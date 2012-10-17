@@ -30,7 +30,7 @@ ifeq ("$(IMSUPPORT_DIR)", "")
    IMSUPPORT_DIR=$if($(wildcard $(DES_HOME)/lib/libimsupport.a),$(DES_HOME))
 endif 
 ifeq ("$(IMSUPPORT_DIR)", "")
-   $(error imsuport defined)
+   $(error imsuport not defined)
 endif 
 IMSUPPORT_LIB := ${IMSUPPORT_DIR}/lib/
 IMSUPPORT_INCLUDE := ${IMSUPPORT_DIR}/include  
