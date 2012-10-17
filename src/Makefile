@@ -25,9 +25,19 @@
 #  Rule: if eups product use it.
 #        if DES Home, use it (greg style stack)
 #        n.b IMSUPPORT_DIR can be set with a setup -r .  from imsuport/trunk (or similar)
+#
+#
+
+
+# $(info Using ${INCLUDE_FILE})
+# $(warning DES_HOME is $(DES_HOME) AND ${DES_HOME})
 
 ifeq ("$(IMSUPPORT_DIR)", "")
-   IMSUPPORT_DIR=$if($(wildcard $(DES_HOME)/lib/libimsupport.a),$(DES_HOME))
+   LIBDETECT = $(wildcard $(DES_HOME)/lib/libimsupport.a))  
+   ifneq ("(LIBDETECT)", "") 
+       IMSUPPORT_DIR := $(DES_HOME)
+   endif 
+   $(info IM $(IMSUPPORT_DIR))
 endif 
 ifeq ("$(IMSUPPORT_DIR)", "")
    $(error imsuport not defined)
