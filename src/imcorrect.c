@@ -1420,18 +1420,18 @@ int ImCorrect(int argc,char *argv[])
       retrievescale(&output,scaleregionn,scalesort,flag_verbose,
 		    &scalefactor,&mode,&skysigma);
       /* cycle through image masking all pixels below threshold */
-      thresholdval=scalefactor*BADPIX_THRESHOLD;
-      maskedpixels=0;
-      for (i=0;i<output.npixels;i++) {
-	if ((output.image[i]<thresholdval || output.image[i]<0.0) &&
-	    !output.mask[i]) {
-	  output.mask[i] |= BADPIX_LOW; /* set the masked flag */
-	  maskedpixels++;
-	}
-      }
-      sprintf(event,"%d pixels masked with value below %.2f",
-	      maskedpixels,thresholdval);
-      reportevt(flag_verbose,QA,1,event);
+//      thresholdval=scalefactor*BADPIX_THRESHOLD;
+//      maskedpixels=0;
+//      for (i=0;i<output.npixels;i++) {
+//      if ((output.image[i]<thresholdval || output.image[i]<0.0) &&
+//          !output.mask[i]) {
+//        output.mask[i] |= BADPIX_LOW; /* set the masked flag */
+//	  maskedpixels++;
+//      }
+//    }
+//    sprintf(event,"%d pixels masked with value below %.2f",
+//            maskedpixels,thresholdval);
+//    reportevt(flag_verbose,QA,1,event);
       /* recalculate scale factor if many pixels masked */
       if (maskedpixels>0.1*output.npixels) {
 	retrievescale(&output,scaleregionn,scalesort,flag_verbose,
