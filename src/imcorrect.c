@@ -1433,10 +1433,10 @@ int ImCorrect(int argc,char *argv[])
 //            maskedpixels,thresholdval);
 //    reportevt(flag_verbose,QA,1,event);
       /* recalculate scale factor if many pixels masked */
-      if (maskedpixels>0.1*output.npixels) {
-	retrievescale(&output,scaleregionn,scalesort,flag_verbose,
-		      &scalefactor,&mode,&skysigma);
-      }
+//      if (maskedpixels>0.1*output.npixels) {
+//	retrievescale(&output,scaleregionn,scalesort,flag_verbose,
+//		      &scalefactor,&mode,&skysigma);
+//      }
 
       /* ************************************************/
       /* ******** BIAS, Pupil Ghost and FLATTEN  ********/
