@@ -17,7 +17,7 @@ endif
 # is present in the subordinate directory, else to to the task. Install is an exception.
 #
 all: 
-	for d in $(DIRS) ; do if [ -e $$d/Makefile ] ; then (cd $$d;$(MAKE) $(MAKEFLAGS) CFLAGS="$(CFLAGS)" CC="$(CC)" all ) fi ; done
+	for d in $(DIRS) ; do if [ -e $$d/Makefile ] ; then (cd $$d;$(MAKE) $(MAKEFLAGS) CFLAGS="$(CFLAGS)" CC="$(CC)" IMSUPPORT_DIR="$(IMSUPPORT_DIR)" all ) fi ; done
 
 clean: tidy
 	for d in $(DIRS) ; do if [ -e $$d/Makefile ] ; then (cd $$d;$(MAKE) $(MAKEFLAGS) clean  ) fi ; done
