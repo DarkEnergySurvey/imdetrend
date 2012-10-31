@@ -359,11 +359,15 @@ int DECamXTalk(int argc,char *argv[])
       {
 	if (!strcmp(argv[i],"-verbose") || !strcmp(argv[i],"-v")) {
 	  sscanf(argv[++i],"%d",&flag_verbose);
-	  if (flag_verbose<0 || flag_verbose>3) {
-	    sprintf(event,"Verbose level out of range %d. Reset to 2",
-		    flag_verbose);
-	    flag_verbose=2;
-	    reportevt(2,STATUS,3,event);
+	  if (flag_verbose<0 || flag_verbose>6){
+            if (flag_verbose < 0){
+  	      sprintf(event,"Verbose level (%d) out of range (0 <= verbose <= 6). Reset to 0.",flag_verbose);
+              flag_verbose=0;
+            }else{
+  	      sprintf(event,"Verbose level (%d) out of range (0 <= verbose <= 6). Reset to 6.",flag_verbose);
+              flag_verbose=6;
+            }
+            reportevt(2,STATUS,3,event);
 	  }
 	}
       }
@@ -419,7 +423,7 @@ int DECamXTalk(int argc,char *argv[])
 	if(optarg){
 	  xtalk_filename = strip_path(optarg);
 	  /* read through crosstalk matrix file */
-	  if (flag_verbose==3) {
+	  if (flag_verbose>=3) {
 	    sprintf(event,"Reading file %s\n",xtalk_filename);
 	    reportevt(flag_verbose,STATUS,1,event);
 	  }
@@ -477,7 +481,7 @@ int DECamXTalk(int argc,char *argv[])
 	    reportevt(flag_verbose,STATUS,5,event);
 	    exit(1);
 	  }
-	  if (flag_verbose==3) /* print the crosstalk coefficients */
+	  if (flag_verbose>3) /* print the crosstalk coefficients */
 	    for (j=0;j<XTDIM;j++) {
 	      if (j%2==0) printf("  ccd%02dA",j/2+1);
 	      else printf("  ccd%02dB",j/2+1);
@@ -810,9 +814,9 @@ int DECamXTalk(int argc,char *argv[])
     }
     /* cut off last bogus "END" line */
     zeroheader[strlen(zeroheader)-80]=0;
-    if (flag_verbose > 4) {
+    if (flag_verbose) {
       printf("  Read %d header keywords from 0th header\n",numzerokeys);
-      if (flag_verbose==3) {
+      if (flag_verbose > 4) {
 	printf("  *************************************************\n");
 	printf("  %s",zeroheader);
 	printf("*************************************************\n");
@@ -1080,7 +1084,7 @@ int DECamXTalk(int argc,char *argv[])
 
       if (flag_verbose) {
 	printf("  Read %d header keywords\n",numnthkeys);
-	if (flag_verbose==3) {
+	if (flag_verbose > 4) {
 	  printf("  *************************************************\n");
 	  printf("  %s",nthheader);
 	  printf("*************************************************\n");
@@ -1201,7 +1205,7 @@ int DECamXTalk(int argc,char *argv[])
       decodesection(input_image.datasecb, input_image.datasecbn, flag_verbose);
       decodesection(input_image.trimsec, input_image.trimsecn, flag_verbose);
       decodesection(input_image.datasec, input_image.datasecn, flag_verbose);
-      if (flag_verbose==3) {
+      if (flag_verbose>=3) {
 	sprintf(event,"BIASSECA=%s",input_image.biasseca);
 	reportevt(flag_verbose,STATUS,1,event);
 	sprintf(event,"DATASECA=%s",input_image.dataseca);
@@ -1520,7 +1524,7 @@ int DECamXTalk(int argc,char *argv[])
 	reportevt(flag_verbose,STATUS,5,event);
 	printerror(status);
       }
-      if (flag_verbose==3) {
+      if (flag_verbose>=3) {
 	sprintf(event,"Currently at header position %d with %d keywords",
 		keynum,totkeynum);
 	reportevt(flag_verbose,STATUS,1,event);
@@ -1804,7 +1808,7 @@ int DECamXTalk(int argc,char *argv[])
 	reportevt(flag_verbose,STATUS,5,event);
 	printerror(status);
       }
-      if (flag_verbose==3) printf("  => %s\n",longcomment);
+      if (flag_verbose>=3) printf("  => %s\n",longcomment);
       /* mark this as an image extension */
       if (fits_write_key_str(output_image.fptr,"DES_EXT","IMAGE","Image extension",
 			     &status)) {
@@ -1994,7 +1998,7 @@ int getheader_flt(hdr,key,value,flag_verbose)
     else
       return(1);
   }
-  //  else if (flag_verbose==3) {
+  //  else if (flag_verbose>=3) {
   //    sprintf(event,"Keyword %s found to be %.2f",key,*value);
   //    reportevt(flag_verbose,STATUS,1,event);
   //  }
@@ -2036,7 +2040,7 @@ int getheader_str(char *hdr,char *key,char *value,int flag_verbose)
     else
       return(1);
   }
-  //else if (flag_verbose==3) {
+  //else if (flag_verbose>=3) {
   //    sprintf(event,"Keyword %s found to be %s",key,value);
   //    reportevt(flag_verbose,STATUS,1,event);
   //}
