@@ -130,7 +130,8 @@ DMWCS := ${DMWCS_LIB}/libwcs.a
 ## Temp addition for PLPLOT library
 
 
-INCLUDE :=    	$(CCFITS_INCLUDE) /usr/include/cfitsio $(FFTW_INCLUDE) $(PSFEX_INCLUDE) $(SWARP_INCLUDE) ${WCS_INCLUDE} ${DMWCS_INCLUDE} ${PLPLOT_INCLUDE} $(IMSUPPORT_INCLUDE) 
+#INCLUDE :=    	$(CCFITS_INCLUDE) /usr/include/cfitsio $(FFTW_INCLUDE) $(PSFEX_INCLUDE) $(SWARP_INCLUDE) ${WCS_INCLUDE} ${DMWCS_INCLUDE} ${PLPLOT_INCLUDE} $(IMSUPPORT_INCLUDE) 
+INCLUDE :=    	$(CCFITS_INCLUDE) $(FFTW_INCLUDE) $(PSFEX_INCLUDE) $(SWARP_INCLUDE) ${WCS_INCLUDE} ${DMWCS_INCLUDE} ${PLPLOT_INCLUDE} $(IMSUPPORT_INCLUDE) 
 LIBS = $(FITSIO_LIB):$(NRECIPES_LIB):$(FFTW_LIB):$(PSFEX_LIB):$(SWARP_LIB):${WCS_LIB}:${DMWCS_LIB}:${PLPLOT_LIB}
 
 
@@ -256,7 +257,7 @@ all: $(EXE)
 ../bin/mkbpm:  mkbpm.o ${LIBIMSUPPORT}  
 	$(CC) $(CFLAGS) -o $@ $^  $(NR2) $(FITSIO) -lm
 ../bin/mkbleedmask: MakeBleedMask.o BleedTrail.o ${LIBIMSUPPORT} fitswcs.o   
-	$(CPPC) -o $@ $^ -L$(DES_PREREQ)/lib $(WCS_C) $(TPIX_FITS) $(FITSIO) -lCCfits -lm
+	$(CPPC) -o $@ $^ -fno-const-strings -L$(DES_PREREQ)/lib $(WCS_C) $(TPIX_FITS) $(FITSIO) -lCCfits -lm
 ../bin/mkmask: mkmask.o mkstarmask.o fitswcs.o ${LIBIMSUPPORT} 
 	$(CC) $(CFLAGS) -o $@ $^  $(NR2) $(WCS_C) $(TPIX_FITS) $(FITSIO) -lm
 
