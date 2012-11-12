@@ -1564,17 +1564,19 @@ int ImCorrect(int argc,char *argv[])
 	for (i=0;i<output.npixels;i++) 
 	  //	      if ((flag_bpm && !output.mask[i]) || !flag_bpm) {
 	  if (!output.mask[i]) {
+	    imval = output.image[i];
+            if (imval < 0) imval = 0.0;
 	    if(column_in_section((i%output.axes[0])+1,output.ampsecan)){
 	      //    if (i%output.axes[0]<=1024) { /* in AMP A section */	      
 	      /* each image contributes Poisson noise, RdNoise */
 	      /*  and BIAS image noise */
-	      sumval=(output.image[i]/output.gainA+ 
+	      sumval=(imval/output.gainA+ 
 		      Squ(output.rdnoiseA/output.gainA));
 	    }
 	    else { /* in AMP B */
 	      /* each image contributes Poisson noise, RdNoise */
 	      /*  and BIAS image noise */
-	      sumval=(output.image[i]/output.gainB+
+	      sumval=(imval/output.gainB+
 		      Squ(output.rdnoiseB/output.gainB));
 	    }
 	    /* apply flat field correction */
