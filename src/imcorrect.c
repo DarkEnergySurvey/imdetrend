@@ -1420,23 +1420,23 @@ int ImCorrect(int argc,char *argv[])
       retrievescale(&output,scaleregionn,scalesort,flag_verbose,
 		    &scalefactor,&mode,&skysigma);
       /* cycle through image masking all pixels below threshold */
-      thresholdval=scalefactor*BADPIX_THRESHOLD;
-      maskedpixels=0;
-      for (i=0;i<output.npixels;i++) {
-	if ((output.image[i]<thresholdval || output.image[i]<0.0) &&
-	    !output.mask[i]) {
-	  output.mask[i] |= BADPIX_LOW; /* set the masked flag */
-	  maskedpixels++;
-	}
-      }
-      sprintf(event,"%d pixels masked with value below %.2f",
-	      maskedpixels,thresholdval);
-      reportevt(flag_verbose,QA,1,event);
+//      thresholdval=scalefactor*BADPIX_THRESHOLD;
+//      maskedpixels=0;
+//      for (i=0;i<output.npixels;i++) {
+//      if ((output.image[i]<thresholdval || output.image[i]<0.0) &&
+//          !output.mask[i]) {
+//        output.mask[i] |= BADPIX_LOW; /* set the masked flag */
+//	  maskedpixels++;
+//      }
+//    }
+//    sprintf(event,"%d pixels masked with value below %.2f",
+//            maskedpixels,thresholdval);
+//    reportevt(flag_verbose,QA,1,event);
       /* recalculate scale factor if many pixels masked */
-      if (maskedpixels>0.1*output.npixels) {
-	retrievescale(&output,scaleregionn,scalesort,flag_verbose,
-		      &scalefactor,&mode,&skysigma);
-      }
+//      if (maskedpixels>0.1*output.npixels) {
+//	retrievescale(&output,scaleregionn,scalesort,flag_verbose,
+//		      &scalefactor,&mode,&skysigma);
+//      }
 
       /* ************************************************/
       /* ******** BIAS, Pupil Ghost and FLATTEN  ********/
@@ -1564,17 +1564,19 @@ int ImCorrect(int argc,char *argv[])
 	for (i=0;i<output.npixels;i++) 
 	  //	      if ((flag_bpm && !output.mask[i]) || !flag_bpm) {
 	  if (!output.mask[i]) {
+	    imval = output.image[i];
+            if (imval < 0) imval = 0.0;
 	    if(column_in_section((i%output.axes[0])+1,output.ampsecan)){
 	      //    if (i%output.axes[0]<=1024) { /* in AMP A section */	      
 	      /* each image contributes Poisson noise, RdNoise */
 	      /*  and BIAS image noise */
-	      sumval=(output.image[i]/output.gainA+ 
+	      sumval=(imval/output.gainA+ 
 		      Squ(output.rdnoiseA/output.gainA));
 	    }
 	    else { /* in AMP B */
 	      /* each image contributes Poisson noise, RdNoise */
 	      /*  and BIAS image noise */
-	      sumval=(output.image[i]/output.gainB+
+	      sumval=(imval/output.gainB+
 		      Squ(output.rdnoiseB/output.gainB));
 	    }
 	    /* apply flat field correction */

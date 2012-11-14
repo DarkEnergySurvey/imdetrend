@@ -393,7 +393,7 @@ int MakeBleedMask(const char *argv[])
     LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
   }
   // If *really* verbose, dump the headers to stdout
-  if(flag_verbose==3){
+  if(flag_verbose>4){
     while(hi != Inimage.Headers().end())
       {
 	Out.str("");
