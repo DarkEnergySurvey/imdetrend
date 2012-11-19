@@ -1131,8 +1131,15 @@ MakeBiasCorrection(int argc,char *argv[])
     printerror(status);
   }
   sprintf(longcomment,"DESDM: (%ld) ",imnum);
-  for (im=0;im<imnum;im++) sprintf(longcomment,"%s %s ",longcomment,
+  /* */
+  /* Change to only ouput small number of images to accomodate supercal */
+  /* */
+  if (imnum < 20){
+    for (im=0;im<imnum;im++) sprintf(longcomment,"%s %s ",longcomment,
 				   striparchiveroot(data[im].name));
+  }else{
+    sprintf(longcomment,"%s input_list=%s",longcomment,inname_temp);
+  }
   if (flag_verbose) {
     sprintf(event,"%s",longcomment);
     reportevt(flag_verbose,STATUS,1,event);
