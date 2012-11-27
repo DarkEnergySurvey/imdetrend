@@ -3,6 +3,7 @@
 
 #include "imsupport.h"
 #include <math.h>
+#include <string.h>
 static const char *svn_id = "$Id$";
 
 void mkstarmask(input,output,filter,astrostdsfile,horiztrails,exposure,flag_verbose,flag_nointerpolate)

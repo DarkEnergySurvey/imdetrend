@@ -40,7 +40,7 @@ ifeq ("$(IMSUPPORT_DIR)", "")
    $(info IM $(IMSUPPORT_DIR))
 endif 
 ifeq ("$(IMSUPPORT_DIR)", "")
-   $(error imsuport not defined)
+   $(error imsupport not defined)
 endif 
 IMSUPPORT_LIB := ${IMSUPPORT_DIR}/lib/
 IMSUPPORT_INCLUDE := ${IMSUPPORT_DIR}/include  
