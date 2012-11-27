@@ -18,8 +18,8 @@
 */
 
 #include "imsupport.h"
+#include <time.h>
 #include <getopt.h>
-
 #include "argutils.h"
 
 #define LINEAR_INTERP 1
