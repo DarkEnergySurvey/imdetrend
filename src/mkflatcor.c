@@ -182,7 +182,7 @@ int MakeFlatCorrection(int argc,char *argv[])
   static int status=0;
   char	comment[1000],imagename[1000],command[1000],event[10000],
     longcomment[2500],scaleregion[100],filter[200]="",command_line[1000],
-    obstype[200],*striparchiveroot(),inname_temp[1000],outname_temp[1000],
+    obstype[200],*strip_path(),inname_temp[1000],outname_temp[1000],
     imtypename[6][10]={"","IMAGE","VARIANCE","MASK","SIGMA","WEIGHT"};
   fitsfile *fptr;
   int	ccdnum=0;
@@ -231,11 +231,15 @@ int MakeFlatCorrection(int argc,char *argv[])
   for (i=1;i<argc;i++) {
     if (!strcmp(argv[i],"-verbose") || !strcmp(argv[i],"-v")) {
       sscanf(argv[++i],"%d",&flag_verbose);
-      if (flag_verbose<0 || flag_verbose>3) {
-	sprintf(event,"Verbose level out of range %d . Reset to 2",
-                flag_verbose);
-	flag_verbose=2;
-	reportevt(2,STATUS,3,event);
+      if (flag_verbose<0 || flag_verbose>6){
+        if (flag_verbose < 0){
+          sprintf(event,"Verbose level (%d) out of range (0 <= verbose <= 6). Reset to 0.",flag_verbose);
+          flag_verbose=0;
+        }else{
+          sprintf(event,"Verbose level (%d) out of range (0 <= verbose <= 6). Reset to 6.",flag_verbose);
+          flag_verbose=6;
+        }
+        reportevt(2,STATUS,3,event);
       }
     }
   }
@@ -1503,37 +1507,42 @@ int MakeFlatCorrection(int argc,char *argv[])
     reportevt(flag_verbose,STATUS,5,event);
     printerror(status);
   }
+
   sprintf(longcomment,"DESDM:");
-  //  for (i=0;i<argc;i++) sprintf(longcomment,"%s %s",longcomment,argv[i]);
   sprintf(longcomment,"%s %s",longcomment,command_line);
   if (flag_verbose) {
     sprintf(event,"%s",longcomment);
     reportevt(flag_verbose,STATUS,1,event);
   }
   if (fits_write_history(output.fptr,longcomment,&status)) {
-    sprintf(event,"Writing history failed: %s",&(output.name[1]));
+    sprintf(event,"Writing mkflatcor call to history failed: %s",&(output.name[1]));
     reportevt(flag_verbose,STATUS,5,event);
     printerror(status);
   }
-  sprintf(longcomment,"DESDM: (%d) ",imnum);
   /* */
-  /* Change to only ouput small number of images to accomodate supercal */
+  /* Change to output image names, one per line, to better accomodate supercal */
   /* */
-  if (imnum < 20){
-    for (im=0;im<imnum;im++) sprintf(longcomment,"%s %s ",longcomment,
-    				   striparchiveroot(data[im].name));
-  }else{
-    sprintf(longcomment,"%s input_list=%s",longcomment,inname_temp);
-  }
-  if (flag_verbose) {
-    sprintf(event,"%s",longcomment);
-    reportevt(flag_verbose,STATUS,1,event);
-  }
+  sprintf(longcomment,"DESDM: %ld input files ",imnum);
+  sprintf(event,"%s",longcomment);
+  reportevt(flag_verbose,STATUS,1,event);
   if (fits_write_history(output.fptr,longcomment,&status)) {
-    sprintf(event,"Writing history failed: %s",&(output.name[1]));
+    sprintf(event,"Writing mkflatcor image list failed: %s",&(output.name[1]));
     reportevt(flag_verbose,STATUS,5,event);
-    printerror(status); 
+    printerror(status);
   }
+  for (im=0;im<imnum;im++){
+    sprintf(longcomment,"  %s",strip_path(data[im].name));
+    if (flag_verbose > 3) {
+      sprintf(event,"%s",longcomment);
+      reportevt(flag_verbose,STATUS,1,event);
+    }
+    if (fits_write_history(output.fptr,longcomment,&status)) {
+      sprintf(event,"Writing mkflatcor input image failed: %s",&(output.name[1]));
+      reportevt(flag_verbose,STATUS,5,event);
+      printerror(status);
+    }
+  }
+
   if (fits_write_key_str(output.fptr,"DES_EXT",imtypename[DES_IMAGE],
 			 "Image extension",&status)) {
     sprintf(event,"Writing DES_EXT=%s failed: %s",

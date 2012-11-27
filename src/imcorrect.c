@@ -353,12 +353,16 @@ int ImCorrect(int argc,char *argv[])
       {
 	if (!strcmp(argv[i],"-verbose") || !strcmp(argv[i],"-v")) {
 	  sscanf(argv[++i],"%d",&flag_verbose);
-	  if (flag_verbose<0 || flag_verbose>3) {
-	    sprintf(event,"Verbose level out of range %d. Reset to 2",
-		    flag_verbose);
-	    flag_verbose=2;
-	    reportevt(2,STATUS,3,event);
-	  }
+          if (flag_verbose<0 || flag_verbose>6){
+            if (flag_verbose < 0){
+              sprintf(event,"Verbose level (%d) out of range (0 <= verbose <= 6). Reset to 0.",flag_verbose);
+              flag_verbose=0;
+            }else{
+              sprintf(event,"Verbose level (%d) out of range (0 <= verbose <= 6). Reset to 6.",flag_verbose);
+              flag_verbose=6;
+            }
+            reportevt(2,STATUS,3,event);
+          }
 	}
       }
 
