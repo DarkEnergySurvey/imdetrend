@@ -211,6 +211,8 @@ Other Output Options:
 Known Bugs/Features:
   - The implementation of the dark correction is suspect.  No test data 
     has been presented and the option has never been carefully tested.
+  - Current interpolation over bad columns assumes that a bad pixel mask 
+    with edges (marked as bad) at least 2 columns wide is used. 
   - Input weigth maps are not respected but always recalculated
   - The algorithm used to remove sources from the weight image (-noisemodel
     SKYONLY) currently has the following idiosychrosies:
@@ -312,8 +314,8 @@ int ImCorrect(int argc,char *argv[])
 #if 0
     void	rd_desimage(),headercheck(),printerror(),decodesection(),
       readimsections(),overscan(),retrievescale(),reportevt(),
-      shell();
-#endif
+#endif      
+    void shell();
     short accept_mask;
     time_t	tm;
     FILE	*inp=NULL;
@@ -1699,12 +1701,20 @@ int ImCorrect(int argc,char *argv[])
 	  if ((output.mask[i]&BADPIX_BPM)&&(!(output.mask[i]&BADPIX_INTERP))) {/* this is bad pixel */
 	    //	  if (output.mask[i]) {/* this is bad pixel */
 	    xlow=i-1;
-	    while (output.mask[xlow]>0) xlow--;
+	    if (xlow < 0) xlow = 0;
+#define INTERP_WIDTH  2
+	    while (output.mask[xlow]>0 && xlow > 0) {
+	      if ((i - xlow) == INTERP_WIDTH+1) break; 
+	      xlow--;
+	    }
 	    xhi=i+1;
-	    while (output.mask[xhi]>0) xhi++;
-	    /* only proceed with interpolation if no more than two bad */
-	    /* pixels in a row are present */
-	    if (xhi-xlow<4) {
+	    if (xhi > output.npixels) xhi = output.npixels;
+	    while (output.mask[xhi]>0 && xhi < output.npixels){ 
+	      if ((xhi -i) == INTERP_WIDTH+1) break; 
+	      xhi++;
+	    }
+	    /* Interpolation over no more than INTERP_WIDTH consecutive pixels */
+	    if (xhi-xlow< INTERP_WIDTH+1) {
 	      output.image[i]=0.5*(output.image[xlow]+output.image[xhi]);
 	      /* could add noise to counteract averaging of 2 pixels */
 	      /*if (flag_variance) output.image[i]+=gasdev(&seed)*
