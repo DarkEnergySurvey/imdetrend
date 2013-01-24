@@ -243,7 +243,7 @@ int MakeBleedMask(const char *argv[])
   // Find out what command line options were set
   bool do_interp         = !comline.GetOption("interpolate").empty();
   bool do_star_interp    = !comline.GetOption("interpolate-stars").empty();
-  std::string stw        =  comline.GetOption("trailwidth");
+  std::string stw        =  comline.GetOption("trail_length");
   std::string sfac       =  comline.GetOption("scalefactor");
   std::string slfac      =  comline.GetOption("starlevel");
   std::string sgrb       =  comline.GetOption("growbox");
