@@ -9,35 +9,50 @@
 /*--MakeBleedMask
 
 Basic syntax:
-mkbleedmask [-aghimz] [-b <factor> -f <value> -l <value> -n <npix> -o <filename> -r <factor> -s <n> -t <npixels> 
+mkbleedmask [-aghimz] [-b <factor> -f <value> -l <value> -n <npix> 
+            -o <filename> -r <factor> -s <n> -t <npixels> 
             -v <level> -w <value> -x <filename> ] <infile> <outfile> 
 
-  Input data
-    <infile>   = FITS image (hopefully with astrometric soln)
-    <outfile>  = FITS image output 
-  Options:
-  -g,--global_only:         Do not use local statistics.
-  -s,--bgiters <n>:         Number of iterations for background estimation. (1)
-  -b,--bgreject <factor>:   Use specified <factor> as scalefactor for background rejection. (5.0)
-  -r,--growbox <factor>:    Factor by which to grow blob boxes for determining background level. (2)
+Input data
+  <infile>   = FITS image (hopefully with astrometric soln)
+  <outfile>  = FITS image output 
+Options:
+  Background Determination:
+   -g,--global_only:       Do not use local statistics.
+   -s,--bgiters <n>:       Number of iterations for background estimation. 
+                           (default=1)
+   -b,--bgreject <factor>: Use specified <factor> as scalefactor for
+                           background rejection. (default=5.0)
+   -r,--growbox <factor>:  Factor by which to grow blob boxes for determining
+                           a background level. (defualt=2)
 
-  -t,--trail_length <npixels>: Use specified <npixels> for trail structuring element in Y. (20)
-  -n,--numtrail <npix>:     Number of contiguous pixels required for trail detection. (trail_length/2)
-  -f,--scalefactor <value>: Use specified <value> as scalefactor on background to detect bleedtrails. (10.0)
+  Filter Description Options:
+   -t,--trail_length <pix>: Use specified <npixels> for trail structuring 
+                            element in Y. (default=20)
+   -n,--numtrail <pix>:     Number of contiguous pixels required for trail
+                             detection. (default=trail_length/2)
+   -f,--scalefactor <value>:Use specified <value> as scalefactor on background 
+                            to detect bleedtrails. (default=10.0)
 
+  Bleed Trail Options:
   -i,--interpolate:         Interpolate over bleedtrails.
 
-  -l,--starlevel <value>:   Use specified <value> as scalefactor on background to detect stars. (5.0)
+  Saturated Object Options:
+  -l,--starlevel <value>:   Use specified <value> as scalefactor on background 
+                            to detect stars. (default=5.0)
+  -w,--growrad <value>:     Factor by which to grow detected star radii. 
+                            (default=1.0)
+  -a,--interpolate-stars:   Do radial interpolation over saturated stars for 
+                            which bleedtrails were detected (default=No)
+  -m,--starmask:            Create a mask for the detected bright objects.
+                            (default=No)
+  -z,--zerostarweights:     Set weights to zero for masked stars. (default=No)
 
-  -w,--growrad <value>:     Factor by which to grow detected star radii. (1.0)
-  -a,--interpolate-stars:   Do radial interpolation over saturated stars for which bleedtrails were detected.
-  -m,--starmask:            Create a mask for the detected bright objects. (No)
-  -z,--zerostarweights:     Set weights to zero for masked stars.
-
+  Miscellaneous Output Options:
   -o,--saturated_objects <filename>: Filename for saturated star table.(None)
   -x,--trailboxes <filename>: Filename for trail box table.(None)
 
-  -h,--help:                Prints this long version of help.
+  -h,--help:                Prints long version of help.
   -v,--verb <level>:        Verbosity level [0-3], default = 1.
 
 Summary:
@@ -48,9 +63,57 @@ Summary:
   Creates object table with WCS positions and radii.
 
 Detailed Description:
+  This code searches for and masks/interpolates over bleed trails by using a 
+  linear filter that searches for values above the local background.  In 
+  addition saturated objects are identified and masked.  The code is highly 
+  tunable with a number of options which are described below.
+
+  Background estimation options:
+    The determination of the background level and RMS is made locally unless 
+    the -g option is specified.  The size of the local region considered to
+    estimate the background is set by the -r option.  When determining the 
+    background and RMS levels the program uses a sigma-clipping algorithm 
+    which rejects values that are more than N*sigma from the median (where 
+    N is set by the -b option).  The maximum number of iterations that may be 
+    used is set by the -s option.  
+
+  Filter Description Options:
+    The geometry of the filter used to detect bleed trails is a single pixel
+    wide kernel with length set by the -t option.  The -n option determines
+    how many contiguous pixels within the filter must be above the background
+    by a factor of M times the RMS (where the -f option sets the value of M).
+     
+  Bleed Trail Options:
+    The default behavior is to flag the pixels within the bleed trail but 
+    if the -i option is given then pixels identified as part of the trail
+    are also interpolated (using values of pixels adjacent to the trail).
+
+  Saturated Object Options:
+    In addition to flagging/interpolating bleed trails, saturated objects can
+    be masked (by setting the -m option).  Saturated objects are identified 
+    and then a radial profile is used to estimate the size of the object by
+    searching for the point where the surrounding pixels are on average more
+    than L times the RMS above the background (where L is set by the -l option).
+    If the -w option is given then masked radius is further multiplied by
+    a constant factor to increase the size of the region masked.  In addition
+    to masking, when the -z option is used the weight image is altered to a 
+    value of 0.0 over the masked areas.  Finally, if the -a option is used
+    then the region around the star that is also part of the bleed trail is
+    interpolated using the radial profile (Note: this last option can remove
+    sources close to saturated objects and therefore is not recommended for 
+
+  Miscellaneous Output Options:
+    Two miscellaneous FITS tables can be output.  The -x options causes a FITS
+    table to be written which describes the region (corners) affected by each 
+    bleed trail.  Similarly, the -o options causes a similar output for 
+    saturated object (giving the center and radius of the area masked around
+    each object).  If a WSC solution is present and SCAMPFLG=0 then the values
+    in these tables are given in decimal degrees and arcseconds.  Otherwise,
+    pixel units are used in the tables.
 
 Known Issues:
-
+  Better handling of "edge bleed" (bleed trails that saturate to the chip edge and then 
+  further affect the portion of the image near the amplifier.
 
 */
 
@@ -180,7 +243,7 @@ int MakeBleedMask(const char *argv[])
   // Find out what command line options were set
   bool do_interp         = !comline.GetOption("interpolate").empty();
   bool do_star_interp    = !comline.GetOption("interpolate-stars").empty();
-  std::string stw        =  comline.GetOption("trailwidth");
+  std::string stw        =  comline.GetOption("trail_length");
   std::string sfac       =  comline.GetOption("scalefactor");
   std::string slfac      =  comline.GetOption("starlevel");
   std::string sgrb       =  comline.GetOption("growbox");

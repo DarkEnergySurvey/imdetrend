@@ -19,6 +19,8 @@
 
 #include "imsupport.h"
 #include <time.h>
+#include <math.h>
+#include <string.h>
 #include <getopt.h>
 #include "argutils.h"
 
