@@ -353,7 +353,7 @@ int ImCorrect(int argc,char *argv[])
     // properly print status messages during command line parse.
     for (i=1;i<argc;i++) 
       {
-	if (!strcmp(argv[i],"-verbose") || !strcmp(argv[i],"-v")) {
+	if (!strcmp(argv[i],"-verbose")){
 	  sscanf(argv[++i],"%d",&flag_verbose);
           if (flag_verbose<0 || flag_verbose>6){
             if (flag_verbose < 0){
@@ -367,7 +367,6 @@ int ImCorrect(int argc,char *argv[])
           }
 	}
       }
-
 
     int clop;
     int cloperr = 0;
