@@ -208,13 +208,17 @@ int MakeSuperSky(int argc, char *argv[])
 
   /* first cycle through looking for quiet flag */
   for (i=1;i<argc-1;i++) {
-    if (!strcmp(argv[i],"-verbose") || !strcmp(argv[i],"-v")) {
+    if (!strcmp(argv[i],"-verbose")) {
       sscanf(argv[++i],"%d",&flag_verbose);
-      if (flag_verbose<0 || flag_verbose>3) {
-	sprintf(event,"Verbose level out of range %d . Reset to 2",
-                flag_verbose);
-	flag_verbose=2;
-	reportevt(2,STATUS,3,event);
+      if (flag_verbose<0 || flag_verbose>6){
+        if (flag_verbose < 0){
+          sprintf(event,"Verbose level (%d) out of range (0 <= verbose <= 6). Reset to 0.",flag_verbose);
+          flag_verbose=0;
+        }else{
+          sprintf(event,"Verbose level (%d) out of range (0 <= verbose <= 6). Reset to 6.",flag_verbose);
+          flag_verbose=6;
+        }
+        reportevt(2,STATUS,3,event);
       }
     }
   }
@@ -387,7 +391,7 @@ int MakeSuperSky(int argc, char *argv[])
     while (fscanf(inp,"%s",imagename)!=EOF) {
       imnum++;
       if (strncmp(&(imagename[strlen(imagename)-5]),".fits",5)
-	  || !strncmp(&(imagename[strlen(imagename)-8]),".fits.gz",8)) {
+	  || (!strncmp(&(imagename[strlen(imagename)-8]),".fits.gz",8))){
 	sprintf(event,"File must contain list of FITS or compressed FITS images: %s",
 		inname_temp);
 	reportevt(flag_verbose,STATUS,5,event);
@@ -852,6 +856,8 @@ int MakeSuperSky(int argc, char *argv[])
 	  valnum++;
 	}
       }
+/*      printf("RAG: %d %d \n",i,valnum); */
+/*      fflush(stdout);                   */
       if (valnum>0) {
 	shell(valnum,vecsort-1);
 	/* odd number of images */
@@ -1050,20 +1056,30 @@ int MakeSuperSky(int argc, char *argv[])
     reportevt(flag_verbose,STATUS,5,event);
     printerror(status);
   }
-  sprintf(longcomment,"DESDM: (%d) ",imnum);
-  for (im=0;im<imnum;im++) 
-    sprintf(longcomment,"%s %s ",longcomment,
-	    striparchiveroot(data[im].name));
-  if (flag_verbose) {
-    sprintf(event,"%s",longcomment);
-    reportevt(flag_verbose,STATUS,1,event);
-  }
-  if (fits_write_comment(output.fptr,longcomment,&status)) {
-    sprintf(event,"Writing longcomment failed: %s",
-	    output.name+1);
+/* */
+/* Change to output image names one per line, to better accomodate large sets of files */
+/* */
+  sprintf(longcomment,"DESDM: %ld input files ",imnum);
+  sprintf(event,"%s",longcomment);
+  reportevt(flag_verbose,STATUS,1,event);
+  if (fits_write_history(output.fptr,longcomment,&status)){
+    sprintf(event,"Writing mksupersky call failed: %s",&(output.name[1]));
     reportevt(flag_verbose,STATUS,5,event);
     printerror(status);
   }
+  for (im=0;im<imnum;im++){
+    sprintf(longcomment," %s",strip_path(data[im].name));
+    if (flag_verbose > 3){
+      sprintf(event,"%s",longcomment);
+      reportevt(flag_verbose,STATUS,1,event);
+    }
+    if (fits_write_history(output.fptr,longcomment,&status)){
+      sprintf(event,"Writing mksupersky input image list failed: %s",&(output.name[1]));
+      reportevt(flag_verbose,STATUS,5,event);
+      printerror(status);
+    }
+  }
+
   if (fits_write_key_str(output.fptr,"DES_EXT",imtypename[DES_IMAGE],
 			 "Image extension",&status)) {
     sprintf(event,"Keyword DES_EXT=%s write failed: %s",
