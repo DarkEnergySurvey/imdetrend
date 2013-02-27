@@ -1220,39 +1220,39 @@ int MakeBleedMask(const char *argv[])
       Morph::BoxType &box = *tbi++;
       if(get_wcs){
 	double rawpos[2],wcspos[2];
-	rawpos[0] = static_cast<double>(box[0])+1.0;
-	rawpos[1] = static_cast<double>(box[2])+1.0;
+	rawpos[0] = static_cast<double>(box[0])+.5;
+	rawpos[1] = static_cast<double>(box[2])+.5;
 	raw_to_wcs(wcs_in,rawpos,wcspos);
 	LocX1.push_back(wcspos[0]);
 	LocY1.push_back(wcspos[1]);
 
-	rawpos[0] = static_cast<double>(box[1])+1.0;
-	rawpos[1] = static_cast<double>(box[2])+1.0;
+	rawpos[0] = static_cast<double>(box[1])+1.5;
+	rawpos[1] = static_cast<double>(box[2])+.5;
 	raw_to_wcs(wcs_in,rawpos,wcspos);
 	LocX2.push_back(wcspos[0]);
 	LocY2.push_back(wcspos[1]);
 
-	rawpos[0] = static_cast<double>(box[1])+1.0;
-	rawpos[1] = static_cast<double>(box[3])+1.0;
+	rawpos[0] = static_cast<double>(box[1])+1.5;
+	rawpos[1] = static_cast<double>(box[3])+1.5;
 	raw_to_wcs(wcs_in,rawpos,wcspos);
 	LocX3.push_back(wcspos[0]);
 	LocY3.push_back(wcspos[1]);
 
-	rawpos[0] = static_cast<double>(box[0])+1.0;
-	rawpos[1] = static_cast<double>(box[3])+1.0;
+	rawpos[0] = static_cast<double>(box[0])+.5;
+	rawpos[1] = static_cast<double>(box[3])+1.5;
 	raw_to_wcs(wcs_in,rawpos,wcspos);
 	LocX4.push_back(wcspos[0]);
 	LocY4.push_back(wcspos[1]);
       }
       else {
-	LocX1.push_back(static_cast<double>(box[0])+1.0);
-	LocY1.push_back(static_cast<double>(box[2])+1.0);
-	LocX2.push_back(static_cast<double>(box[1])+1.0);
-	LocY2.push_back(static_cast<double>(box[2])+1.0);
-	LocX3.push_back(static_cast<double>(box[1])+1.0);
-	LocY3.push_back(static_cast<double>(box[3])+1.0);
-	LocX4.push_back(static_cast<double>(box[0])+1.0);
-	LocY4.push_back(static_cast<double>(box[3])+1.0);
+	LocX1.push_back(static_cast<double>(box[0])+.5);
+	LocY1.push_back(static_cast<double>(box[2])+.5);
+	LocX2.push_back(static_cast<double>(box[1])+1.5);
+	LocY2.push_back(static_cast<double>(box[2])+.5);
+	LocX3.push_back(static_cast<double>(box[1])+1.5);
+	LocY3.push_back(static_cast<double>(box[3])+1.5);
+	LocX4.push_back(static_cast<double>(box[0])+.5);
+	LocY4.push_back(static_cast<double>(box[3])+1.5);
       }
       
     }
