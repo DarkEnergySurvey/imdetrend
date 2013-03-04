@@ -152,20 +152,22 @@ public:
   { Initialize(); };
   void Initialize(){
     AddOption('a',"interpolate-stars");
+    AddOption('b',"bgreject",2,"factor");
+    AddOption('d',"edgesize",2,"npix");
+    AddOption('e',"version");
+    AddOption('f',"scalefactor",2,"value");
     AddOption('g',"global_only");
     AddOption('h',"help");
     AddOption('i',"interpolate");
-    AddOption('m',"starmask");
-    AddOption('b',"bgreject",2,"factor");
-    AddOption('f',"scalefactor",2,"value");
+    AddOption('j',"trailreject",2,"npix");
     AddOption('l',"starlevel",2,"value");
+    AddOption('m',"starmask");
     AddOption('n',"numtrail",2,"npix");
     AddOption('o',"saturated_objects",2,"filename");
     AddOption('r',"growbox",2,"factor");
     AddOption('s',"bgiters",2,"n");
     AddOption('t',"trail_length",2,"npixels");
     AddOption('v',"verbose",2,"level");
-    AddOption('e',"version");
     AddOption('w',"growrad",2,"value");
     AddOption('x',"trailboxes",2,"filename");
     AddOption('z',"zerostarweights");
@@ -175,6 +177,8 @@ public:
     AddHelp("global_only","Do not use local statistics.");
     AddHelp("help","Prints this long version of help.");
     AddHelp("interpolate","Interpolate over bleedtrails.");
+    AddHelp("trailreject","Reject bleedtrails of size <npix> or smaller. (1)");
+    AddHelp("edgesize","Size of edges used to detect edgebleed. (5)");
     AddHelp("starmask","Create a mask for the detected bright objects. (No)");
     AddHelp("bgreject","Use specified <factor> as scalefactor for background rejection. (5.0)");
     AddHelp("scalefactor","Use specified <value> as scalefactor on background to detect bleedtrails. (10.0)");
@@ -244,6 +248,8 @@ int MakeBleedMask(const char *argv[])
   bool do_interp         = !comline.GetOption("interpolate").empty();
   bool do_star_interp    = !comline.GetOption("interpolate-stars").empty();
   std::string stw        =  comline.GetOption("trail_length");
+  std::string eds        =  comline.GetOption("edgesize");
+  std::string trj        =  comline.GetOption("trailreject");
   std::string sfac       =  comline.GetOption("scalefactor");
   std::string slfac      =  comline.GetOption("starlevel");
   std::string sgrb       =  comline.GetOption("growbox");
@@ -356,6 +362,30 @@ int MakeBleedMask(const char *argv[])
       Out << program_name << ": Invalid number of background iterations, " << nbgit << std::endl;
       LX::ReportMessage(flag_verbose,STATUS,5,Out.str());
       return(1);
+    }
+  }
+
+  // This option is needed to ensure that the bleed trail size rejection is functioning properly
+  int ntrail_reject = 1;
+  if(!trj.empty()){
+    std::istringstream Istr(trj);
+    Istr >> ntrail_reject;
+    if(ntrail_reject < 0){
+      Out << program_name << ": Invalid trail rejection threshold, " << ntrail_reject << ", resetting to 1." << std::endl;
+      LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
+      ntrail_reject = 1;
+    }
+  }
+
+  // This option is needed to ensure that the edgebleed detection is functioning properly
+  int npix_edge = 5;
+  if(!eds.empty()){
+    std::istringstream Istr(eds);
+    Istr >> npix_edge;
+    if(npix_edge < 0){
+      Out << program_name << ": Invalid edge size for edgebleed detection, " << npix_edge << ", resetting to 5." << std::endl;
+      LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
+      npix_edge = 5;
     }
   }
   // Set up a list of keywords we want
@@ -538,7 +568,7 @@ int MakeBleedMask(const char *argv[])
   }
   
     
-  // THESE data structures hold the bounding boxes for
+  // These data structures hold the bounding boxes for
   // each blob, and the image statistics within an extended
   // version of the bounding box.
   std::vector<Morph::StatType> box_stats;
@@ -799,7 +829,7 @@ int MakeBleedMask(const char *argv[])
   //    Inimage.DES()->mask[p] = temp_mask[p];
 
   // Now the trail pixels are marked, and some trail pixels are marked
-  // with BADPIX_STAR as well.  We want to do "star interpolation" for
+  // with BADPIX_STAR as well.  If enabled, do "star interpolation" for
   // the pixels marked with BADPIX_STAR, instead of the run-of-the-mill
   // linear interpolation in the row for the normal bleed trail pixels.
   
@@ -807,7 +837,7 @@ int MakeBleedMask(const char *argv[])
   // Get the "blobs" of BADPIX_STAR pixels. The number of blobs is the 
   // new number of saturated objects after bleedtrail rejection.
   //
-  // - blob_image is an integer image wherein the value indicates which
+  // - blob_image is an integer image wherein the value indicates the
   //   blob to which the pixel belongs.
   // - blobs contains the pixel indices for each blob
   //
@@ -822,18 +852,93 @@ int MakeBleedMask(const char *argv[])
     LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
   }
   
-    
-  // Get boxes just around actual trails
+  // \TODO: Possible point at which to weed out objects that are too small to care about 
+  // \TODO: Tailor the bleedtrails to identify edgebleed here.
+  //
+  // PLAN: Multiple passes:
+  // PLAN: (1) weed out tiny trails (1 pixel)
+  // PLAN: (2) Check for bleedtrail pixels close to image edge (edgebleed)
+  // PLAN: (3) For each bleedtrail, move edgetrail pixels to new trail datastruct
+  // PLAN: Final pass to get bounding boxes
+  // PLAN: There might be only two passes described here. Only implementation
+  // PLAN: will tell.
+  //
+  // Get pixel centered boxes just around actual trails
   std::vector<Morph::BoxType>  trail_boxes;
   std::vector<std::vector<Morph::IndexType> > trail_blobs;
+  std::vector<std::vector<Morph::IndexType> > edgebleed_blobs;
+
+  // First pass rejects any trail of size <ntrail_reject> or smaller
+  if(ntrail_reject > 0){
+    blob_image.resize(npix,0);
+    trail_blobs.resize(0);
+    Morph::GetBlobs(Inimage.DES()->mask,Nx,Ny,trail_mask,blob_image,trail_blobs);
+    bbbi   = trail_blobs.begin();
+    while(bbbi != trail_blobs.end()){
+      int blobno = bbbi - trail_blobs.begin() + 1;
+      Morph::BlobType &blob = *bbbi++;
+      int nblobpix = blob.size();
+      if(nblobpix <= ntrail_reject){
+	// Need to correct image mask to remove trail
+	Morph::BlobType::iterator blobit = blob.begin();
+	while(blobit != blob.end()){
+	  (Inimage.DES()->mask)[*blobit++] |= ~trail_mask;
+	}
+	continue;
+      }
+    }
+  }
+
+  // Second pass grabs the valid trails and tailors them to 
+  // separate out the edgebleeds
   blob_image.resize(npix,0);
   trail_blobs.resize(0);
   Morph::GetBlobs(Inimage.DES()->mask,Nx,Ny,trail_mask,blob_image,trail_blobs);
+  if(npix_edge > 0){
+    bbbi   = trail_blobs.begin();
+    int edgetrail_index = trail_blobs.size();
+    while(bbbi != trail_blobs.end()){
+      int blobno = bbbi - trail_blobs.begin() + 1;
+      Morph::BlobType &blob = *bbbi++;
+      Morph::BlobType::iterator blobit = blob.begin();
+      std::list<Morph::IndexType> edgebleed_pixels;
+      std::list<Morph::IndexType> bleedtrail_pixels;
+      while(blobit != blob.end()){
+	Morph::IndexType blob_pixel_index = *blobit++;
+	Morph::IndexType row = blob_pixel_index/Nx;
+	if((row < npix_edge) || (row >= (Ny - npix_edge))){
+	  edgebleed_pixels.push_back(blob_pixel_index);
+	}
+	else bleedtrail_pixels.push_back(blob_pixel_index);
+      }
+      if(!edgebleed_pixels.empty()){
+	// Edgebleed detected - so the edgebleed pixels should be 
+	// removed from the original blob, and added to a new, 
+	// separate blob.  Don't need to update the blob_image because 
+	// it is never used.
+	blob.resize(0);
+	std::list<Morph::IndexType>::iterator btpi = bleedtrail_pixels.begin();
+	while(btpi != bleedtrail_pixels.end())
+	  blob.push_back(*btpi++);
+	Morph::BlobType edgebleed_blob;
+	btpi = edgebleed_pixels.begin();
+	while(btpi != edgebleed_pixels.end())
+	  edgebleed_blob.push_back(*btpi++);
+	edgebleed_blobs.push_back(edgebleed_blob);
+      }
+    }
+  }
+  if(!edgebleed_blobs.empty()){
+    std::vector<Morph::BlobType>::iterator ebbi = edgebleed_blobs.begin();
+    while(ebbi != edgebleed_blobs.end())
+      trail_blobs.push_back(*ebbi++);
+  }
+  edgebleed_blobs.resize(0);
+
   bbbi   = trail_blobs.begin();
   while(bbbi != trail_blobs.end()){
     int blobno = bbbi - trail_blobs.begin() + 1;
     Morph::BlobType &blob = *bbbi++;
-    int nblobpix = blob.size();
     // Step 1 - Get blob bounding box
     std::vector<Morph::IndexType> box;
     std::sort(blob.begin(),blob.end());
@@ -841,7 +946,7 @@ int MakeBleedMask(const char *argv[])
     //  adds the box to our list of blob boxes
     trail_boxes.push_back(box);
   }
-
+  
   std::vector<Morph::BoxType>  star_boxes;
   std::vector<double> star_centers_x;
   std::vector<double> star_centers_y;
