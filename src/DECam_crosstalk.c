@@ -8,6 +8,7 @@ Basic syntax: DECam_crosstalk <infile.fits> <outfile> <options>
                 if it is absent, CCDN.fits will be attached to the end of the filename
   Options:
     -crosstalk <crosstalk matrix- file>
+    -crossatthresh <factor> 
     -photflag <0 or 1>
     -satmask
 
@@ -72,7 +73,7 @@ Detailed Description:
     Finally, note that this program also alters the OBSTYPE header keyword to 
     conform to DESDM standards, and leaves a history in the header.
 
-  Crosstalk Correction:
+  Crosstalk Correction: (-crosstalk and -crossatthresh )
     If the -crosstalk option is used then the code will read the crosstalk 
     matrix file to determine the coefficients that are applied.  This file 
     currently has a format similar to that used in IRAF for the MOSAIC cameras.
@@ -92,6 +93,17 @@ Detailed Description:
     Currently for a correction to occur the absolute value of the coefficient
     must be greater than 1e-6 (note that negative crosstalk corrections are now
     possible).
+
+    If the option -crossatthresh <value> is used then a slightly different
+    correction is applied for source pixels with values above the SATURAT(A/B)
+    level on their given amplifier.  In such cases the correction has the 
+    form:
+
+      corrected = victim - ( SATURAT(A/B) * coefficient * value )
+
+    This has the effect that the correction applied will jump by a factor of 
+    <value> when the count level on the source amp exceeds SATURAT(A/B) but
+    then will plateau at a constant value.
 
   Saturation:
     Since the images operated on are unprocssed, DECam_crosstalk represents 
@@ -237,6 +249,7 @@ void print_usage(char *program_name)
 {
   printf("%s <infile.fits> <outfile> <options>\n",program_name);
   printf("  -crosstalk <crosstalk matrix- file>\n");
+  printf("  -crossatthresh <factor> \n");
   printf("  -photflag <0 or 1>\n");
   printf("  -satmask\n");
   printf("  -overscan\n");
@@ -290,13 +303,16 @@ int DECamXTalk(int argc,char *argv[])
       longcomment[10000],event[10000],newimagename[500],*xtalk_filename=NULL,
       flag_hdus_or_ccds = 0, ccdlist[CCDNUM2], hdulist[CCDNUM2], AmpOrder[CCDNUM1];
     int	anynull,nfound,i,hdunum,hdutype,j,k,x,y,chdu, ccdnum,locout,
-      flag_crosstalk=0,flag_verbose=1,flag_phot=0,bitpix,naxis,
+      flag_crosstalk=0,flag_verbose=1,flag_phot=0,flag_crossatthresh=0,bitpix,naxis,
       ext1,ext2,ampextension,ampA,ampB,locA,locB,ampoffset1,nkeys,
       ampoffset2,nsata=0,nsatb=0,flag_osorder=0,
       maxhdunum=HDUNUM, nhdus, needpath=1,
       mkpath(),getheader_flt(),getheader_str();
     static int status=0;
     float	value,uncertainty,significance,nullval,*outdata=NULL,*outdata2=NULL,**indata;
+    float       crossatthresh;
+    float       tmp_satAval,tmp_satBval;
+    float       satA[CCDNUM2],satB[CCDNUM2];
     float       ampAmin = 1e+30,ampAmax = 0,satval;
     float       ampBmin = 1e+30,ampBmax = 0;
     float       new_ltv1,new_ltv2,old_ltv1,old_ltv2;
@@ -317,8 +333,8 @@ int DECamXTalk(int argc,char *argv[])
 				  "BIASSECA","BIASSECB",""};
 
     enum {OPT_CROSSTALK=1,OPT_PHOTFLAG,OPT_SATMASK,OPT_OVERSCAN,OPT_OVERSCANSAMPLE,OPT_OVERSCANFUNCTION,
-	  OPT_OVERSCANORDER,OPT_OVERSCANTRIM,OPT_MAXHDUNUM,OPT_CCDLIST,OPT_HDULIST,OPT_FOCUSCHIPSOUT,
-	  OPT_VERBOSE,OPT_HELP,OPT_VERSION};
+	  OPT_OVERSCANORDER,OPT_OVERSCANTRIM,OPT_MAXHDUNUM,OPT_CCDLIST,OPT_HDULIST,OPT_CROSSATTHRESH,
+          OPT_FOCUSCHIPSOUT,OPT_VERBOSE,OPT_HELP,OPT_VERSION};
     
     if(build_command_line(argc,argv,command_line,1000) <= 0){
       reportevt(2,STATUS,1,"Failed to record full command line.");
@@ -391,6 +407,7 @@ int DECamXTalk(int argc,char *argv[])
 	  {"maxhdunum",        required_argument, 0,        OPT_MAXHDUNUM},
 	  {"ccdlist",          required_argument, 0,          OPT_CCDLIST},
 	  {"hdulist",          required_argument, 0,          OPT_HDULIST},
+	  {"crossatthresh",    required_argument, 0,    OPT_CROSSATTHRESH},
 	  {"verbose",          required_argument, 0,          OPT_VERBOSE},
 	  {"version",          no_argument,       0,          OPT_VERSION},
 	  {"help",             no_argument,       0,             OPT_HELP},
@@ -636,6 +653,24 @@ int DECamXTalk(int argc,char *argv[])
 	  reportevt(flag_verbose,STATUS,5,
 		    "Option -hdulist requires an argument.");
 	  command_line_errors++;
+	  exit(1);
+	}
+	break;
+      case OPT_CROSSATTHRESH: // Enables the prescription for crosstalk in heavily saturated cases //
+        cloperr=0;
+	flag_crossatthresh=1;
+	if(optarg){
+	  sscanf(optarg,"%f",&crossatthresh);
+	  if (crossatthresh < 0.0){
+	    sprintf(event,"Invlaid crossatthresh, must be >0.\n");
+	    reportevt(flag_verbose,STATUS,5,event);
+	    exit(1);
+	  }
+	}else{
+	  cloperr = 1;
+        }
+	if(cloperr){
+	  reportevt(flag_verbose,STATUS,5,"Option -crossatthresh requires an argument.\n");
 	  exit(1);
 	}
 	break;
@@ -902,6 +937,20 @@ int DECamXTalk(int argc,char *argv[])
       decodesection(input_image.datasecb, input_image.datasecbn, flag_verbose);
       AmpOrder[ccdnum] = (input_image.datasecan[0] < input_image.datasecbn[0]) ? AmpAB : AmpBA;
 
+      /* RAG added read to get SATURATA and SATURATB keywords for use when implementing -crossatthresh option */
+      /* wait to populate these values until after the ccdnum check has passed */
+
+      if(getheader_flt(nthheader,"SATURATA",&tmp_satAval,flag_verbose)){
+	sprintf(event,"SATURATA not found in header.");
+	reportevt(flag_verbose,STATUS,5,event);
+	printerror(status);	  
+      }     
+      if(getheader_flt(nthheader,"SATURATB",&tmp_satBval,flag_verbose)){
+	sprintf(event,"SATURATB not found in header.");
+	reportevt(flag_verbose,STATUS,5,event);
+	printerror(status);	  
+      }
+
       free(nthheader); nthheader = NULL;
 
       /* error checking for ccdnum range */
@@ -962,6 +1011,9 @@ int DECamXTalk(int argc,char *argv[])
 	reportevt(flag_verbose,STATUS,5,event);
 	printerror(status);
       }
+      satA[ccdnum]=tmp_satAval;
+      satB[ccdnum]=tmp_satBval;
+      printf(" CCDNUM=%2d: SATURATA=%f SATURATB=%f \n",ccdnum,satA[ccdnum],satB[ccdnum]);
 
       /*if (flag_verbose) {printf(".");fflush(stdout);}*/
     }
@@ -1279,10 +1331,20 @@ int DECamXTalk(int argc,char *argv[])
                     locB=locout;
                     locA=y*naxes[0]+(naxes[0]-x-1);
                 }
-                if (fabsf(xtalk[ampextension][ampA])>1.0e-6f) 
-                  xtalkcorrection+=xtalk[ampextension][ampA]*indata[j][locA];
-                if (fabsf(xtalk[ampextension][ampB])>1.0e-6f) 
-                  xtalkcorrection+=xtalk[ampextension][ampB]*indata[j][locB];
+                if (fabsf(xtalk[ampextension][ampA])>1.0e-6f){
+                  if ((flag_crossatthresh)&&(indata[j][locA] > satA[j])){
+                    xtalkcorrection+=xtalk[ampextension][ampA]*satA[j]*crossatthresh;
+                  }else{
+                    xtalkcorrection+=xtalk[ampextension][ampA]*indata[j][locA];
+                  }
+                }
+                if (fabsf(xtalk[ampextension][ampB])>1.0e-6f){
+                  if ((flag_crossatthresh)&&(indata[j][locB] > satB[j])){
+                    xtalkcorrection+=xtalk[ampextension][ampB]*satB[j]*crossatthresh;
+                  }else{
+                    xtalkcorrection+=xtalk[ampextension][ampB]*indata[j][locB];
+                  }
+                }
               }
               outdata[locout]-=xtalkcorrection;
             }
@@ -1298,10 +1360,20 @@ int DECamXTalk(int argc,char *argv[])
                     locA=locout;
                     locB=y*naxes[0]+(naxes[0]-x-1);
                 }
-                if (fabsf(xtalk[ampextension][ampA])>1.0e-6f)
-                  xtalkcorrection+=xtalk[ampextension][ampA]*indata[j][locA];
-                if (fabsf(xtalk[ampextension][ampB])>1.0e-6f) 
-                  xtalkcorrection+=xtalk[ampextension][ampB]*indata[j][locB]; 
+                if (fabsf(xtalk[ampextension][ampA])>1.0e-6f){
+                  if ((flag_crossatthresh)&&(indata[j][locA] > satA[j])){
+                    xtalkcorrection+=xtalk[ampextension][ampA]*satA[j]*crossatthresh;
+                  }else{
+                    xtalkcorrection+=xtalk[ampextension][ampA]*indata[j][locA];
+                  }
+                }
+                if (fabsf(xtalk[ampextension][ampB])>1.0e-6f){
+                  if ((flag_crossatthresh)&&(indata[j][locB] > satB[j])){
+                    xtalkcorrection+=xtalk[ampextension][ampB]*satB[j]*crossatthresh;
+                  }else{
+                    xtalkcorrection+=xtalk[ampextension][ampB]*indata[j][locB]; 
+                  }
+                }
               }
               outdata[locout]-=xtalkcorrection;
             }
@@ -2085,6 +2157,7 @@ int main(int argc,char *argv[])
 {
   return(DECamXTalk(argc,argv));
 }
+
 
 #undef STRING
 #undef FLOAT
