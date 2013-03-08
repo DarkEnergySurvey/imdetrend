@@ -584,47 +584,29 @@ int MakeBleedMask(const char *argv[])
   image_box[2] = 0;
   image_box[3] = Ny-1;
   Morph::IndexType image_npix_box;
-  
-  // Get global image statistics
-  Morph::BoxStats(Inimage.DES()->image,Inimage.DES()->mask,Nx,Ny,image_box,
-		  BADPIX_SATURATE | BADPIX_CRAY |            // reject pixels with
-		  BADPIX_BPM | BADPIX_STAR | BADPIX_TRAIL,   // these bits set
-		  BADPIX_INTERP,                             // accept these
-		  image_stats,image_npix_box);
-  int bbb = 0;
-  bool converged = false;
-  double last_mean = image_stats[Image::IMMEAN];
-  while((bbb < nbgit) && !converged){ 
-    bbb++;
-    Morph::ImageDataType ground_rejection_level = image_stats[Image::IMMEAN] + 
-      ground_rejection_factor*image_stats[Image::IMSIGMA];
-    // Get stats again, but reject high pixels
-    Morph::BoxStats(Inimage.DES()->image,Inimage.DES()->mask,Nx,Ny,image_box,
-		    BADPIX_SATURATE | BADPIX_CRAY |            // reject pixels with
-		    BADPIX_BPM | BADPIX_STAR | BADPIX_TRAIL,   // these bits set
-		    BADPIX_INTERP,                             // accept these
-		    0,ground_rejection_level,                  // rejection levels
-		    image_stats,image_npix_box);
-    double residual = std::abs(image_stats[Image::IMMEAN]-last_mean);
-    if(residual < 1e-3){
-      converged = true;
-      if(flag_verbose){
-	Out.str("");
-	Out << "Global image statistics converged after NITER=" << bbb 
-	    << (bbb==1 ? " iteration." : " iterations.") << std::endl; 
-	LX::ReportMessage(flag_verbose,QA,1,Out.str());
-	Out.str("");
-	Out << Util::stripdirs(filename) << "   BKGD=" << image_stats[Image::IMMEAN] << ", "
-	    << "BKGD_SIGMA=" << image_stats[Image::IMSIGMA] << std::endl;
-	LX::ReportMessage(flag_verbose,QA,1,Out.str());
-      }
+  Morph::IndexType minpix = static_cast<Morph::IndexType>(.3*static_cast<double>(npix));
+  Morph::IndexType niter = 0;
+
+  if(Morph::GetSky(Inimage.DES()->image,Inimage.DES()->mask,Nx,Ny,
+		   minpix,nbgit,ground_rejection_factor,1e-3,
+		   BADPIX_SATURATE | BADPIX_CRAY | BADPIX_BPM | BADPIX_STAR | 
+		   BADPIX_TRAIL,BADPIX_INTERP,image_stats,image_npix_box,niter,&Out))
+    {
+      std::ostringstream GSO;
+      GSO << "Global image statistics failed:" << std::endl
+	  << Out.str() << std::endl;
+      LX::ReportMessage(flag_verbose,STATUS,5,GSO.str());
+      return(1);
     }
-    last_mean = image_stats[Image::IMMEAN];
-  }
-  if(!converged){
+  else if(flag_verbose){
+    Out << "Global image statistics converged after NITER=" << niter 
+	<< (niter==1 ? " iteration." : " iterations.") << std::endl; 
+    LX::ReportMessage(flag_verbose,QA,1,Out.str());
     Out.str("");
-    Out << "Global image statistics did not converge after " << nbgit << " iterations.";
-    LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
+    Out << Util::stripdirs(filename) << "   BKGD=" << image_stats[Image::IMMEAN] << ", "
+	<< "BKGD_SIGMA=" << image_stats[Image::IMSIGMA] << std::endl;
+    LX::ReportMessage(flag_verbose,QA,1,Out.str());
+
   }
 
   // Experimental - push saturated,interpolated pixels back up to detectable levels
@@ -717,8 +699,8 @@ int MakeBleedMask(const char *argv[])
 	//	std::cout << "Initial Stats: (" << stats[Image::IMMIN] << "," << stats[Image::IMMAX]
 	//		  << "," << stats[Image::IMMEAN] << "," << stats[Image::IMSIGMA] << std::endl;
 	bool stats_converged = false;
-	bbb = 0;
-	last_mean = stats[Image::IMMEAN];
+	Morph::IndexType bbb = 0;
+	double last_mean = stats[Image::IMMEAN];
 	while((bbb < nbgit) && !stats_converged && !use_image_stats){
 	  bbb++;
 	  Morph::ImageDataType local_ground_rejection_level = stats[Image::IMMEAN] + 
@@ -882,7 +864,9 @@ int MakeBleedMask(const char *argv[])
 	// Need to correct image mask to remove trail
 	Morph::BlobType::iterator blobit = blob.begin();
 	while(blobit != blob.end()){
-	  (Inimage.DES()->mask)[*blobit++] |= ~trail_mask;
+	  Morph::IndexType pixind = *blobit++;
+	  (Inimage.DES()->mask)[pixind] &= ~(trail_mask|BADPIX_INTERP);
+	  temp_image[pixind] = Inimage.DES()->image[pixind];
 	}
 	continue;
       }
@@ -908,6 +892,8 @@ int MakeBleedMask(const char *argv[])
 	Morph::IndexType row = blob_pixel_index/Nx;
 	if((row < npix_edge) || (row >= (Ny - npix_edge))){
 	  edgebleed_pixels.push_back(blob_pixel_index);
+	  temp_image[blob_pixel_index] = Inimage.DES()->image[blob_pixel_index];
+	  Inimage.DES()->mask[blob_pixel_index] &= ~BADPIX_INTERP;
 	}
 	else bleedtrail_pixels.push_back(blob_pixel_index);
       }
@@ -935,6 +921,7 @@ int MakeBleedMask(const char *argv[])
   }
   edgebleed_blobs.resize(0);
 
+  // Get bounding boxes for each BADPIX_TRAIL blob
   bbbi   = trail_blobs.begin();
   while(bbbi != trail_blobs.end()){
     int blobno = bbbi - trail_blobs.begin() + 1;
@@ -952,7 +939,7 @@ int MakeBleedMask(const char *argv[])
   std::vector<double> star_centers_y;
   std::vector<double> star_radii;
   std::vector<std::vector<double> > star_idf;
-  // Loop through each blob, get blob bounding box,
+  // Loop through each BADPIX_STAR blob, get blob bounding box,
   // star center, and pixel intensity distribution function
   //
   // Step 0 - Initiate loop over blobs
@@ -982,8 +969,9 @@ int MakeBleedMask(const char *argv[])
     double cy = static_cast<double>(nby);
     cx /= 2.0;
     cy /= 2.0;
-    double star_r = cy*cy;
-    long r = static_cast<long>((std::sqrt(cx*cx + cy*cy)) + 2.0);
+    double star_r = cx*cx;
+    if(cy < cx) star_r = cy*cy;
+    long r = static_cast<long>((std::sqrt(star_r)) + 2.0);
     std::vector<double> idf(r,0);
     //    std::vector<Morph::IndexType> npix(r,0);
     cx += (box[0]);
@@ -1150,6 +1138,62 @@ int MakeBleedMask(const char *argv[])
       }
     }  
   }
+
+  // Reject stars obscured by bleeds 
+  blob_image.resize(npix,0);
+  blobs.resize(0);
+  Morph::GetBlobs(Inimage.DES()->mask,Nx,Ny,BADPIX_STAR,blob_image,blobs);
+  std::vector<Morph::BlobType>::iterator blobit = blobs.begin();
+  std::vector<double> new_center_x;
+  std::vector<double> new_center_y;
+  std::vector<double> new_radius;
+  std::vector<double>::iterator cxi  = star_centers_x.begin();
+  std::vector<double>::iterator cyi  = star_centers_y.begin();
+  std::vector<double>::iterator sri  = star_radii.begin();
+  Morph::IndexType ncovered = 0;
+  while(blobit != blobs.end()){
+    double center_x = *cxi++;
+    double center_y = *cyi++;
+    double srad = *sri++;
+    Morph::BlobType &blob = *blobit++;
+    Morph::BlobType::iterator bi = blob.begin();
+    bool covered_by_trail = true;
+    while(bi != blob.end() && covered_by_trail){
+      Morph::IndexType pixel_index = *bi++;
+      if(!(Inimage.DES()->mask[pixel_index] & BADPIX_TRAIL))
+	covered_by_trail = false;
+    }
+    if(covered_by_trail){
+      ncovered++;
+      bi = blob.begin();
+      while(bi != blob.end() && covered_by_trail){
+	Morph::IndexType pixel_index = *bi++;
+	Inimage.DES()->mask[pixel_index] &= ~BADPIX_STAR;
+      }
+    }
+    else{
+      new_center_x.push_back(center_x);
+      new_center_y.push_back(center_y);
+      new_radius.push_back(srad);
+    }
+  }
+  star_centers_x.resize(0);
+  star_centers_y.resize(0);
+  star_radii.resize(0);
+  cxi = new_center_x.begin();
+  cyi = new_center_y.begin();
+  sri = new_radius.begin();
+  while(sri != new_radius.end()){
+    star_centers_x.push_back(*cxi++);
+    star_centers_y.push_back(*cyi++);
+    star_radii.push_back(*sri++);
+  }
+  if(ncovered > 0){
+    Out.str("");
+    Out << "Rejected " << ncovered << " stars due to being completely obscured by bleeds.";
+    LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
+  }
+
   // Check for a WCS soln for this image
   bool get_wcs               = true;
   bool write_radii_in_pixels = false;
