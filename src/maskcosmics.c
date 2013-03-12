@@ -53,13 +53,13 @@ void print_usage(char *program_name)
   printf("%s <input image> <options>\n",program_name);
   printf("  Masking Options\n");
   printf("    -crays \n");
-   printf("    -crfract <cosmic ray flux fraction> \n");
-   printf("    -crsig2 <cosmic variance> \n");
+   printf("    -crfract <cosmic ray flux fraction> (default 0.40)\n");
+   printf("    -crsig2 <cosmic variance> (default 20)\n");
    printf("    -stars <astrostdsfile> \n");
    //   printf("    -flag_horiztrails \n"); 
    //   printf("    -nointerpolate \n");
    printf("  Output Options\n");
-   printf("    -output <newimage>\n");
+   //printf("    -output <newimage>\n");
    printf("    -verbose <0-3>\n");
    printf("    -help    (print usage and exit)\n");
    printf("    -version (print version and exit)\n");
@@ -74,8 +74,7 @@ int naxis1, naxis2,naxis;
 /* Parameters for doComic routine. This routines determines which pixels are
    potential cosmics rays and mask them */
 
-double CR_FRACT = 0.40;
-double CR_SIG2 = 20.0;
+
 double LOW_FACT = 5.0;
 int MIN_SAMPLE = 100;
 int MIN_LINE = 3;
@@ -138,7 +137,7 @@ int main(int argc,char *argv[])
      retrievescale(),printerror();
    void    polin2(),creategrid(),mkstarmask(),headervalue(),pixelhisto(),getfloatheader();
    /* process definitions from makeWeight */
-   int doCosmic(float *image,short *bpm,float *weight, float *tempweight);
+   int doCosmic(float *image,short *bpm,float *weight, float *tempweight, double crfract, double crsig2);
    int doStat(float *image,short *bpm,float *weight);
    int doWeight(float *image,short *bpm,float *weight);
    void dogrow(int masksrch,int npix,int maskset,float *image,short *bpm,float *weight);
@@ -151,6 +150,10 @@ int main(int argc,char *argv[])
      num = 0,filemode=0,goodpix,badpix,hdutype;
    enum {OPT_CRAYS=1,OPT_CRFRACT,OPT_CRSIG2,OPT_STARS,OPT_FLAG_HORIZTRAILS,
          OPT_NOINTERPOLATE,OPT_OUTPUT,OPT_VERBOSE,OPT_HELP,OPT_VERSION};
+
+   
+   double crfract = 0.40;
+   double crsig2 = 20.0;
 
    int error;
    int mask;
@@ -195,9 +198,9 @@ int main(int argc,char *argv[])
      {"stars",            required_argument, 0,              OPT_STARS},
      {"output",           required_argument, 0,          OPT_OUTPUT},
      {"verbose",          required_argument, 0,              OPT_VERBOSE},
+     {"crfract",           required_argument, 0,              OPT_CRFRACT},
+     {"crsig2",           required_argument, 0,              OPT_CRSIG2},
      {"crays",            no_argument,       0,              OPT_CRAYS},
-     {"crfrac",            no_argument,       0,              OPT_CRFRACT},
-     {"crsig2",            no_argument,       0,              OPT_CRSIG2},
      {"version",          no_argument,       0,              OPT_VERSION},
      {"help",             no_argument,       0,              OPT_HELP},
      {"nointerpolate",    no_argument,       &flag_nointerp, NO},
@@ -220,6 +223,22 @@ int main(int argc,char *argv[])
      printf(" with %s",optarg);
        printf(".\n");
        break;
+     case OPT_CRFRACT: // -crfract
+       if (optarg)
+         sscanf(optarg, "%d", &crfract);
+       else {
+         reportevt(flag_verbose,STATUS,5,"Option -crfract requires an argument.");
+         exit(1);
+       }
+       break;
+     case OPT_CRSIG2: // -crsig2
+       if (optarg)
+         sscanf(optarg, "%d", &crsig2);
+       else {
+         reportevt(flag_verbose,STATUS,5,"Option -crsig2 requires an argument.");
+         exit(1);
+       }
+       break;
      case OPT_CRAYS: // -crays
        /*sprintf(cray.name,"%s",optarg);*/
        flag_crays=YES;
@@ -228,10 +247,10 @@ int main(int argc,char *argv[])
        sprintf(astrostdsfile,"%s",optarg);
        flag_stars=YES;
        break;
-     case OPT_OUTPUT: // -output
-       sprintf(outputname,"%s",optarg);
-       flag_output=YES;
-       break;
+       //   case OPT_OUTPUT: // -output
+       //sprintf(outputname,"%s",optarg);
+       //flag_output=YES;
+       //break;
      case OPT_VERBOSE: // -verbose
        // already parsed verbosity
        break;
@@ -303,7 +322,7 @@ int main(int argc,char *argv[])
   sprintf(input.name,"%s",inname_temp);
   if (flag_output) { 
     rd_desimage(&input,READONLY,flag_verbose);
-  }
+   }
   else {
     rd_desimage(&input,READWRITE,flag_verbose);
   }
@@ -367,10 +386,6 @@ int main(int argc,char *argv[])
   if (!flag_output) { 
     sprintf(output.name,"%s",input.name);
   
-  /*else {
-    sprintf(output.name,"%s",outputname);
-    } */
-  
   /* create image, mask and varim arrays and copy from input */
   output.image=(float *)calloc(output.npixels,sizeof(float));
   if (output.image==NULL) reportevt(flag_verbose,STATUS,5,
@@ -405,14 +420,15 @@ int main(int argc,char *argv[])
     printerror(status);
   }*/
 
+  }
 
-
+  
   /* do star masking*/
   if (flag_stars){
     if (flag_verbose)reportevt(flag_verbose,STATUS,1,"Implementing bright stars masking"); 
     mkstarmask(&input,&output,filter,astrostdsfile,horiztrails,exposure,flag_verbose,flag_nointerp);
   }
-  }
+  
   /* Get Sky level */
   //  doSky(image,bpm,weight);
   sky.npixX = NXSIZE;
@@ -463,7 +479,7 @@ int main(int argc,char *argv[])
     if (flag_verbose==3) reportevt(flag_verbose,STATUS,1,
                                    "Now masking cosmic ray pixels");
 
-    doCosmic(output.image, output.mask, output.varim,tempimage.varim);
+    doCosmic(output.image, output.mask, output.varim,tempimage.varim, crfract, crsig2);
     
     spread(BADPIX_CRAY, 1000.0, BADPIX_CRAY, output.image, output.mask, output.varim);
 
@@ -487,6 +503,8 @@ int main(int argc,char *argv[])
   /* ******************************************** */
   /* **********   WRITE OUTPUT IMAGE  *********** */
   /* ******************************************** */
+
+
 
   sprintf(event,"Writing results to %s",output.name);
   reportevt(flag_verbose,STATUS,1,event);
@@ -618,7 +636,7 @@ void dogrow(int masksrch,int npix,int maskset,float *image,short *bpm,float *wei
         }
     }
   printf("Grow found %i pixels with mask=%#08x \n",kount[0],masksrch);
-  printf("Grow added %i pixels with mask=%#08x \n",kount[1],maskset);
+  // printf("Grow added %i pixels with mask=%#08x \n",kount[1],maskset);
   return;
 }
 
@@ -740,21 +758,21 @@ int doWeight(float *image,short *bpm,float *weight)
 
 
 
-int doCosmic(float *image,short *bpm,float *weight,float *tempweight)
+int doCosmic(float *image,short *bpm,float *weight,float *tempweight, double crfract, double crsig2)
 {
   int ix, iy, ip;
   double gx, gy, gtot, phi;
   double skylvl;
   int kount=0;
   double p0, px, py;
-  double crfract;
-  double crsig2;
+  //double crfract;
+  //double crsig2;
   double sigx2, sigy2;
   double crfract2, ofract;
   int debug;
 
-  crsig2 = CR_SIG2;
-  crfract = CR_FRACT;
+  //crsig2 = CR_SIG2;
+  //crfract = CR_FRACT;
 
   crfract2 = crfract*crfract;
   ofract = 1.0 - crfract;
