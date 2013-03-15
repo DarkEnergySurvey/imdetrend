@@ -565,6 +565,7 @@ int MakeBleedMask(const char *argv[])
     Out.str("");
     Out << "Found " << blobs.size() << " saturated objects initially."; 
     LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
+    Out.str("");  
   }
   
     
@@ -583,14 +584,25 @@ int MakeBleedMask(const char *argv[])
   image_box[1] = Nx-1;
   image_box[2] = 0;
   image_box[3] = Ny-1;
+
   Morph::IndexType image_npix_box;
   Morph::IndexType minpix = static_cast<Morph::IndexType>(.3*static_cast<double>(npix));
   Morph::IndexType niter = 0;
+  
+  Morph::IndexType nbadpix = Morph::MaskBadPixelData(Inimage.DES()->image,Inimage.DES()->mask,Nx,Ny,BADPIX_BPM);
 
+  if(nbadpix)
+    {
+      Out.str("");
+      Out << "Warning: Flagged " << nbadpix << " bad-valued pixels."; 
+      LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
+      Out.str("");
+    }
+  
   if(Morph::GetSky(Inimage.DES()->image,Inimage.DES()->mask,Nx,Ny,
-		   minpix,nbgit,ground_rejection_factor,1e-3,
-		   BADPIX_SATURATE | BADPIX_CRAY | BADPIX_BPM | BADPIX_STAR | 
-		   BADPIX_TRAIL,BADPIX_INTERP,image_stats,image_npix_box,niter,&Out))
+  		   minpix,nbgit,ground_rejection_factor,1e-3,
+  		   BADPIX_SATURATE | BADPIX_CRAY | BADPIX_BPM | BADPIX_STAR | 
+  		   BADPIX_TRAIL,BADPIX_INTERP,image_stats,image_npix_box,niter,&Out))
     {
       std::ostringstream GSO;
       GSO << "Global image statistics failed:" << std::endl
