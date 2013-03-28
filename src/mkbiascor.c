@@ -870,10 +870,10 @@ MakeBiasCorrection(int argc,char *argv[])
   /* ********************************************* */
 	
   if (flag_combine==AVSIGCLIP) {
-    if ( imnum <= 4) {
-      sprintf(event,"Sigma clipping require at list 4 images to combine");
-      reportevt(flag_verbose,STATUS,1,event);
-      exit(0);
+    if ( imnum < 4) {
+      sprintf(event,"Sigma clipping require at least 4 images to combine");
+      reportevt(flag_verbose,STATUS,5,event);
+      exit(1);
     }
     for (i=0;i<output.npixels;i++) { /* for each pixel */
       x=i%output.axes[0];y=i/output.axes[0];
