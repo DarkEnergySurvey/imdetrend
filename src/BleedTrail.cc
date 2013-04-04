@@ -447,6 +447,43 @@ int DetectBleedTrails(Morph::ImageDataType *image,
 }
 
 
+inline Morph::IndexType GetTrailWidth(Morph::ImageDataType *image,Morph::MaskDataType *mask,
+				      Morph::IndexType Nx,Morph::IndexType Ny,Morph::IndexType index,
+				      Morph::MaskDataType RejectMask,Morph::MaskDataType AcceptMask)
+{
+  Morph::IndexType y = index/Nx;
+  Morph::IndexType x = index%Nx;
+  Morph::IndexType sx = x;
+  Morph::IndexType sy = y;
+  Morph::IndexType sdist = 0;
+  bool search_done = false;
+  while(!search_done){
+    sx--;
+    sdist++;
+    if(sx < 0)
+      search_done = true;
+    else{
+      Morph::IndexType sindex = y*Nx+sx;
+      if((!(mask[sindex]&RejectMask)) || (mask[sindex]&AcceptMask))
+	search_done = true;
+    }
+  }
+  search_done = false;
+  sx = x;
+  while(!search_done){
+    sx++;
+    sdist++;
+    if(sx >= Nx)
+      search_done = true;
+    else{
+      Morph::IndexType sindex = y*Nx+sx;
+      if((!(mask[sindex]&RejectMask)) || (mask[sindex]&AcceptMask))
+	search_done = true;
+    }
+  }
+  return(sdist);
+}
+
 ///
 /// \brief Basic structuring element-based bleed trail detection
 /// \param input_image Pointer to image data
@@ -520,7 +557,7 @@ int DetectBleedTrailsInBoxes(Morph::ImageDataType *input_image,
     for(Morph::IndexType i = 0;i < npix;i++)
       *omptr++ = *imptr++;
   
-  std::vector<Morph::MaskDataType> temp_mask(&input_mask[0],&input_mask[npix-1]);
+  //  std::vector<Morph::MaskDataType> temp_mask(&input_mask[0],&input_mask[npix-1]);
   Morph::GetSEAttributes(trail_struct,Nx,npix_trail,tborder_y_minus,tborder_y_plus,
 			 tborder_x_minus,tborder_x_plus);
 
@@ -546,7 +583,7 @@ int DetectBleedTrailsInBoxes(Morph::ImageDataType *input_image,
 	for(Morph::IndexType x = box[0];x <= box[1];x++){
 	  Morph::IndexType index = y*Nx + x;
 	  // Make sure pixel at index isn't in the rejection mask before doing next set of things
-	  if(!(temp_mask[index]&TrailRejectionMask) || (temp_mask[index]&TrailExceptionMask)){
+	  if(!(input_mask[index]&TrailRejectionMask) || (input_mask[index]&TrailExceptionMask)){
 	    Morph::ImageDataType trail_mean = 0;
 	    Morph::ImageDataType trail_min = 0;
 	    Morph::ImageDataType trail_max = 0;
@@ -558,40 +595,77 @@ int DetectBleedTrailsInBoxes(Morph::ImageDataType *input_image,
 	    npix_bright = 0;
 	    while(selIt != trimmed_trail_struct.end() && (npix_bright < trail_pix_limit)){
 	      Morph::IndexType sindex = index + *selIt++;
-	      if(!(temp_mask[sindex]&TrailRejectionMask) || (temp_mask[sindex]&TrailExceptionMask)){
+	      if(!(input_mask[sindex]&TrailRejectionMask) || (input_mask[sindex]&TrailExceptionMask)){
 		if(input_image[sindex] > trail_level)
 		  npix_bright++;
-		else if(npix_bright) npix_bright = 0;
+		else 
+		  npix_bright = 0;
 	      }
 	    }
 	    if(npix_bright >= trail_pix_limit){
 	      output_mask[index] |= TrailMask;
 	      if(interpolate){
-		output_mask[index] |= InterpMask;
 		std::vector<Morph::ImageDataType> vals(4,0);
 		std::vector<Morph::IndexType>     dist(4,0);
-		Morph::ClosestValidValues(input_image,input_mask,Nx,Ny,index,
-					  ImageRejectionMask,ImageExceptionMask,
-					  vals,dist);
-		if(dist[0] > 0 && dist[1] > 0){
-		  Morph::ImageDataType total_dist = dist[0] + dist[1];
-		  Morph::ImageDataType distm1 = 1.0/total_dist;
-		  Morph::ImageDataType weight_1 = (total_dist - dist[0]);
-		  Morph::ImageDataType weight_2 = (total_dist - dist[1]);
-		  output_image[index] = (weight_1*vals[0] + weight_2*vals[1])*distm1;
-		  if((vals[0] > star_level) || (vals[1] > star_level)){
-		    output_mask[index] |= StarMask;
-		  }
-		}
+		Morph::IndexType trailwidth = GetTrailWidth(input_image,input_mask,Nx,Ny,index,
+							    ImageRejectionMask|TrailMask,ImageExceptionMask);
+		//		assert(trailwidth < 20);
+		Morph::BoxType bgbox(4,0);
+		bgbox[0] = x - (trailwidth+4);
+		bgbox[1] = x + (trailwidth+4);
+		bgbox[2] = y - 1;
+		bgbox[3] = y + 1;
+		if(bgbox[0] < 0) bgbox[0] = 0;
+		if(bgbox[1] >= Nx) bgbox[1] = Nx-1;
+		if(bgbox[2] < 0) bgbox[2] = 0;
+		if(bgbox[3] >= Ny) bgbox[3] = Ny-1;
+		Morph::StatType interpstats;
+		Morph::IndexType npix_interp;
+		Morph::BoxStats(input_image,input_mask,Nx,Ny,bgbox,
+				ImageRejectionMask|TrailMask,ImageExceptionMask,
+				interpstats,npix_interp);
+// 		assert(npix_interp > 0);
+// 		Morph::ClosestValidValues(input_image,input_mask,Nx,Ny,index,
+// 					  ImageRejectionMask,ImageExceptionMask,
+// 					  vals,dist);
+// 		if(dist[0] > 0 && dist[1] > 0){
+// 		  Morph::ImageDataType total_dist = dist[0] + dist[1];
+// 		  Morph::ImageDataType distm1 = 1.0/total_dist;
+// 		  Morph::ImageDataType weight_1 = (total_dist - dist[0]);
+// 		  Morph::ImageDataType weight_2 = (total_dist - dist[1]);
+// 		  if((vals[0] > star_level) || (vals[1] > star_level)){
+// 		    output_mask[index] |= StarMask;
+// 		  }
+// 		  else{
+// 		    output_mask[index] |= InterpMask;
+// 		    output_image[index] = (weight_1*vals[0] + weight_2*vals[1])*distm1 + mygasdev(&ranseed)*stats[Image::IMSIGMA];
+// 		  }
+
+// 		}
+		Morph::ImageDataType baseval = interpstats[Image::IMMEAN];
+		output_image[index] = baseval + mygasdev(&ranseed)*stats[Image::IMSIGMA];
+		output_mask[index] |= InterpMask;
+		if(baseval > star_level)
+		  output_mask[index] |= StarMask;
 		//		  else {
 		//		  }
 		//		}
-		else if(dist[0] > 0){
-		  output_image[index] = vals[0] + mygasdev(&ranseed)*stats[Image::IMSIGMA];
-		}
-		else if(dist[1] > 0){
-		  output_image[index] = vals[1] + mygasdev(&ranseed)*stats[Image::IMSIGMA];
-		}
+// 		else if(dist[0] > 0){
+// 		  if(vals[0] > star_level)
+// 		    output_mask[index] |= StarMask;
+// 		  else{
+// 		    output_mask[index] |= InterpMask;
+// 		    output_image[index] = vals[0] + mygasdev(&ranseed)*stats[Image::IMSIGMA];
+// 		  }
+// 		}
+// 		else if(dist[1] > 0){
+// 		  if(vals[1] > star_level)
+// 		    output_mask[index] |= StarMask;
+// 		  else{
+// 		    output_image[index] = vals[1] + mygasdev(&ranseed)*stats[Image::IMSIGMA];
+// 		    output_mask[index] |= InterpMask;
+// 		  }
+// 		}
 	      }
 	      ntrail++;
 	    }
@@ -604,7 +678,7 @@ int DetectBleedTrailsInBoxes(Morph::ImageDataType *input_image,
 	for(Morph::IndexType x = box[0];x <= box[1];x++){
 	  Morph::IndexType index = y*Nx + x;
 	  // Make sure pixel at index isn't in the rejection mask before doing next set of things
-	  if(!(temp_mask[index]&TrailRejectionMask) || (temp_mask[index]&TrailExceptionMask)){
+	  if(!(input_mask[index]&TrailRejectionMask) || (input_mask[index]&TrailExceptionMask)){
 	    Morph::ImageDataType trail_mean = 0;
 	    Morph::ImageDataType trail_min = 0;
 	    Morph::ImageDataType trail_max = 0;
@@ -614,47 +688,77 @@ int DetectBleedTrailsInBoxes(Morph::ImageDataType *input_image,
 	    npix_bright = 0;
 	    while(selIt != trail_struct.end() && (npix_bright < trail_pix_limit)){
 	      Morph::IndexType sindex = index + *selIt++;
-	      if(!(temp_mask[sindex]&TrailRejectionMask) || (temp_mask[sindex]&TrailExceptionMask)){
+	      if(!(input_mask[sindex]&TrailRejectionMask) || (input_mask[sindex]&TrailExceptionMask)){
 		if(input_image[sindex] > trail_level)
 		  npix_bright++;
-		else if(npix_bright) npix_bright = 0;
+		else 
+		  npix_bright = 0;
 	      }
 	    }
 	    if(npix_bright >= trail_pix_limit){
 	      output_mask[index] |= TrailMask;
 	      if(interpolate){
-		output_mask[index] |= InterpMask;
 		std::vector<Morph::ImageDataType> vals(4,0);
 		std::vector<Morph::IndexType>     dist(4,0);
-		Morph::ClosestValidValues(input_image,input_mask,Nx,Ny,index,
-					  ImageRejectionMask,ImageExceptionMask,
-					  vals,dist);
-		if(dist[0] > 0 && dist[1] > 0){
-		    Morph::ImageDataType total_dist = dist[0] + dist[1];
-		    Morph::ImageDataType distm1 = 1.0/total_dist;
-		    Morph::ImageDataType weight_1 = (total_dist - dist[0]);
-		    Morph::ImageDataType weight_2 = (total_dist - dist[1]);
-		    output_image[index] = (weight_1*vals[0] + weight_2*vals[1])*distm1;
-		    if((vals[0] > star_level) || (vals[1] > star_level)){
-		      output_mask[index] |= StarMask;
-		    }
-		}
+		Morph::IndexType trailwidth = GetTrailWidth(input_image,input_mask,Nx,Ny,index,
+							    ImageRejectionMask|TrailMask,ImageExceptionMask);
+		//		assert(trailwidth < 20);
+		Morph::BoxType bgbox(4,0);
+		bgbox[0] = x - (trailwidth+4);
+		bgbox[1] = x + (trailwidth+4);
+		bgbox[2] = y - 1;
+		bgbox[3] = y + 1;
+		if(bgbox[0] < 0) bgbox[0] = 0;
+		if(bgbox[1] >= Nx) bgbox[1] = Nx-1;
+		if(bgbox[2] < 0) bgbox[2] = 0;
+		if(bgbox[3] >= Ny) bgbox[3] = Ny-1;
+		Morph::StatType interpstats;
+		Morph::IndexType npix_interp;
+		Morph::BoxStats(input_image,input_mask,Nx,Ny,bgbox,
+				ImageRejectionMask|TrailMask,ImageExceptionMask,
+				interpstats,npix_interp);
+		//		assert(npix_interp > 0);
+		//		Morph::ClosestValidValues(input_image,input_mask,Nx,Ny,index,
+		//					  ImageRejectionMask,ImageExceptionMask,
+		//					  vals,dist);
+		//		if(dist[0] > 0 && dist[1] > 0){
+		//		    Morph::ImageDataType total_dist = dist[0] + dist[1];
+		//		    Morph::ImageDataType distm1     = 1.0/total_dist;
+		//		    Morph::ImageDataType weight_1   = (total_dist - dist[0]);
+		//		    Morph::ImageDataType weight_2   = (total_dist - dist[1]);
+		//		    if((vals[0] > star_level) || (vals[1] > star_level)){
+		//		output_image[index] = (weight_1*vals[0] + weight_2*vals[1])*distm1 + mygasdev(&ranseed)*stats[Image::IMSIGMA];
+		Morph::ImageDataType baseval = interpstats[Image::IMMEAN];
+		output_image[index] = baseval + mygasdev(&ranseed)*stats[Image::IMSIGMA];
+		output_mask[index] |= InterpMask;
+		if(baseval > star_level)
+		  output_mask[index] |= StarMask;
+		//		    }
+		//		    else{
+		//		    }
+		//		}
 		//		  else {
 
 		//		  }
 		//		}
-		else if(dist[0] > 0){
-		  if(vals[0] < trail_level)
-		    output_image[index] = vals[0] + mygasdev(&ranseed)*stats[Image::IMSIGMA];
-		  else
-		    output_mask[index] |= StarMask;
-		}
-		else if(dist[1] > 0){
-		  if(vals[1] < trail_level)
-		    output_image[index] = vals[1] + mygasdev(&ranseed)*stats[Image::IMSIGMA];
-		  else
-		    output_mask[index] |= StarMask;
-		}
+		//		else if(dist[0] > 0){
+		//		  if(vals[0] < star_level){
+		//		    output_mask[index] |= InterpMask;
+		//		    output_image[index] = vals[0] + mygasdev(&ranseed)*stats[Image::IMSIGMA];
+		//		  }
+		//		  else
+		    //	    if(vals[0] > star_level)
+		//		      output_mask[index] |= StarMask;
+		//		}
+		//		else if(dist[1] > 0){
+		//		  if(vals[1] < star_level){
+		//		    output_mask[index] |= InterpMask;
+		//		    output_image[index] = vals[1] + mygasdev(&ranseed)*stats[Image::IMSIGMA];
+		//		  }
+		//		  else
+		    //		  if(vals[1] > star_level)
+		//		    output_mask[index] |= StarMask;
+		//		}
 	      }
 	      ntrail++;
 	    }
