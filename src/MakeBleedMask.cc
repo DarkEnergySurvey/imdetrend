@@ -518,6 +518,7 @@ int MakeBleedMask(const char *argv[])
 						     Inimage.DES()->mask,Nx,Ny,BADPIX_BPM);
   if(nbadpix)
     {
+      // Set weights to zero for all of BPM 
       if(Inimage.DES()->varim){
 	for(Morph::IndexType nni = 0;nni < npix;nni++){
 	  if(Inimage.DES()->mask[nni]&BADPIX_BPM)
@@ -530,7 +531,8 @@ int MakeBleedMask(const char *argv[])
       Out.str("");
     }
   
-
+  // Set up trail_width - which is the length of the structuring element
+  // in the scan direction. 
   // Check for FWHM keyword if width unset
   float fwhm = 0;
   if(trail_width == 0){
@@ -541,12 +543,14 @@ int MakeBleedMask(const char *argv[])
 	trail_width = static_cast<long>(fwhm);
     }
   }
+  // Default to 20
   if(trail_width == 0)
     trail_width = 20;
-
+  // Force symmetry
   if(trail_width%2)
     trail_width++;
   
+  // The trail_arm is the number of pixels in each of +/- scan direction
   int trail_arm = trail_width/2;
   if(!snum.empty()){
     std::istringstream Istr(snum);
@@ -559,6 +563,8 @@ int MakeBleedMask(const char *argv[])
     }    
   }
 
+  // This actually forms the structuring element for the trail
+  // search, trail_structure.
   unsigned int trail_pix = trail_width/2;
   std::vector<long> trail_structure(trail_width,0);
   std::vector<long>::iterator trailit = trail_structure.begin();
@@ -567,15 +573,22 @@ int MakeBleedMask(const char *argv[])
   for(unsigned int i = 1;i <= trail_pix;i++)
     *trailit++ = i*Nx;
   
+  // Pixels with these bits set are ignored in bleedtrail detection
   short trail_rejection_mask  = BADPIX_CRAY | BADPIX_BPM;
+  // Accept pixels with this bit set no matter what
   short trail_exception_mask  = 0;
+  // Set this bit for detected trail pixels
   short trail_mask = BADPIX_TRAIL;
-  short ground_rejection_mask = trail_rejection_mask | trail_mask | BADPIX_SATURATE; 
+  // Reject pixels with these bits set when determining background levels
+  short ground_rejection_mask = trail_rejection_mask | trail_mask | BADPIX_SATURATE;
+
+ 
   int bleed_status = 0; 
   int total_trail_pixels = 0;
   int method = 1;
   
 
+  // Copy the incoming mask (or create one if it doesn't already exist)
   std::vector<Morph::MaskDataType> temp_mask(npix,0);
   if(!Inimage.DES()->mask){
     method = 0;
@@ -600,7 +613,6 @@ int MakeBleedMask(const char *argv[])
   // trails, and this is a way to specify that pixels neighboring saturated
   // pixels are untrusted.
   //
-  
   std::vector<Morph::IndexType> blob_image(npix,0);
   std::vector<std::vector<Morph::IndexType> > blobs;
   if(debug){
@@ -615,6 +627,7 @@ int MakeBleedMask(const char *argv[])
       std::cout << "Blob(" << blobno << ") size = " << nblobpix << std::endl;
     }
   } 
+  // The structuring element used for dilation of the saturated pixel mask
   std::vector<long> structuring_element(8,0);
   structuring_element[0] = -(Nx+1);
   structuring_element[1] = -Nx;
@@ -624,6 +637,9 @@ int MakeBleedMask(const char *argv[])
   structuring_element[5] = Nx-1;
   structuring_element[6] = Nx;
   structuring_element[7] = Nx+1;
+  // Dilate twice.  This *should* speed up the bleedtrail detection because
+  // now instead of using the bounding box, just the "saturated" mask can be 
+  // used.
   Morph::DilateMask(&temp_mask[0],Nx,Ny,structuring_element,BADPIX_SATURATE);
   Morph::DilateMask(&temp_mask[0],Nx,Ny,structuring_element,BADPIX_SATURATE);
 
@@ -704,7 +720,8 @@ int MakeBleedMask(const char *argv[])
 
   }
 
-  // Experimental - push saturated,interpolated pixels back up to detectable levels
+  // Experimental - push saturated,interpolated pixels back up to detectable levels. This undos 
+  // imcorrect's interpolation over 1-pixel gaps.
   double trail_level = image_stats[Image::IMMEAN] + 2.0*scalefactor*image_stats[Image::IMSIGMA];
   //   //  double trail_level = image_stats[Image::IMMAX];
   for(int pixi = 0;pixi < Nx*Ny;pixi++){
@@ -864,35 +881,50 @@ int MakeBleedMask(const char *argv[])
     
 
   // PASS 1 - DETECT EVERYTHING BRIGHT
-   bleed_status = DetectBleedTrailsInBoxes(Inimage.DES()->image,
- 					  NULL,
- 					  &tempmask2[0],
- 					  &temp_mask[0],
- 					  Nx,Ny,candidate_trail_boxes,box_stats,
- 					  trail_structure,
- 					  trail_rejection_mask,trail_exception_mask,
- 					  ground_rejection_mask,trail_exception_mask,
- 					  trail_mask,
- 					  BADPIX_INTERP,
- 					  BADPIX_STAR,
- 					  trail_arm,scalefactor,
- 					  star_scalefactor,
-					  false,std::cout);
-  // PASS 2 - DETECT BLEED TRAILS
-  bleed_status = DetectBleedTrailsInBoxes(Inimage.DES()->image,
-					  &temp_image[0],
-					  &temp_mask[0],
-					  Inimage.DES()->mask,
-					  Nx,Ny,candidate_trail_boxes,box_stats,
-					  trail_structure,
-					  trail_rejection_mask,trail_exception_mask,
-					  ground_rejection_mask,trail_exception_mask,
-					  trail_mask,
-					  BADPIX_INTERP,
-					  BADPIX_STAR,
-					  trail_arm,scalefactor,
-					  star_scalefactor,
-					  do_interp,std::cout);
+  //  bleed_status = DetectBleedTrailsInBoxes(Inimage.DES()->image,
+  //  					  NULL,
+  //  					  &tempmask2[0],
+  //  					  &temp_mask[0],
+  //  					  Nx,Ny,candidate_trail_boxes,box_stats,
+  //  					  trail_structure,
+  //  					  trail_rejection_mask,trail_exception_mask,
+  //  					  ground_rejection_mask,trail_exception_mask,
+  //  					  trail_mask,
+  //  					  BADPIX_INTERP,
+  //  					  BADPIX_STAR,
+  //  					  trail_arm,scalefactor,
+  //  					  star_scalefactor,
+  //  					  false,std::cout);
+  // // PASS 2 - DETECT BLEED TRAILS
+  // bleed_status = DetectBleedTrailsInBoxes(Inimage.DES()->image,
+  // 					  &temp_image[0],
+  // 					  &temp_mask[0],
+  // 					  Inimage.DES()->mask,
+  // 					  Nx,Ny,candidate_trail_boxes,box_stats,
+  // 					  trail_structure,
+  // 					  trail_rejection_mask,trail_exception_mask,
+  // 					  ground_rejection_mask,trail_exception_mask,
+  // 					  trail_mask,
+  // 					  BADPIX_INTERP,
+  // 					  BADPIX_STAR,
+  // 					  trail_arm,scalefactor,
+  // 					  star_scalefactor,
+  // 					  do_interp,std::cout);
+
+  bleed_status = DetectBleedTrailsInBlobs(Inimage.DES()->image,
+  					  &temp_image[0],
+  					  &temp_mask[0],
+  					  Inimage.DES()->mask,
+  					  Nx,Ny,blobs,box_stats,
+  					  trail_structure,
+  					  trail_rejection_mask,trail_exception_mask,
+  					  ground_rejection_mask,trail_exception_mask,
+  					  trail_mask,
+  					  BADPIX_INTERP,
+  					  BADPIX_STAR,
+  					  trail_arm,scalefactor,
+  					  star_scalefactor,
+  					  do_interp,std::cout);
   
   total_trail_pixels = bleed_status;
 
