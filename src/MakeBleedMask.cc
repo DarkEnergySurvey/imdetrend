@@ -179,7 +179,7 @@ public:
     AddHelp("help","Prints this long version of help.");
     AddHelp("interpolate","Interpolate over bleedtrails.");
     AddHelp("trailreject","Reject bleedtrails of size <npix> or smaller. (1)");
-    AddHelp("edgesize","Size of edges used to detect edgebleed. (5)");
+    AddHelp("edgesize","Size of edges used to detect edgebleed. (15)");
     AddHelp("starmask","Create a mask for the detected bright objects. (No)");
     AddHelp("bgreject","Use specified <factor> as scalefactor for background rejection. (5.0)");
     AddHelp("scalefactor","Use specified <value> as scalefactor on background to detect bleedtrails. (10.0)");
