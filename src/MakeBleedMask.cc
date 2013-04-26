@@ -1253,9 +1253,9 @@ int MakeBleedMask(const char *argv[])
     cx /= 2.0;
     cy /= 2.0;
     double star_r = cx*cx;
+    if(debug)
+      std::cout << "Initial Stellar Radius(" << blobno << ") = " << std::sqrt(star_r) << std::endl;
     if(cy < cx) star_r = cy*cy;
-    long r = static_cast<long>((std::sqrt(star_r)) + 2.0);
-    std::vector<double> idf(r,0);
     //    std::vector<Morph::IndexType> npix(r,0);
     cx += (box[0]);
     cy += (box[2]);
@@ -1264,7 +1264,18 @@ int MakeBleedMask(const char *argv[])
     star_centers_x.push_back(cx);
     star_centers_y.push_back(cy);
     
+    ModifyStarR(Inimage.DES()->mask,Inimage.DES()->image,cx,cy,star_r,Nx,Ny,
+		ground_rejection_mask,star_scalefactor,image_stats);
+    star_r *= rgf2;
+    double srstarr = std::sqrt(star_r);
+    if(debug)
+      std::cout << "Modified Stellar Radius(" << blobno << "): " << srstarr << std::endl;
+
+    star_radii.push_back(srstarr);
+
     if(do_star_interp){
+      long r = static_cast<long>((std::sqrt(star_r)) + 2.0);
+      std::vector<double> idf(r,0);
       //      BlobFile << "# Box: [" << box[0] << ":" << box[1] << ","
       //	       << box[2] << ":" << box[3] << "]" << std::endl;
       
@@ -1382,11 +1393,7 @@ int MakeBleedMask(const char *argv[])
 	  Inimage.DES()->mask[pixel_index] ^= BADPIX_STAR;
       }
     }
-    ModifyStarR(Inimage.DES()->mask,Inimage.DES()->image,cx,cy,star_r,Nx,Ny,
-		ground_rejection_mask,star_scalefactor,image_stats);
-    star_r *= rgf2;
-    double srstarr = std::sqrt(star_r);
-    star_radii.push_back(srstarr);
+
     if(do_starmask){
       //      star_radii[star_radii.size()-1] = std::sqrt(star_r);
       double sx1 = cx - static_cast<double>(nby)/2.0 - 1.0;
@@ -1874,8 +1881,8 @@ void ModifyStarR(Morph::MaskDataType *mask,Morph::ImageDataType *image,
 		 double star_scalefactor,Morph::StatType &stats)
 {
   double starval = stats[Image::IMMEAN] + star_scalefactor*stats[Image::IMSIGMA];
-  double temp_r = 5.0*std::sqrt(star_r);
-  Morph::IndexType nbins = static_cast<Morph::IndexType>(temp_r + 1);
+  double temp_r = 10.0*std::sqrt(star_r);
+  Morph::IndexType nbins = static_cast<Morph::IndexType>(temp_r + 1);  
   double binsize = temp_r/static_cast<double>(nbins);
   std::vector<std::vector<double> > starbins(nbins+1);
   Morph::IndexType x0 = static_cast<Morph::IndexType>(cx - temp_r - 1);
@@ -1918,7 +1925,8 @@ void ModifyStarR(Morph::MaskDataType *mask,Morph::ImageDataType *image,
       } 
     }
   }
-  star_r *= star_r;
+  if(done)
+    star_r *= star_r;
 }
 
 //  LocalWords:  LocY
