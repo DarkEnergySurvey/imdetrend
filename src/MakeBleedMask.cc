@@ -121,6 +121,8 @@ Known Issues:
 #include "ComLine.hh"
 #include "FitsTools.hh"
 #include "BleedTrails.hh"
+//#include "Profiler.hh"
+
 extern "C" {
 #undef   OFF_T
 #include "fitscat_mine.h"
@@ -215,6 +217,7 @@ public:
 
 int MakeBleedMask(const char *argv[])
 {
+  //  Profiler::ProfilerObj profiler;
   // ------- Setup and Command Line Parsing --------
   
   // Initialization of command line object
@@ -222,7 +225,8 @@ int MakeBleedMask(const char *argv[])
   int comline_status = comline.ProcessCommandLine((const char **)argv);
 
   std::string program_name(comline.ProgramName());
-  
+  //  profiler.Init(program_name,0);
+  //  profiler.FunctionEntry("Init");
   // Just print help on stdout and quit if user
   // did -h or --help. 
   if(comline.Narg()==1){
@@ -445,12 +449,15 @@ int MakeBleedMask(const char *argv[])
   
   std::vector<std::string>::iterator inamei = infile_names.begin();
 
+  //  profiler.FunctionExit("Init");
+  //  profiler.FunctionEntry("FitsRead");
   // Step through the file lists and read in the FITS images
 
   // Declare and initialize FitsImage object which
   // will handle most of the FITS-specific interactions
   // under-the-covers.
   FitsTools::FitsImage Inimage;
+  //  Inimage.SetProfiler(profiler);
   Inimage.SetOutStream(Out);
   Inimage.SetExclusions(exclusion_list,43);
 
@@ -473,6 +480,7 @@ int MakeBleedMask(const char *argv[])
     LX::ReportMessage(flag_verbose,STATUS,5,Out.str());
     return(1);
   }
+  //  Inimage.Copy(ofilename,flag_verbose);
   // Close the input FITS file, we're done with it.
   Inimage.Close();
   // Let stdout know what file was actually read.
@@ -482,7 +490,6 @@ int MakeBleedMask(const char *argv[])
     Out << "Found " << Inimage.DES()->name << ".";
     LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
   }
-  
   // How many HDU's were read?  Report it to stdout if verbose
   int number_of_hdus = Inimage.Headers().size();
   std::vector<std::string>::iterator hi = Inimage.Headers().begin();
@@ -507,6 +514,10 @@ int MakeBleedMask(const char *argv[])
       }
   }
 
+  //  profiler.FunctionExit("FitsRead");
+  
+  //  profiler.FunctionEntry("Setup");
+  
   Morph::IndexType Nx = Inimage.DES()->axes[0];
   Morph::IndexType Ny = Inimage.DES()->axes[1];
   Morph::IndexType npix = Nx*Ny;
@@ -613,6 +624,7 @@ int MakeBleedMask(const char *argv[])
   // trails, and this is a way to specify that pixels neighboring saturated
   // pixels are untrusted.
   //
+  //  profiler.FunctionEntry("Dilation");
   std::vector<Morph::IndexType> blob_image(npix,0);
   std::vector<std::vector<Morph::IndexType> > blobs;
   if(debug){
@@ -643,6 +655,7 @@ int MakeBleedMask(const char *argv[])
   Morph::DilateMask(&temp_mask[0],Nx,Ny,structuring_element,BADPIX_SATURATE);
   Morph::DilateMask(&temp_mask[0],Nx,Ny,structuring_element,BADPIX_SATURATE);
 
+  // profiler.FunctionExit("Dilation");
   // Get the "blobs" of BADPIX_SATURATE pixels. The number of blobs is the 
   // initial number of saturated objects before bleedtrail rejection.
   //
@@ -654,11 +667,13 @@ int MakeBleedMask(const char *argv[])
   //  std::vector<std::vector<Morph::IndexType> > blobs;
   blob_image.resize(npix,0);
   blobs.resize(0);
+  // profiler.FunctionEntry("GetBlobs");
   // This call populates the above two data structures
   Morph::GetBlobsWithRejection(&temp_mask[0],Nx,Ny,BADPIX_SATURATE,BADPIX_BPM,
 			       0,blob_image,blobs);
 
-  
+  // profiler.FunctionExit("GetBlobs");
+
   if(debug){
     std::vector<Morph::BlobType>::iterator bbbi   = blobs.begin();
     std::cout << "AFTER DILATION:" << std::endl;
@@ -677,6 +692,7 @@ int MakeBleedMask(const char *argv[])
   }
   
     
+  // profiler.FunctionEntry("Statistics");
   // These data structures hold the bounding boxes for
   // each blob, and the image statistics within an extended
   // version of the bounding box.
@@ -697,6 +713,7 @@ int MakeBleedMask(const char *argv[])
   Morph::IndexType minpix = static_cast<Morph::IndexType>(.3*static_cast<double>(npix));
   Morph::IndexType niter = 0;
   
+  // profiler.FunctionEntry("GetSky");
   // This determines the sky by rejecting bright pixels until the mean stops changing.
   if(Morph::GetSky(Inimage.DES()->image,&temp_mask[0],Nx,Ny,
   		   minpix,nbgit,ground_rejection_factor,1e-3,
@@ -719,6 +736,7 @@ int MakeBleedMask(const char *argv[])
     LX::ReportMessage(flag_verbose,QA,1,Out.str());
 
   }
+  // profiler.FunctionExit("GetSky");
 
   // Experimental - push saturated,interpolated pixels back up to detectable levels. This undos 
   // imcorrect's interpolation over 1-pixel gaps.
@@ -742,6 +760,7 @@ int MakeBleedMask(const char *argv[])
     *tii++ = Inimage.DES()->image[index];
   }
   
+  // profiler.FunctionEntry("LocalStats");
   // Loop through each blob, get image stats inside extended 
   // blob bounding box.
   //
@@ -863,6 +882,8 @@ int MakeBleedMask(const char *argv[])
     //    box_stats.push_back(stats);
     box_stats.push_back(stats);
   }
+  // profiler.FunctionExit("LocalStats");
+  // profiler.FunctionExit("Statistics");
 
   if(flag_verbose){
     Out.str("");
@@ -878,6 +899,8 @@ int MakeBleedMask(const char *argv[])
   
 
   std::vector<Morph::MaskDataType> tempmask2(temp_mask.begin(),temp_mask.end());
+
+  // profiler.FunctionExit("Setup");
     
 
   // PASS 1 - DETECT EVERYTHING BRIGHT
@@ -911,6 +934,7 @@ int MakeBleedMask(const char *argv[])
   // 					  star_scalefactor,
   // 					  do_interp,std::cout);
 
+  // profiler.FunctionEntry("BleedTrails");
   bleed_status = DetectBleedTrailsInBlobs(Inimage.DES()->image,
   					  &temp_image[0],
   					  &temp_mask[0],
@@ -926,6 +950,7 @@ int MakeBleedMask(const char *argv[])
   					  star_scalefactor,
   					  do_interp,std::cout);
   
+  // profiler.FunctionExit("BleedTrails");
   total_trail_pixels = bleed_status;
 
   if(bleed_status < 0)
@@ -973,6 +998,7 @@ int MakeBleedMask(const char *argv[])
     LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
   }
   
+  // profiler.FunctionEntry("RejectSmall");
   // First pass rejects any trail of size <ntrail_reject> or smaller
   std::vector<Morph::BlobType> trail_blobs;
   std::vector<Morph::BoxType>  trail_boxes;
@@ -997,7 +1023,9 @@ int MakeBleedMask(const char *argv[])
       }
     }
   }
-
+  // profiler.FunctionExit("RejectSmall");
+  
+  // profiler.FunctionEntry("EdgeBleed");
   // Second pass blobs the valid trails and checks
   // for potential edgebleed
   //
@@ -1214,8 +1242,10 @@ int MakeBleedMask(const char *argv[])
     }
   }
   
+  // profiler.FunctionExit("EdgeBleed");
 
 
+  // profiler.FunctionEntry("Stars");
   std::vector<Morph::BoxType>  star_boxes;
   std::vector<double> star_centers_x;
   std::vector<double> star_centers_y;
@@ -1264,8 +1294,10 @@ int MakeBleedMask(const char *argv[])
     star_centers_x.push_back(cx);
     star_centers_y.push_back(cy);
     
+    // profiler.FunctionEntry("StarRadius");
     ModifyStarR(Inimage.DES()->mask,Inimage.DES()->image,cx,cy,star_r,Nx,Ny,
 		ground_rejection_mask,star_scalefactor,image_stats);
+    // profiler.FunctionExit("StarRadius");
     star_r *= rgf2;
     double srstarr = std::sqrt(star_r);
     if(debug)
@@ -1274,6 +1306,7 @@ int MakeBleedMask(const char *argv[])
     star_radii.push_back(srstarr);
 
     if(do_star_interp){
+      // profiler.FunctionEntry("StarInterp");
       long r = static_cast<long>((std::sqrt(star_r)) + 2.0);
       std::vector<double> idf(r,0);
       //      BlobFile << "# Box: [" << box[0] << ":" << box[1] << ","
@@ -1392,9 +1425,10 @@ int MakeBleedMask(const char *argv[])
 	if(!do_starmask)
 	  Inimage.DES()->mask[pixel_index] ^= BADPIX_STAR;
       }
+      // profiler.FunctionExit("StarInterp");
     }
-
     if(do_starmask){
+      // profiler.FunctionEntry("StarMask");
       //      star_radii[star_radii.size()-1] = std::sqrt(star_r);
       double sx1 = cx - static_cast<double>(nby)/2.0 - 1.0;
       double sx2 = cx + static_cast<double>(nby)/2.0 + 1.0;
@@ -1428,9 +1462,11 @@ int MakeBleedMask(const char *argv[])
 	    Inimage.DES()->mask[bindex] ^= BADPIX_STAR;
 	}
       }
-    }  
+      // profiler.FunctionExit("StarMask");
+    } 
   }
 
+  // profiler.FunctionEntry("RejectObscured");
   // Reject stars obscured by bleeds 
   blob_image.resize(npix,0);
   blobs.resize(0);
@@ -1485,7 +1521,10 @@ int MakeBleedMask(const char *argv[])
     Out << "Rejected " << ncovered << " stars due to being completely obscured by bleeds.";
     LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
   }
-
+  // profiler.FunctionExit("RejectObscured");
+  // profiler.FunctionExit("Stars");
+  // profiler.FunctionEntry("Output");
+  // profiler.FunctionEntry("WCS");
   // Check for a WCS soln for this image
   bool get_wcs               = true;
   bool write_radii_in_pixels = false;
@@ -1534,6 +1573,8 @@ int MakeBleedMask(const char *argv[])
       }
     }
   }
+  // profiler.FunctionExit("WCS");
+  // profiler.FunctionEntry("ObjectTable");
   // Write the bright object table.
   if(!SaturatedObjectFileName.empty() && !star_centers_x.empty()){
     std::vector<std::string> field_names;
@@ -1613,6 +1654,8 @@ int MakeBleedMask(const char *argv[])
     }
     StarTableOut.Close();
   }
+  // profiler.FunctionExit("ObjectTable");
+  // profiler.FunctionEntry("TrailTable");
 
   // Make table for trail blob bounding boxes (if enabled)
   if(!TrailBoxesFileName.empty() && !trail_boxes.empty()){
@@ -1765,6 +1808,7 @@ int MakeBleedMask(const char *argv[])
     }
     TrailBoxesOut.Close();
   }
+  // profiler.FunctionExit("TrailTable");
   if(!do_starmask){
     for(int mindex = 0;mindex < npix;mindex++){
       if(Inimage.DES()->mask[mindex]&BADPIX_STAR)
@@ -1840,6 +1884,7 @@ int MakeBleedMask(const char *argv[])
     Hstr << argv[argn++] << " ";
   Inimage.AppendImageHeader(Hstr.str());
 
+  // profiler.FunctionEntry("ImageWrite");
   // Now actually write the output FITS file
   if(flag_verbose==3){
     Out.str("");
@@ -1855,13 +1900,16 @@ int MakeBleedMask(const char *argv[])
   }
   // Close the output image.
   Inimage.Close();
+  // profiler.FunctionExit("ImageWrite");
 
   if(flag_verbose==3){
     Out.str("");
     Out << "Finished writing " << ofilename;
     LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
   }
-
+  // profiler.FunctionExit("Output");
+  // profiler.Finalize();
+  // profiler.SummarizeSerialExecution(std::cout);
   return(0);
 }
 
