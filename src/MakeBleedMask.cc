@@ -172,6 +172,7 @@ public:
     AddOption('v',"verbose",2,"level");
     AddOption('w',"growrad",2,"value");
     AddOption('x',"trailboxes",2,"filename");
+    AddOption('y',"holelevel",2,"value");
     AddOption('z',"zerostarweights");
     AddOption('D',"Debug");
     AddArgument("infile",1);
@@ -181,6 +182,7 @@ public:
     AddHelp("help","Prints this long version of help.");
     AddHelp("interpolate","Interpolate over bleedtrails.");
     AddHelp("trailreject","Reject bleedtrails of size <npix> or smaller. (1)");
+    AddHelp("holelevel","Number of sigma below sky for hole detection. (3.0)");
     AddHelp("edgesize","Size of edges used to detect edgebleed. (15)");
     AddHelp("starmask","Create a mask for the detected bright objects. (No)");
     AddHelp("bgreject","Use specified <factor> as scalefactor for background rejection. (5.0)");
@@ -256,6 +258,7 @@ int MakeBleedMask(const char *argv[])
   bool do_star_interp    = !comline.GetOption("interpolate-stars").empty();
   std::string stw        =  comline.GetOption("trail_length");
   std::string eds        =  comline.GetOption("edgesize");
+  std::string hols       =  comline.GetOption("holelevel");
   std::string trj        =  comline.GetOption("trailreject");
   std::string sfac       =  comline.GetOption("scalefactor");
   std::string slfac      =  comline.GetOption("starlevel");
@@ -399,6 +402,15 @@ int MakeBleedMask(const char *argv[])
       npix_edge = 15;
     }
   }
+
+  // This option is needed to ensure that the edgebleed detection is functioning properly
+  double hole_detection_level  = 3.0;
+  if(!hols.empty()){
+    std::istringstream Istr(hols);
+    Istr >> hole_detection_level;
+  }
+
+
   // Set up a list of keywords we want
   // to exclude from our headers
   char **exclusion_list;
@@ -829,7 +841,7 @@ int MakeBleedMask(const char *argv[])
 	if(flag_verbose >= 3){
 	  Out.str("");
 	  Out << "Getting local statistics for blob " << blobno;
-	  LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
+	  LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
 	}
 	bool stats_converged = false;
 	Morph::IndexType bbb = 0;
@@ -861,7 +873,7 @@ int MakeBleedMask(const char *argv[])
 	      Out.str("");
 	      Out << "Local image statistics converged after " << bbb << " iteration"
 		  << (bbb==1 ? "." : "s."); 
-	      LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
+	      LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
 	    }
 	  }
 	  last_mean = stats[Image::IMMEAN];
@@ -1076,8 +1088,8 @@ int MakeBleedMask(const char *argv[])
 
   // -- These configuration values are used for  --
   // -- edgebleed detection and processing
+  //  Morph::ImageDataType hole_detection_level = 3.0;
   short BADPIX_HOLE = BADPIX_TRAIL;
-  Morph::ImageDataType hole_detection_level = 3.0;
   int NPIX_EDGEBLEED = 20;
   // --------------------------
 
