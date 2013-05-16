@@ -809,8 +809,7 @@ int DECamXTalk(int argc,char *argv[])
     }
     if (hdunum!=HDUNUM) {
       sprintf(event,"%d HDUs not standard DECam format",hdunum);
-      reportevt(flag_verbose,STATUS,5,event);
-      exit(0);
+      reportevt(flag_verbose,STATUS,4,event);
     }
 
     /* allocate memory for indata */
