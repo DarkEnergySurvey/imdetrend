@@ -53,20 +53,20 @@ void print_usage(char *program_name)
   printf("%s <input image> <options>\n",program_name);
   printf("  Masking Options\n");
   printf("    -crays \n");
-   printf("    -crfract <cosmic ray flux fraction> (default 0.40)\n");
-   printf("    -crsig2 <cosmic variance> (default 20)\n");
-   printf("    -stars <astrostdsfile> \n");
-   //   printf("    -flag_horiztrails \n"); 
-   //   printf("    -nointerpolate \n");
-   printf("  Output Options\n");
-   //printf("    -output <newimage>\n");
-   printf("    -verbose <0-3>\n");
-   printf("    -help    (print usage and exit)\n");
-   printf("    -version (print version and exit)\n");
+  printf("    -crfract <cosmic ray flux fraction> (default 0.40)\n");
+  printf("    -crsig2 <cosmic variance> (default 20)\n");
+  //printf("    -stars <astrostdsfile> \n");
+  //   printf("    -flag_horiztrails \n"); 
+  //   printf("    -nointerpolate \n");
+  printf("  Output Options\n");
+  //printf("    -output <newimage>\n");
+  printf("    -verbose <0-3>\n");
+  printf("    -help    (print usage and exit)\n");
+  printf("    -version (print version and exit)\n");
  }
 
- static int flag_nointerp = NO;
- static int flag_horiz    = NO;
+static int flag_nointerp = NO;
+static int flag_horiz    = NO;
 
 int stack[2048*4096];
 int naxis1, naxis2,naxis;
@@ -115,7 +115,7 @@ int main(int argc,char *argv[])
     {*/
    char	filter[100]="",comment[1000],longcomment[10000],event[10000],
      scaleregion[100],keycard[100],outputname[1000],astrostdsfile[10000],
-     imagetype[1000],exposstr[1000],command_line[1000];
+     imagetype[1000],exposstr[1000],command_line[1000], updated_command_line[1000];
    char outputnamewithtempl[2500],inname_temp[1000];
    int	i,j,x,y,k,l,flag_fringe=NO,flag_illum=YES,xp,yp,th,horiztrails=0,
      minsize=4,maxsize=10,loc,dx,dy,xmin,xmax,ymin,ymax,scalenum,bitpix,
@@ -146,14 +146,13 @@ int main(int argc,char *argv[])
 
    time_t	tm;
    float	interp_noise=1.0,interp_fwhm=0.0;
-   int	flag_output=0,flag_crays=0,flag_stars=0,flag_srcgrowrad=0,
+   int	flag_output=0,flag_crays=0,flag_stars=0,flag_srcgrowrad=0, flag_crfract = 0, flag_crsig2 = 0,
      num = 0,filemode=0,goodpix,badpix,hdutype;
    enum {OPT_CRAYS=1,OPT_CRFRACT,OPT_CRSIG2,OPT_STARS,OPT_FLAG_HORIZTRAILS,
          OPT_NOINTERPOLATE,OPT_OUTPUT,OPT_VERBOSE,OPT_HELP,OPT_VERSION};
 
    
-   double crfract = 0.40;
-   double crsig2 = 20.0;
+   float crfract,crsig2;
 
    int error;
    int mask;
@@ -195,7 +194,6 @@ int main(int argc,char *argv[])
      int curind = optind;
      static struct option mask_options[] =
        {
-     {"stars",            required_argument, 0,              OPT_STARS},
      {"output",           required_argument, 0,          OPT_OUTPUT},
      {"verbose",          required_argument, 0,              OPT_VERBOSE},
      {"crfract",           required_argument, 0,              OPT_CRFRACT},
@@ -220,34 +218,34 @@ int main(int argc,char *argv[])
      break;
        printf("Option %s is set",mask_options[clopx].name);
        if(optarg)
-     printf(" with %s",optarg);
+         printf(" with %s",optarg);
        printf(".\n");
        break;
      case OPT_CRFRACT: // -crfract
-       if (optarg)
-         sscanf(optarg, "%d", &crfract);
-       else {
-         reportevt(flag_verbose,STATUS,5,"Option -crfract requires an argument.");
-         exit(1);
-       }
+         flag_crfract = YES;
+         sscanf(optarg,"%f",&crfract);
+         //if (crfract = '\0') {
+         //reportevt(flag_verbose,STATUS,5,"Option -crfract requires an argument.");
+         //exit(1);
+         //}
        break;
      case OPT_CRSIG2: // -crsig2
-       if (optarg)
-         sscanf(optarg, "%d", &crsig2);
-       else {
-         reportevt(flag_verbose,STATUS,5,"Option -crsig2 requires an argument.");
-         exit(1);
-       }
+         sscanf(optarg, "%f", &crsig2);
+         flag_crsig2 = YES;
+         //if (crsig2 = '\0') {
+         //reportevt(flag_verbose,STATUS,5,"Option -crsig2 requires an argument.");
+         //exit(1);
+         //}
        break;
      case OPT_CRAYS: // -crays
        /*sprintf(cray.name,"%s",optarg);*/
        flag_crays=YES;
        break;
-     case OPT_STARS: // -stars
-       sprintf(astrostdsfile,"%s",optarg);
-       flag_stars=YES;
-       break;
-       //   case OPT_OUTPUT: // -output
+       //case OPT_STARS: // -stars
+       //sprintf(astrostdsfile,"%s",optarg);
+       //flag_stars=YES;
+       //break;
+       //case OPT_OUTPUT: // -output
        //sprintf(outputname,"%s",optarg);
        //flag_output=YES;
        //break;
@@ -320,6 +318,7 @@ int main(int argc,char *argv[])
   /* ********************************** */
   
   sprintf(input.name,"%s",inname_temp);
+ 
   if (flag_output) { 
     rd_desimage(&input,READONLY,flag_verbose);
    }
@@ -361,15 +360,17 @@ int main(int argc,char *argv[])
   getfloatheader(&input,"SKYSIGMA",&skysigma,filemode);
   getfloatheader(&input,"SKYBRITE",&skybrite,filemode);
   getfloatheader(&input,"SATURATE",&saturate,filemode);
+  getfloatheader(&input,"FWHM",&fwhm,filemode);
 
   if (flag_verbose>2) {
-	  sprintf(event,"Input image SKYSIGMA=%5.2f, SKYBRITE=%5.2f and SATURATE=%5.2f: %s",skysigma,skybrite,saturate, input.name);
-	  reportevt(flag_verbose,STATUS,1,event);
+    sprintf(event,"Input image SKYSIGMA=%5.2f, SKYBRITE=%5.2f, SATURATE=%5.2f and FWHM=%5.2f: %s",skysigma,skybrite,saturate,fwhm,input.name);
+    reportevt(flag_verbose,STATUS,1,event);
   }
 
   if (skybrite>0.0 && skysigma>0.0) estgain = skybrite/(skysigma*skysigma);
   else estgain = 0.0;
-  printf("Estimated gain=%f skybrite=%f skysigma=%f saturate=%f \n",estgain,skybrite,skysigma,saturate);
+  sprintf(event,"Estimated gain=%f skybrite=%f skysigma=%f saturate=%f \n",estgain,skybrite,skysigma,saturate);
+  reportevt(3, STATUS, 1, event);
 
   if (SATURATED>saturate)
     {
@@ -455,7 +456,42 @@ int main(int argc,char *argv[])
   /* *********  COSMIC RAY SECTION  ******** */
   /* *************************************** */
   /*******************************************/
+
+  /*    
+    #if seeing <= 2.7pix , crfract = 0.1, crsig = 1 (almost no detections of crs)
+    #if seeing < 3.3 pix > 2.7 , crfract = 0.15, crsig2 = 2 (not the best CR detection rate)
+    #If seeing >= 3.3 pix crfract = 0.2, crsig2 = 2
+  */
+
+  if (fwhm <= 2.7) {
+    sprintf(event,"Image with FWHM=%.2f pixels (< 2.7 pix limit), No cosmic rays detection algorithm run \n",fwhm);
+    reportevt(flag_verbose, STATUS,3,event);
+    exit(0);
+  }
+
+  else if (fwhm > 2.7 && fwhm < 3.3) {
+    crfract = 0.15;
+    crsig2 = 2.0;
+    sprintf(event,"Image with 2.7 < FWHM=%.2f < 3.3 pixels. Using crfract=%.2f and crsig2=%.2f \n", fwhm,crfract, crsig2);
+    reportevt(flag_verbose,STATUS,1,event);
+  }
+  else if (fwhm >= 3.3 || !flag_crfract || !flag_crsig2) {
+    crfract = 0.2;
+    crsig2 = 2.0;
+    sprintf(event,"Image with FWHM=%.2f > 3.3 pixels. Using crfract=%.2f and crsig2=%.2f \n", fwhm,crfract, crsig2);
+    reportevt(flag_verbose,STATUS,1,event);
+  }
+
+  /* no input crfract, using default value 0.2 
+  if (!flag_crfract) {
+    crfract = 0.2;
+  }
   
+  if (!flag_crsig2){
+    crsig2 = 2;
+    }*/
+
+    
   if (flag_crays) {
     if (flag_verbose) 
       {
@@ -505,6 +541,23 @@ int main(int argc,char *argv[])
   /* ******************************************** */
 
 
+  /* Start building command line used*/
+  strcpy(updated_command_line,argv[0]);
+  strcat(updated_command_line," ");
+  strcat(updated_command_line,input.name);
+
+  if (flag_crays) {
+    strcat(updated_command_line, " -crays");
+  }
+  if (flag_crfract) {
+    sprintf(event," -crfract %.2f",crfract);
+    strcat(updated_command_line,event);
+  }
+  if (flag_crsig2) {
+    sprintf(event," -crsig2 %.2f",crsig2);
+    strcat(updated_command_line,event);
+  }
+
 
   sprintf(event,"Writing results to %s",output.name);
   reportevt(flag_verbose,STATUS,1,event);
@@ -540,9 +593,9 @@ int main(int argc,char *argv[])
   }
   sprintf(longcomment,"DESDM:");
   //  for (i=0;i<argc;i++) sprintf(longcomment,"%s %s",longcomment,argv[i]);
-  sprintf(longcomment,"%s %s",longcomment,command_line);
+  sprintf(longcomment,"%s %s",longcomment,updated_command_line);
   reportevt(flag_verbose,STATUS,1,longcomment);
-  if (fits_write_comment(output.fptr,longcomment,&status)) {
+  if (fits_write_history(output.fptr,longcomment,&status)) {
     sprintf(event,"Writing longcomment failed: %s",output.name);
     reportevt(flag_verbose,STATUS,5,event);
     printerror(status);
