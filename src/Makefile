@@ -188,7 +188,7 @@ EXE_REST =  ../bin/imcorrect			\
 	../bin/mksupersky			\
         ../bin/mkbleedmask                     \
         ../bin/mkmask                          \
-        ../bin/maskcosmics                          
+        ../bin/maskcosmics          
 
 EXE = ${EXE_REST}
 # Sample add another list:
