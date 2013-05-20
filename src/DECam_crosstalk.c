@@ -9,8 +9,9 @@ Basic syntax: DECam_crosstalk <infile.fits> <outfile> <options>
   Options:
     -crosstalk <crosstalk matrix- file>
     -crossatthresh <factor> 
-    -photflag <0 or 1>
+    -linear    (expects xtalk matrix with only linear components)
     -satmask
+    -photflag <0 or 1>
 
     -overscan
     -overscansample <-1 for MEDIAN, 0 for MEAN, 1 for MEAN w/MINMAX>,
@@ -73,26 +74,47 @@ Detailed Description:
     Finally, note that this program also alters the OBSTYPE header keyword to 
     conform to DESDM standards, and leaves a history in the header.
 
-  Crosstalk Correction: (-crosstalk and -crossatthresh )
+  Crosstalk Correction: (-crosstalk and -linear )
     If the -crosstalk option is used then the code will read the crosstalk 
-    matrix file to determine the coefficients that are applied.  This file 
-    currently has a format similar to that used in IRAF for the MOSAIC cameras.
-    Specifically the values are:
+    matrix file to determine the coefficients that are applied.  Under the 
+    default (i.e. the -linear flag is NOT set).  The format expected is:
+
+      victim   source
+      ccdXXA   ccdXXA  coefficient uncertainty  nl_on  C1 C2 C3
+
+    When the -linear flag is present this file has a format similar to that 
+    used in IRAF for the MOSAIC cameras.  In such a case the values are 
+    assumed to have the format:
 
       victim   source
       ccdXXA   ccdXXA  coefficient (unc,sigma)
 
-    where the names for the victim/source declaration have XX=ccdnum and 
-    A=amplifier(A|B).  The values for uncertainty and sigma are included for 
-    the user to assess/track the relative fidelity of the measurements but 
-    are not used as part of the calculation performed.  The correction 
-    performed is:
+    The names for the victim/source declaration have XX=ccdnum and 
+    A=amplifier(A|B).  The other values track the solution including
+    whether a non-linear component may exist.  The uncertainty (and sigma)
+    values are not used in any calulations but do allow a user to 
+    assess/track the relative fidelity of the measurements but are not used 
+    as part of the calculation performed.  The value nl_on tracks the 
+    onset of non-linearity.  The C1, C2, C3, are polynomial coefficients
+    used to characterize the non-linearity.
 
-      corrected = victim - sum (source * coefficient)
+    In the simplest case (linear crostalk) the correction performed is:
+
+      corrected = victim - sum (source * coefficient)  
+
+    This is the case used when source < nl_on (nl_on=1e+10 for -linear).
+    For values where the source >= nl_on
+
+      corrected = victim - ( coefficient * nl_on) 
+                         - sum ( C_N * ( source - nl_on )^N )
 
     Currently for a correction to occur the absolute value of the coefficient
     must be greater than 1e-6 (note that negative crosstalk corrections are now
     possible).
+
+
+    NOTE, THE FOLLOWING FOR -crossatthresh NO LONGER APPLIES ALTHOUGH THE 
+    OPTION HAS NOT BEEN REMOVED.
 
     If the option -crossatthresh <value> is used then a slightly different
     correction is applied for source pixels with values above the SATURAT(A/B)
@@ -220,6 +242,8 @@ Known "Features":
 
 #define NUM_KEYS 200
 #define XTDIM 148
+#define DEGPOLY 3
+
 
 /* there are 70 CCDs in currect configuration: 
    1-62, 63-64, (skipping 65-68), 69-74.
@@ -242,6 +266,7 @@ Known "Features":
 int getlistitems(char *strlist, char *indxlist, int maxitems);
 static const char *svn_id = "$Id$";
 static int flag_sat = 0;
+static int flag_linear = 0;
 static int flag_overscan = 0;
 static int flag_focus = 0;
 
@@ -249,6 +274,7 @@ void print_usage(char *program_name)
 {
   printf("%s <infile.fits> <outfile> <options>\n",program_name);
   printf("  -crosstalk <crosstalk matrix- file>\n");
+  printf("  -linear \n");
   printf("  -crossatthresh <factor> \n");
   printf("  -photflag <0 or 1>\n");
   printf("  -satmask\n");
@@ -294,13 +320,18 @@ int DECamXTalk(int argc,char *argv[])
     /*  ******** array for storing crosstalk coefficients ****** */
     /*  ******************************************************** */
     float	xtalk[XTDIM][XTDIM];
+    float	x_nl[XTDIM][XTDIM];
+    float	y_nl[XTDIM][XTDIM];
+    float	c_poly[XTDIM][XTDIM][DEGPOLY];
+    float   xprime,xprime_pow;
+    
 	
     /*  ******************************************************** */
     /*  ******* other variables needed for the processing ****** */
     /*  ******************************************************** */
     char	filename[500],outname_temp[500],trash[200],nfilename[500],tag1[100],tag2[100],
       newname[500],filetype[50],obstype[80],comment[100],oldcomment[100],command_line[1000],
-      longcomment[10000],event[10000],newimagename[500],*xtalk_filename=NULL,
+      longcomment[10000],event[10000],newimagename[500],*xtalk_file=NULL,*xtalk_filename=NULL,
       flag_hdus_or_ccds = 0, ccdlist[CCDNUM2], hdulist[CCDNUM2], AmpOrder[CCDNUM1];
     int	anynull,nfound,i,hdunum,hdutype,j,k,x,y,chdu, ccdnum,locout,
       flag_crosstalk=0,flag_verbose=1,flag_phot=0,flag_crossatthresh=0,bitpix,naxis,
@@ -310,6 +341,7 @@ int DECamXTalk(int argc,char *argv[])
       mkpath(),getheader_flt(),getheader_str();
     static int status=0;
     float	value,uncertainty,significance,nullval,*outdata=NULL,*outdata2=NULL,**indata;
+    float   nonlinon, poly1, poly2, poly3;
     float       crossatthresh;
     float       tmp_satAval,tmp_satBval;
     float       satA[CCDNUM2],satB[CCDNUM2];
@@ -328,6 +360,7 @@ int DECamXTalk(int argc,char *argv[])
     desimage output_image;
     overscan_config osconfig;
     short *maskdata = NULL, *maskdata2 = NULL;
+    int myl;
     char	delkeys[100][10]={"PRESECA","PRESECB","POSTSECA",
 				  "POSTSECB","TRIMSECA","TRIMSECB","TRIMSEC",
 				  "BIASSECA","BIASSECB",""};
@@ -411,6 +444,7 @@ int DECamXTalk(int argc,char *argv[])
 	  {"verbose",          required_argument, 0,          OPT_VERBOSE},
 	  {"version",          no_argument,       0,          OPT_VERSION},
 	  {"help",             no_argument,       0,             OPT_HELP},
+	  {"linear",           no_argument,       &flag_linear,         1},
 	  {"satmask",          no_argument,       &flag_sat,            1},
 	  {"overscan",         no_argument,       &flag_overscan,       1},
 	  {"focuschipsout",    no_argument,       &flag_focus,          1},
@@ -434,79 +468,9 @@ int DECamXTalk(int argc,char *argv[])
       case OPT_CROSSTALK: // -crosstalk
 	cloperr = 0;
 	flag_crosstalk=1;
-	for (j=0;j<XTDIM;j++) 
-	  for (k=0;k<XTDIM;k++) 
-	    xtalk[j][k]=0.0;
 	if(optarg){
-	  xtalk_filename = strip_path(optarg);
-	  /* read through crosstalk matrix file */
-	  if (flag_verbose>=3) {
-	    sprintf(event,"Reading file %s\n",xtalk_filename);
-	    reportevt(flag_verbose,STATUS,1,event);
-	  }
-	  inp=fopen(optarg,"r");
-	  if (inp==NULL) {
-	    sprintf(event,"Crosstalk file %s not found",xtalk_filename);
-	    reportevt(flag_verbose,STATUS,5,event);
-	    exit(1);
-	  }
-	  //	strip_path(xtalk_filename);
-	  while (fgets(trash,200,inp)!=NULL) {
-	    if (!strncmp(trash,"ccd",3) || !strncmp(trash,"CCD",3)) {
-	      /* first replace parentheses and commas with spaces */
-	      for (j=0;j<strlen(trash);j++) 
-		if (!strncmp(&(trash[j]),"(",1) || 
-		    !strncmp(&(trash[j]),")",1)) trash[j]=32; 
-	      sscanf(trash,"%s %s %f %f %f",tag1,tag2,
-		     &value,&uncertainty,&significance);
-	      if (!strncmp(tag1+strlen(tag1)-1,"A",1)) ampoffset1=0;
-	      else if (!strncmp(tag1+strlen(tag1)-1,"B",1)) ampoffset1=1;
-	      else {
-		sprintf(event,"Amp not properly noted as A/B in %s",tag1);
-		reportevt(flag_verbose,STATUS,5,event);
-		exit(1);
-	      }
-	      if (!strncmp(tag2+strlen(tag2)-1,"A",1)) ampoffset2=0;
-	      else if (!strncmp(tag2+strlen(tag2)-1,"B",1)) ampoffset2=1;
-	      else {
-		sprintf(event,"Amp not properly noted as A/B in %s",tag2);
-		reportevt(flag_verbose,STATUS,5,event);
-		exit(1);
-	      }
-	      /* strip off the A/B suffix */	
-	      tag1[strlen(tag1)-1]=0;tag2[strlen(tag2)-1]=0; 
-	      /* read in the ccd number */       
-	      sscanf(&(tag1[3]),"%d",&ext1);
-	      sscanf(&(tag2[3]),"%d",&ext2);
-	      ext1=(ext1-1)*2+ampoffset1;
-	      if (ext1<0 || ext1>=XTDIM) {
-		sprintf(event,"CCD number out of range: %s %d",tag1,ext1);
-		reportevt(flag_verbose,STATUS,5,event);
-		exit(1);
-	      }
-	      ext2=(ext2-1)*2+ampoffset2;
-	      if (ext2<0 || ext2>=XTDIM) {
-		sprintf(event,"CCD number out of range: %s %d",tag2,ext2);
-		reportevt(flag_verbose,STATUS,5,event);
-		exit(0);
-	      }
-	      xtalk[ext1][ext2]=value;
-	    }
-	  }
-	  if (fclose(inp)) {
-	    sprintf(event,"File close failed: %s",xtalk_filename);
-	    reportevt(flag_verbose,STATUS,5,event);
-	    exit(1);
-	  }
-	  if (flag_verbose>3) /* print the crosstalk coefficients */
-	    for (j=0;j<XTDIM;j++) {
-	      if (j%2==0) printf("  ccd%02dA",j/2+1);
-	      else printf("  ccd%02dB",j/2+1);
-	      for (k=0;k<XTDIM;k++) {
-		printf("  %7.5f",xtalk[j][k]);
-	      }
-	      printf("\n");
-	    }
+	  xtalk_file=optarg;
+	  xtalk_filename=strip_path(optarg);
 	}
 	else{
 	  cloperr = 1;
@@ -520,8 +484,7 @@ int DECamXTalk(int argc,char *argv[])
 	  sscanf(optarg,"%d",&flag_phot);
 	else cloperr = 1;
 	if(cloperr){
-	  reportevt(flag_verbose,STATUS,5,
-		    "Option -photflag requires an argument.");
+	  reportevt(flag_verbose,STATUS,5, "Option -photflag requires an argument.");
 	  command_line_errors++;
 	  exit(1);
 	}
@@ -701,7 +664,124 @@ int DECamXTalk(int argc,char *argv[])
 	// should never get here
 	abort();
       }
-    }          
+    }  
+
+    /* ********************************************** */
+    /* ********* Initialize Crosstalk Matrices        */
+    /* ********************************************** */
+    for (j=0;j<XTDIM;j++) {
+       for (k=0;k<XTDIM;k++) { 
+          xtalk[j][k]=0.0;
+          x_nl[j][k]=100000.0;
+          y_nl[j][k]=0.0;
+          for (myl=0;myl<DEGPOLY;myl++) {
+             c_poly[j][k][myl] = 0.0;
+          }  
+       }
+    }
+
+    /* ********************************************** */
+    /* ********* Populate Crosstalk Matrices          */
+    /* ********************************************** */
+    if (flag_crosstalk){
+       if (flag_verbose>=3) {
+          sprintf(event,"Reading file %s\n",xtalk_filename);
+          reportevt(flag_verbose,STATUS,1,event);
+       }
+       inp=fopen(xtalk_file,"r");
+       if (inp==NULL) {
+          sprintf(event,"Crosstalk file %s not found",xtalk_file);
+          reportevt(flag_verbose,STATUS,5,event);
+          exit(1);
+       }
+       /* This now uses flag_linear (-linear option) to distinguish between   */
+       /* old (linear) crosstalk files and new ones which contain polynomials */
+       while (fgets(trash,200,inp)!=NULL) {
+          if (!strncmp(trash,"ccd",3) || !strncmp(trash,"CCD",3)){
+             if (flag_linear){
+	        /* OLD school xtalk files need to replace parentheses and commas with spaces */
+                for (j=0;j<strlen(trash);j++){
+                   if (!strncmp(&(trash[j]),"(",1) || !strncmp(&(trash[j]),")",1)) trash[j]=32; 
+                }
+                sscanf(trash,"%s %s %f %f %f",tag1,tag2,&value,&uncertainty,&significance);
+             }else{
+                sscanf(trash,"%s %s %f %f %f %f %f %f",
+                              tag1,tag2,&value,&uncertainty,&nonlinon,&poly1,&poly2,&poly3);
+             }
+             /* Parse the CCD Name (from the tags) */
+             /* First determine whether each are ampA or ampB */
+             if (!strncmp(tag1+strlen(tag1)-1,"A",1)) ampoffset1=0;
+             else if (!strncmp(tag1+strlen(tag1)-1,"B",1)) ampoffset1=1;
+             else {
+                sprintf(event,"Amp not properly noted as A/B in %s",tag1);
+                reportevt(flag_verbose,STATUS,5,event);
+                exit(1);
+             }
+             if (!strncmp(tag2+strlen(tag2)-1,"A",1)) ampoffset2=0;
+             else if (!strncmp(tag2+strlen(tag2)-1,"B",1)) ampoffset2=1;
+             else {
+    		sprintf(event,"Amp not properly noted as A/B in %s",tag2);
+    		reportevt(flag_verbose,STATUS,5,event);
+    		exit(1);
+             }
+             /* strip off the A/B suffix */	
+             tag1[strlen(tag1)-1]=0;tag2[strlen(tag2)-1]=0; 
+
+             /* read in the ccd number */       
+             sscanf(&(tag1[3]),"%d",&ext1);
+             sscanf(&(tag2[3]),"%d",&ext2);
+             ext1=(ext1-1)*2+ampoffset1;
+             if (ext1<0 || ext1>=XTDIM) {
+                sprintf(event,"CCD number out of range: %s %d",tag1,ext1);
+                reportevt(flag_verbose,STATUS,5,event);
+              	exit(1);
+             }
+	     ext2=(ext2-1)*2+ampoffset2;
+	     if (ext2<0 || ext2>=XTDIM) {
+                sprintf(event,"CCD number out of range: %s %d",tag2,ext2);
+                reportevt(flag_verbose,STATUS,5,event);
+                exit(1);
+             }
+             /* Now populate the coefficient values */       
+             xtalk[ext1][ext2]=value;
+
+             if (flag_linear){
+                /* for the case where option -linear was set   */
+                /* assume the values respect old convention */
+		x_nl[ext1][ext2]=1.0e+10;
+		y_nl[ext1][ext2]=value*x_nl[ext1][ext2];
+		c_poly[ext1][ext2][0]=0.0;
+		c_poly[ext1][ext2][1]=0.0;
+		c_poly[ext1][ext2][2]=0.0;
+             }else{
+                x_nl[ext1][ext2]=nonlinon;
+                y_nl[ext1][ext2]=value*nonlinon;
+                c_poly[ext1][ext2][0]=poly1;
+                c_poly[ext1][ext2][1]=poly2;
+                c_poly[ext1][ext2][2]=poly3;
+//              for (myl=0;myl<DEGPOLY;myl++) {   c_poly[ext1][ext2][myl]=poly1;  }
+             }
+	  }
+       }
+       if (fclose(inp)) {
+          sprintf(event,"File close failed: %s",xtalk_filename);
+          reportevt(flag_verbose,STATUS,5,event);
+          exit(1);
+       }
+       if (flag_verbose>3){ /* print the crosstalk coefficients */
+         for (j=0;j<XTDIM;j++) {
+            if (j%2==0){
+               printf("  ccd%02dA",j/2+1);
+            }else{
+               printf("  ccd%02dB",j/2+1);
+            }
+            for (k=0;k<XTDIM;k++) {
+               printf("  %7.5f",xtalk[j][k]);
+            }
+	    printf("\n");
+         }
+       }
+    } 
 	
     /* ********************************************** */
     /* ********* Handle Input Image/File  *********** */
@@ -749,6 +829,7 @@ int DECamXTalk(int argc,char *argv[])
 
 
     /* process all images (hdus & ccds) unless -ccdlist or -hdulist */
+
     if (!flag_hdus_or_ccds)
         for (i = 0; i < CCDNUM2; i++) 
             ccdlist[i] = hdulist[i] = 1;
@@ -810,6 +891,7 @@ int DECamXTalk(int argc,char *argv[])
     if (hdunum!=HDUNUM) {
       sprintf(event,"%d HDUs not standard DECam format",hdunum);
       reportevt(flag_verbose,STATUS,4,event);
+/*      exit(0); */
     }
 
     /* allocate memory for indata */
@@ -1296,6 +1378,7 @@ int DECamXTalk(int argc,char *argv[])
 	for (x=0;x<naxes[0];x++) {
 	    locout=y*naxes[0]+x;
 	    xtalkcorrection=0.0;
+    
 	    if(flag_sat){
 	      // Determine whether the current position (wrt input array) is
 	      // within the Amp-specific data region by checking DATASEC[A,B]
@@ -1331,21 +1414,34 @@ int DECamXTalk(int argc,char *argv[])
                     locA=y*naxes[0]+(naxes[0]-x-1);
                 }
                 if (fabsf(xtalk[ampextension][ampA])>1.0e-6f){
-                  if ((flag_crossatthresh)&&(indata[j][locA] > satA[j])){
-                    xtalkcorrection+=xtalk[ampextension][ampA]*satA[j]*crossatthresh;
+                  if ((x_nl[ampextension][ampA] > 0.0f)&&(indata[j][locA] > x_nl[ampextension][ampA])){
+                    xprime = indata[j][locA] - x_nl[ampextension][ampA];
+                    xprime_pow = 1.0;
+                    for (myl=0;myl<DEGPOLY;myl++) {
+                        xprime_pow *= xprime;
+                        xtalkcorrection += c_poly[ampextension][ampA][myl]*xprime_pow;
+                    }
+                    xtalkcorrection += y_nl[ampextension][ampA];
                   }else{
                     xtalkcorrection+=xtalk[ampextension][ampA]*indata[j][locA];
                   }
                 }
                 if (fabsf(xtalk[ampextension][ampB])>1.0e-6f){
-                  if ((flag_crossatthresh)&&(indata[j][locB] > satB[j])){
-                    xtalkcorrection+=xtalk[ampextension][ampB]*satB[j]*crossatthresh;
-                  }else{
-                    xtalkcorrection+=xtalk[ampextension][ampB]*indata[j][locB];
-                  }
+                    if ((x_nl[ampextension][ampB] > 0.0f)&&(indata[j][locB] > x_nl[ampextension][ampB])){
+                      xprime = indata[j][locB] - x_nl[ampextension][ampB];
+                      xprime_pow = 1.0;
+                      for (myl=0;myl<DEGPOLY;myl++) {
+                          xprime_pow *= xprime;
+                          xtalkcorrection += c_poly[ampextension][ampB][myl]*xprime_pow;
+                      }
+                      xtalkcorrection += y_nl[ampextension][ampB];
+                    }else{
+                      xtalkcorrection+=xtalk[ampextension][ampB]*indata[j][locB];
+                    }
                 }
               }
               outdata[locout]-=xtalkcorrection;
+              
             }
             else if (column_in_section(x+1,input_image.datasecbn)) { /* in amp B */
               ampextension=(ccdnum-1)*2+1; 
@@ -1360,18 +1456,30 @@ int DECamXTalk(int argc,char *argv[])
                     locB=y*naxes[0]+(naxes[0]-x-1);
                 }
                 if (fabsf(xtalk[ampextension][ampA])>1.0e-6f){
-                  if ((flag_crossatthresh)&&(indata[j][locA] > satA[j])){
-                    xtalkcorrection+=xtalk[ampextension][ampA]*satA[j]*crossatthresh;
-                  }else{
-                    xtalkcorrection+=xtalk[ampextension][ampA]*indata[j][locA];
-                  }
+                    if ((x_nl[ampextension][ampA] > 0.0f)&&(indata[j][locA] > x_nl[ampextension][ampA])){
+                      xprime = indata[j][locA] - x_nl[ampextension][ampA];
+                      xprime_pow = 1.0f;
+                      for (myl=0;myl<DEGPOLY;myl++) {
+                          xprime_pow *= xprime;
+                          xtalkcorrection += c_poly[ampextension][ampA][myl]*xprime_pow;
+                      }
+                      xtalkcorrection += y_nl[ampextension][ampA];
+                    }else{
+                      xtalkcorrection+=xtalk[ampextension][ampA]*indata[j][locA];
+                    }
                 }
                 if (fabsf(xtalk[ampextension][ampB])>1.0e-6f){
-                  if ((flag_crossatthresh)&&(indata[j][locB] > satB[j])){
-                    xtalkcorrection+=xtalk[ampextension][ampB]*satB[j]*crossatthresh;
-                  }else{
-                    xtalkcorrection+=xtalk[ampextension][ampB]*indata[j][locB]; 
-                  }
+                    if ((x_nl[ampextension][ampB] > 0.0f)&&(indata[j][locB] > x_nl[ampextension][ampB])){
+                      xprime = indata[j][locB] - x_nl[ampextension][ampB];
+                      xprime_pow = 1.0f;
+                      for (myl=0;myl<DEGPOLY;myl++) {
+                          xprime_pow *= xprime;
+                          xtalkcorrection += c_poly[ampextension][ampB][myl]*xprime_pow;
+                      }
+                      xtalkcorrection += y_nl[ampextension][ampB];
+                    }else{
+                      xtalkcorrection+=xtalk[ampextension][ampB]*indata[j][locB];
+                    }
                 }
               }
               outdata[locout]-=xtalkcorrection;
