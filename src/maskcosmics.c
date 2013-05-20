@@ -1,4 +1,3 @@
-/*$Id: maskcosmics.c 9825 2012-11-27 21:53:11Z donaldp $*/
 /*
  maskcosmics
 
@@ -46,7 +45,7 @@ float skybrite, skysigma, estgain;
 //Log file                                                                                                                                       
 /*FILE *flog;*/
 
-//static const char *svn_id = "$Id: maskcosmics.c 9825 2012-11-27 21:53:11Z donaldp $";
+static const char *svn_id = "$Id$";
 
 void print_usage(char *program_name)
 {
@@ -121,7 +120,7 @@ int main(int argc,char *argv[])
      minsize=4,maxsize=10,loc,dx,dy,xmin,xmax,ymin,ymax,scalenum,bitpix,
      count,flag_verbose=1,
      nvec,xlen,ylen,totpix,mkpath(),ccdnum=0,ncompare=0,
-     flag_illumcor_compare=NO,flag_fringecor_compare=NO,
+     flag_nofwhm=0,flag_illumcor_compare=NO,flag_fringecor_compare=NO,
      scaleregionn[4]={500,1500,1500,2500},ctr,
                         keysexist,numcrays,interp,xpospix,ypospix,
                         pixrow,pixcol,xval,yval;
@@ -167,7 +166,7 @@ int main(int argc,char *argv[])
    }
    /* RAG: Added to print version of code to standard output (for logs) */
 
-   //sprintf(event,"%s",svn_id);
+   sprintf(event,"%s",svn_id);
    reportevt(2,STATUS,1,event);
    reportevt(2,STATUS,1,command_line);
 
@@ -196,7 +195,7 @@ int main(int argc,char *argv[])
        {
      {"output",           required_argument, 0,          OPT_OUTPUT},
      {"verbose",          required_argument, 0,              OPT_VERBOSE},
-     {"crfract",           required_argument, 0,              OPT_CRFRACT},
+     {"crfract",          required_argument, 0,              OPT_CRFRACT},
      {"crsig2",           required_argument, 0,              OPT_CRSIG2},
      {"crays",            no_argument,       0,              OPT_CRAYS},
      {"version",          no_argument,       0,              OPT_VERSION},
@@ -230,8 +229,8 @@ int main(int argc,char *argv[])
          //}
        break;
      case OPT_CRSIG2: // -crsig2
-         sscanf(optarg, "%f", &crsig2);
          flag_crsig2 = YES;
+         sscanf(optarg, "%f", &crsig2);
          //if (crsig2 = '\0') {
          //reportevt(flag_verbose,STATUS,5,"Option -crsig2 requires an argument.");
          //exit(1);
@@ -348,7 +347,7 @@ int main(int argc,char *argv[])
     {
       naxis1 = input.axes[0];
       naxis2 = input.axes[1];
-      naxis = input.axes;
+      naxis=2;
       printf("naxis=%li naxis1=%li naxis2=%li \n",
              naxis,naxis1,naxis2);
     }
@@ -361,6 +360,12 @@ int main(int argc,char *argv[])
   getfloatheader(&input,"SKYBRITE",&skybrite,filemode);
   getfloatheader(&input,"SATURATE",&saturate,filemode);
   getfloatheader(&input,"FWHM",&fwhm,filemode);
+  flag_nofwhm=0;
+  if (fits_read_key_flt(input.fptr,"FWHM",&fwhm,comment,&status) ==KEY_NO_EXIST) {
+     flag_nofwhm=1;
+     sprintf(event,"Keyword FWHM not defined: %s",input);
+     reportevt(flag_verbose,STATUS,3,event);
+  }
 
   if (flag_verbose>2) {
     sprintf(event,"Input image SKYSIGMA=%5.2f, SKYBRITE=%5.2f, SATURATE=%5.2f and FWHM=%5.2f: %s",skysigma,skybrite,saturate,fwhm,input.name);
@@ -377,8 +382,59 @@ int main(int argc,char *argv[])
       printf("Saturation level requested is greater than level in fits header.  SATURATE=%f keyword value.\n",saturate);
       SATURATED = saturate;
     }
-  
-  
+ 
+  /**********************************************************/
+  /* Set crfract and crsig2 based on the seeing (FWHM) unless explicitly set on the command line. */
+  /**********************************************************/
+
+  /*    
+    #if seeing <= 2.7pix , crfract = 0.1, crsig = 1 (almost no detections of crs)
+    #if seeing < 3.3 pix > 2.7 , crfract = 0.15, crsig2 = 2 (not the best CR detection rate)
+    #If seeing >= 3.3 pix crfract = 0.2, crsig2 = 2
+  */
+
+  if (!flag_crfract){
+     if (flag_nofwhm){
+        crfract=0.15;
+        sprintf(event,"No seeing measurement present.  Defaulting to CRFRACT=%.2f\n",crfract);
+        reportevt(flag_verbose,STATUS,3,event);
+     }else{
+        if (fwhm > 2.7 && fwhm < 3.3) {
+           crfract = 0.15;
+        }else if(fwhm >= 3.3 || !flag_crfract || !flag_crsig2) {
+           crfract = 0.2;
+        }else{
+           sprintf(event,"Image with FWHM=%.2f (<2.7 pix) is not suitable for automatic detection of CR\n",fwhm);
+           reportevt(flag_verbose,STATUS,3,event);
+           exit(0);
+        }
+     }
+     sprintf(event," Value for CRFRACT set automaically based on seeing to CRFACT=%.2f\n",crfract);
+     reportevt(flag_verbose,STATUS,1,event);
+  }
+
+  if (!flag_crsig2){
+     if (flag_nofwhm){
+        crsig2=2.0;
+        sprintf(event,"No seeing measurement present.  Defaulting to CRSIG2=%.2f\n",crsig2);
+        reportevt(flag_verbose,STATUS,3,event);
+     }else{
+        if (fwhm > 2.7){
+           crsig2 = 2.0;
+        }else{
+           sprintf(event,"Image with FWHM=%.2f (<2.7 pix) is not suitable for automatic detection of CR\n",fwhm);
+           reportevt(flag_verbose,STATUS,3,event);
+           exit(0);
+        }
+     }
+     sprintf(event," Value for CRSIG2 set automaically based on seeing to CRSIG2=%.2f\n",crsig2);
+     reportevt(flag_verbose,STATUS,1,event);
+  }
+
+  sprintf(event,"Using crfract=%.2f and crsig2=%.2f \n", crfract, crsig2);
+  reportevt(flag_verbose,STATUS,1,event);
+
+ 
   /* create an output image with same parameters as input image */
   output=input;
   tempimage=input;
@@ -456,40 +512,6 @@ int main(int argc,char *argv[])
   /* *********  COSMIC RAY SECTION  ******** */
   /* *************************************** */
   /*******************************************/
-
-  /*    
-    #if seeing <= 2.7pix , crfract = 0.1, crsig = 1 (almost no detections of crs)
-    #if seeing < 3.3 pix > 2.7 , crfract = 0.15, crsig2 = 2 (not the best CR detection rate)
-    #If seeing >= 3.3 pix crfract = 0.2, crsig2 = 2
-  */
-
-  if (fwhm <= 2.7) {
-    sprintf(event,"Image with FWHM=%.2f pixels (< 2.7 pix limit), No cosmic rays detection algorithm run \n",fwhm);
-    reportevt(flag_verbose, STATUS,3,event);
-    exit(0);
-  }
-
-  else if (fwhm > 2.7 && fwhm < 3.3) {
-    crfract = 0.15;
-    crsig2 = 2.0;
-    sprintf(event,"Image with 2.7 < FWHM=%.2f < 3.3 pixels. Using crfract=%.2f and crsig2=%.2f \n", fwhm,crfract, crsig2);
-    reportevt(flag_verbose,STATUS,1,event);
-  }
-  else if (fwhm >= 3.3 || !flag_crfract || !flag_crsig2) {
-    crfract = 0.2;
-    crsig2 = 2.0;
-    sprintf(event,"Image with FWHM=%.2f > 3.3 pixels. Using crfract=%.2f and crsig2=%.2f \n", fwhm,crfract, crsig2);
-    reportevt(flag_verbose,STATUS,1,event);
-  }
-
-  /* no input crfract, using default value 0.2 
-  if (!flag_crfract) {
-    crfract = 0.2;
-  }
-  
-  if (!flag_crsig2){
-    crsig2 = 2;
-    }*/
 
     
   if (flag_crays) {
