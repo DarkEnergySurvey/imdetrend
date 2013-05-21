@@ -1,19 +1,54 @@
 /*
- maskcosmics
+Basic syntax: maskcosmics <input image> <options>
+  Input data:
+    <input image> = Input FITS image to be used to mask cosmics rays.
+  Options:
+    -crays 
+    -crfract <cosmic ray flux fraction> (default 0.20)
+    -crsig2 <cosmic variance> (default 2)
+    -verbose <0-3>
+    -help    (print usage and exit)
+    -version (print version and exit)
 
- 	takes an input MEF image (image, bpm, weight map),
-    determines the pixels with cosmics rays setting them
-    in the bpm as well as interpolating over the cosmic ray
-    pixels to replace them.
+Summary:
+  This routine takes an input MEF image (image, bpm, weight map) and identifies
+  (defined by doCosmics routine) every pixel touched by a cosmics ray and 
+  that is crsig2 sigmas above sky level. An additional 1 pixel buffer
+  around all pixels identified is also added. All cosmics rays found with
+  their repective buffer are masked in the bad pixel mask (BPM) plane of 
+  the input image as well as in the weight map plane (a value of zero
+  is given to the masked cosmics rays written in the weight map image plane).
+  Routine search for the FWHM on the image header and adjusts crfract and crsig2
+  in the following manner:
+  if FWHM < 2.7 pixels, it reports STATUS 3 warning and does not try to find
+  cosmics rays.
+  if 2.7 > FWHM < 3.3 pixels, it defines crfract = 0.15 and crsig2 = 2.0 for
+  optimal cosmics rays detection in this FWHM range.
+  if FWHM >= 3.3 pixels, it defines crfract = 0.2 and crsig2 = 2.0 for optimal
+  cosmics rays detections in this FWHM range.
+  If no FWHM present in image header, it defaults to crfract = 0.1 and 
+  crsig2 =1.0, but this values are not optimal for cosmics rays detection.
 
-	Future plans:
-    * Could also take an input star list (from USNO-B?) and apply bright
-      star masks.
-    * Could use a mapping for scattered light to mask light from stars that
-      are off the field of view.
-    * Could carry out a Hough transform to look for and remove satellite
-      trails.
 
+Detailed Description:
+
+    -crays
+     maskcosmics code will be executed, Must be used or code will exit.
+
+    -crfract <crfract>
+     Cosmics rays flux fraction:
+     If this option is used, it will be passed to the code, but it might get
+     overwritten depending of the exitence of the FWHM in the image header, or the
+     value of the FWHM (see summary for explanation).
+
+    -crsig2 <crsig2>
+     Sigma above sky level:
+     If this option is used, it will be passed to the code, but it might get
+     overwritten depending of the exitence of the FWHM in the image header, or the
+     value of the FWHM (see summary for explanation).
+
+     -verbose (0-3)
+     Sets the verbosity level for reporting actions being taken as the processing progresses.                                                                                                                                                                                                                  
 */
 
 #include "imsupport.h"
@@ -42,8 +77,6 @@
 
 /* Global Variables */
 float skybrite, skysigma, estgain;
-//Log file                                                                                                                                       
-/*FILE *flog;*/
 
 static const char *svn_id = "$Id$";
 
@@ -54,17 +87,12 @@ void print_usage(char *program_name)
   printf("    -crays \n");
   printf("    -crfract <cosmic ray flux fraction> (default 0.40)\n");
   printf("    -crsig2 <cosmic variance> (default 20)\n");
-  //printf("    -stars <astrostdsfile> \n");
-  //   printf("    -flag_horiztrails \n"); 
-  //   printf("    -nointerpolate \n");
   printf("  Output Options\n");
-  //printf("    -output <newimage>\n");
   printf("    -verbose <0-3>\n");
   printf("    -help    (print usage and exit)\n");
   printf("    -version (print version and exit)\n");
  }
 
-static int flag_nointerp = NO;
 static int flag_horiz    = NO;
 
 int stack[2048*4096];
@@ -134,7 +162,7 @@ int main(int argc,char *argv[])
    desimage input,cray,output,tempimage;	
    void	rd_desimage(),shell(),reportevt(),image_compare(),
      retrievescale(),printerror();
-   void    polin2(),creategrid(),mkstarmask(),headervalue(),pixelhisto(),getfloatheader();
+   void    polin2(),creategrid(),headervalue(),pixelhisto(),getfloatheader();
    /* process definitions from makeWeight */
    int doCosmic(float *image,short *bpm,float *weight, float *tempweight, double crfract, double crsig2);
    int doStat(float *image,short *bpm,float *weight);
@@ -200,7 +228,6 @@ int main(int argc,char *argv[])
      {"crays",            no_argument,       0,              OPT_CRAYS},
      {"version",          no_argument,       0,              OPT_VERSION},
      {"help",             no_argument,       0,              OPT_HELP},
-     {"nointerpolate",    no_argument,       &flag_nointerp, NO},
      {"flag_horiztrails", no_argument,       &flag_horiz,    NO},
      {0,0,0,0}
        };
@@ -388,20 +415,21 @@ int main(int argc,char *argv[])
   /**********************************************************/
 
   /*    
-    #if seeing <= 2.7pix , crfract = 0.1, crsig = 1 (almost no detections of crs)
+    #if seeing <= 2.7pix , crfract = 0.1, crsig = 1. I am being safe and I am not trying to detect CRs on
+    images with seeing < 2.7.
     #if seeing < 3.3 pix > 2.7 , crfract = 0.15, crsig2 = 2 (not the best CR detection rate)
     #If seeing >= 3.3 pix crfract = 0.2, crsig2 = 2
   */
 
   if (!flag_crfract){
      if (flag_nofwhm){
-        crfract=0.15;
+        crfract=0.1;
         sprintf(event,"No seeing measurement present.  Defaulting to CRFRACT=%.2f\n",crfract);
         reportevt(flag_verbose,STATUS,3,event);
      }else{
         if (fwhm > 2.7 && fwhm < 3.3) {
            crfract = 0.15;
-        }else if(fwhm >= 3.3 || !flag_crfract || !flag_crsig2) {
+        }else if(fwhm >= 3.3) {
            crfract = 0.2;
         }else{
            sprintf(event,"Image with FWHM=%.2f (<2.7 pix) is not suitable for automatic detection of CR\n",fwhm);
@@ -415,7 +443,7 @@ int main(int argc,char *argv[])
 
   if (!flag_crsig2){
      if (flag_nofwhm){
-        crsig2=2.0;
+        crsig2=1.0;
         sprintf(event,"No seeing measurement present.  Defaulting to CRSIG2=%.2f\n",crsig2);
         reportevt(flag_verbose,STATUS,3,event);
      }else{
@@ -464,27 +492,7 @@ int main(int argc,char *argv[])
   }
     
   
-  /* create the output file using input file as template */
-  /*strcpy(outputnamewithtempl, "!");
-  strcat(outputnamewithtempl, output.name);
-  strcat(outputnamewithtempl, "(");
-  strcat(outputnamewithtempl, input.name);
-  strcat(outputnamewithtempl, ")");
-  printf("outputfilename %s\n",outputnamewithtempl);
-  if (fits_create_file(&output.fptr,outputnamewithtempl,&status)) {
-    sprintf(event,"File creation failed: %s",outputnamewithtempl);
-    reportevt(flag_verbose,STATUS,5,event);
-    printerror(status);
-  }*/
-
-  }
-
   
-  /* do star masking*/
-  if (flag_stars){
-    if (flag_verbose)reportevt(flag_verbose,STATUS,1,"Implementing bright stars masking"); 
-    mkstarmask(&input,&output,filter,astrostdsfile,horiztrails,exposure,flag_verbose,flag_nointerp);
-  }
   
   /* Get Sky level */
   //  doSky(image,bpm,weight);
@@ -507,7 +515,7 @@ int main(int argc,char *argv[])
     }
 
 
-  /*	printf("finished star masking\n"); */
+  }
   /* *************************************** */
   /* *********  COSMIC RAY SECTION  ******** */
   /* *************************************** */
@@ -542,12 +550,12 @@ int main(int argc,char *argv[])
     spread(BADPIX_CRAY, 1000.0, BADPIX_CRAY, output.image, output.mask, output.varim);
 
     dogrow(BADPIX_CRAY,1,BADPIX_CGROW,output.image,output.mask,output.varim);
+    
+
     /*
     doStat(output.image,output.mask,output.varim);
-    */
     
     
-    /*
     if (flag_verbose) {
       sprintf(event,"Number of cosmic ray pixels masked= %d",numcrays);
       reportevt(flag_verbose,QA,1,event);
