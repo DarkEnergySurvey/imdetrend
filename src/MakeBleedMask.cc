@@ -186,7 +186,7 @@ public:
     AddHelp("edgesize","Size of edges used to detect edgebleed. (15)");
     AddHelp("starmask","Create a mask for the detected bright objects. (No)");
     AddHelp("bgreject","Use specified <factor> as scalefactor for background rejection. (5.0)");
-    AddHelp("scalefactor","Use specified <value> as scalefactor on background to detect bleedtrails. (10.0)");
+    AddHelp("scalefactor","Use specified <value> as scalefactor on background to detect bleedtrails. (1.0)");
     AddHelp("starlevel","Use specified <value> as scalefactor on background to detect stars. (5.0)");
     AddHelp("numtrail","Number of contiguous pixels required for trail detection. (trail_length/2)");
     AddHelp("saturated_objects","Filename for saturated star table.(None)");
@@ -313,7 +313,7 @@ int MakeBleedMask(const char *argv[])
     }
   }
 
-  double scalefactor = 5.0;
+  double scalefactor = 1.0;
   if(!sfac.empty()){
     std::istringstream Istr(sfac);
     Istr >> scalefactor;
@@ -735,7 +735,7 @@ int MakeBleedMask(const char *argv[])
       std::ostringstream GSO;
       GSO << "Global image statistics failed:" << std::endl
 	  << Out.str() << std::endl;
-      LX::ReportMessage(flag_verbose,STATUS,5,GSO.str());
+      LX::ReportMessage(flag_verbose,STATUS,4,GSO.str());
       return(1);
     }
   else if(flag_verbose){
@@ -967,10 +967,10 @@ int MakeBleedMask(const char *argv[])
 
   if(bleed_status < 0)
     { 
-      LX::ReportMessage(flag_verbose,STATUS,5,Out.str());
+      LX::ReportMessage(flag_verbose,STATUS,4,Out.str());
       Out.str("");
       Out << "DetectBleedTrails failed on pixel " << bleed_status << std::endl;
-      LX::ReportMessage(flag_verbose,STATUS,5,Out.str());
+      LX::ReportMessage(flag_verbose,STATUS,4,Out.str());
       return(1);
     }
 
