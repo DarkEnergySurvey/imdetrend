@@ -175,7 +175,7 @@ int main(int argc,char *argv[])
    float	interp_noise=1.0,interp_fwhm=0.0;
    int	flag_output=0,flag_crays=0,flag_stars=0,flag_srcgrowrad=0, flag_crfract = 0, flag_crsig2 = 0,
      num = 0,filemode=0,goodpix,badpix,hdutype;
-   enum {OPT_CRAYS=1,OPT_CRFRACT,OPT_CRSIG2,OPT_STARS,OPT_FLAG_HORIZTRAILS,
+   enum {OPT_CRAYS=1,OPT_CRFRACT,OPT_CRSIG2,OPT_FLAG_HORIZTRAILS,
          OPT_NOINTERPOLATE,OPT_OUTPUT,OPT_VERBOSE,OPT_HELP,OPT_VERSION};
 
    
