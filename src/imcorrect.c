@@ -7,6 +7,7 @@ Basic Syntax: imcorrect <input image or list> <options>
     -bpm <image>
     -obpm <image>
     -bias <image>
+    -linear <lut>
     -pupil <image>
     -flatten <image>
     -darkcor <image>  (see warning below)
@@ -253,6 +254,7 @@ void print_usage(char *program_name)
       printf("    -bpm <image>\n");
       printf("    -obpm <image>\n");
       printf("    -bias <image>\n");
+      printf("    -linear <lut>\n");
       printf("    -pupil <image>\n");
       printf("    -flatten <image>\n");
       printf("    -darkcor <image>\n");
@@ -286,23 +288,26 @@ int ImCorrect(int argc,char *argv[])
     scaleregionn[4]={500,1500,1500,2500},
     miniscaleregionn[4],scalenum,ccdnum=0,
       flag_overscan=YES,flag_bias=NO,flag_flatten=NO,flag_verbose=1,
-      flag_output=NO,flag_list=NO,flag_bpm=0,flag_variance=NO,
+      flag_output=NO,flag_list=NO,flag_bpm=0,flag_variance=NO,flag_newvarim=NO,
       flag_noisemodel=DES_SKYONLY,
       imnum,imoutnum,im,hdutype,flag_interpolate_col=NO,
       flag_illumination=NO,flag_fringe=NO,flag_dark=NO,
       flag_pupil=NO,flag_impupil=NO,flag_photflatten=NO,
-      flag_imoverscan=NO,flag_imbias=NO,flag_imflatten=NO,flag_imphotflatten,
-      flag_imillumination,flag_imfringe,flag_updateskybrite=NO,
-      flag_updateskysigma=NO,minsize=4,maxsize=128,
+      flag_imoverscan=NO,flag_imbias=NO,flag_imdark=NO,flag_imflatten=NO,
+      flag_imphotflatten,flag_imillumination,flag_imfringe,
+      flag_updateskybrite=NO,flag_updateskysigma=NO,minsize=4,maxsize=128,
       seed=-15,xlow,xhi,flag_mef=NO,flag_bpm_override=0,
       ymax,ymin,dy,dx,loc,count,ylen,xlen,k,totpix,l,overscantype=0;
+    int flag_linear=NO,flag_lutinterp=YES,flag_imlinear=NO;
     static	int status=0;
-    double	dbzero,dbscale,sumval;
+    float       image_val;
+    double	dbzero,dbscale,sumval,uncval;
     long	axes[2],naxes[2],pixels,npixels,bscale,bzero,bitpix,fpixel,
       ranseed=-564;
     char	comment[1000],longcomment[10000],filter[100]="",imagename[1000],
+      firstimage[1000],retry_firstimage[1000],
       bpmname[1000],rootname[1000],varimname[1000],outputlist[1000],input_list_name[1000],
-      *striparchiveroot(),event[10000],command_line[1000],
+      linear_tab[1000],*striparchiveroot(),event[10000],command_line[1000],
       keycard[100],keyname[10],scaleregion[100],
       imtypename[6][10]={"","IMAGE","VARIANCE","MASK","SIGMA","WEIGHT"};
     float	scale,offset,gasdev(),scale_interpolate,maxsaturate,imval,
@@ -310,7 +315,15 @@ int ImCorrect(int argc,char *argv[])
       *randnum=NULL,*vecsort,*scalesort,skybrite,skysigma,thresholdval;
     desimage bias,photflat,flat,darkimage,data,output,bpm,illumination,
       fringe,pupil,nosource;
+    float *lutx;
+    double *luta,*lutb;
+    float over;
     int	check_image_name();
+
+    fitsfile *tmp_fptr;
+    int ihdu,nhdunum;
+    long found_ccdnum;
+
 #if 0
     void	rd_desimage(),headercheck(),printerror(),decodesection(),
       readimsections(),overscan(),retrievescale(),reportevt(),
@@ -321,14 +334,12 @@ int ImCorrect(int argc,char *argv[])
     FILE	*inp=NULL;
     FILE        *out=NULL;
     /* list of keywords to be removed from the header after imcorrect */
-    char	delkeys[100][10]={"CCDSUM","AMPSECA","AMPSECB","TRIMSEC",
-				  "BIASSECA","BIASSECB","GAINA","GAINB","RDNOISEA",
-				  "RDNOISEB","SATURATA","SATURATB",
-				  ""};
+    char	delkeys[100][10]={"CCDSUM","TRIMSEC","BIASSECA","BIASSECB",""};
 
-    enum {OPT_BPM=1,OPT_OBPM,OPT_BIAS,OPT_PUPIL,OPT_FLATTEN,OPT_DARKCOR,OPT_PHOTFLATTEN,OPT_ILLUMINATION,
-	  OPT_FRINGE, OPT_SCALEREGION,OPT_OUTPUT,OPT_MEF,OPT_VARIANCETYPE,OPT_NOISEMODEL,OPT_INTERPOLATE_COL,
-	  OPT_MINSIZE,OPT_MAXSIZE,OPT_UPDATESKY,OPT_VERBOSE,OPT_VERSION,OPT_HELP,OPT_RANSEED};
+    enum {OPT_BPM=1,OPT_OBPM,OPT_BIAS,OPT_LINEAR,OPT_PUPIL,OPT_FLATTEN,OPT_DARKCOR,OPT_PHOTFLATTEN,
+          OPT_ILLUMINATION,OPT_FRINGE, OPT_SCALEREGION,OPT_OUTPUT,OPT_MEF,OPT_VARIANCETYPE,
+          OPT_NOISEMODEL,OPT_INTERPOLATE_COL,OPT_MINSIZE,OPT_MAXSIZE,OPT_UPDATESKY,
+          OPT_VERBOSE,OPT_VERSION,OPT_HELP,OPT_RANSEED};
     
     nosource.image = NULL;
     imoutnum = 0;
@@ -378,6 +389,7 @@ int ImCorrect(int argc,char *argv[])
 	  {"bpm",             required_argument, 0,OPT_BPM},
 	  {"obpm",            required_argument, 0,OPT_OBPM},
 	  {"bias",            required_argument, 0,OPT_BIAS},
+	  {"linear",          required_argument, 0,OPT_LINEAR},
 	  {"pupil",           required_argument, 0,OPT_PUPIL},
 	  {"flatten",         required_argument, 0,OPT_FLATTEN},
 	  {"darkcor",         required_argument, 0,OPT_DARKCOR},
@@ -462,6 +474,23 @@ int ImCorrect(int argc,char *argv[])
 	if(cloperr){
 	  reportevt(flag_verbose,STATUS,5,
 		    "Bias correction image must follow -bias");
+	  command_line_errors++;
+	  exit(1);
+	}
+	break;
+      case OPT_LINEAR: // -linear
+	cloperr = 0;
+	flag_linear=YES;
+	if(optarg){
+	  if (!check_image_name(optarg,CHECK_FITS,flag_verbose)) {
+	    cloperr = 1;
+	  }	    
+	  else sprintf(linear_tab,"%s",optarg);
+	}
+	else cloperr = 1;
+	if(cloperr){
+	  reportevt(flag_verbose,STATUS,5,
+		    "Linearity correction look-up table must follow -linear");
 	  command_line_errors++;
 	  exit(1);
 	}
@@ -793,6 +822,7 @@ int ImCorrect(int argc,char *argv[])
       /* copy input image name if FITS file*/
       if(check_image_name(argv[optind],CHECK_FITS,flag_verbose)){
 	sprintf(data.name,"%s",argv[optind]);
+	sprintf(firstimage,"%s",argv[optind]);
 	imnum = 1;
       }
       else { /* expect file containing list of images */
@@ -813,6 +843,9 @@ int ImCorrect(int argc,char *argv[])
 	    command_line_errors++;
 	    exit(1);
 	  }
+	  if (imnum == 1){
+             sprintf(firstimage,"%s",imagename);
+          }
 	}
 	if (fclose(inp)) {
 	  reportevt(flag_verbose,STATUS,5,"Closing input image list failed");
@@ -898,7 +931,6 @@ int ImCorrect(int argc,char *argv[])
       }
     }
 
-
     /* ****************************************** */
     /* ********** READ CALIBRATION DATA ********* */
     /* ****************************************** */
@@ -921,6 +953,7 @@ int ImCorrect(int argc,char *argv[])
 	printerror(status);
       }
     }
+
     /* read dark image */
     if (flag_dark) {
       rd_desimage(&darkimage,READONLY,flag_verbose);
@@ -931,7 +964,7 @@ int ImCorrect(int argc,char *argv[])
 	reportevt(flag_verbose,STATUS,5,event);
 	printerror(status);
       }
-      /* confirm that this is bias image */
+      /* confirm that this is dark image */
       headercheck(&darkimage,"NOCHECK",&ccdnum,"DESMKDCR",flag_verbose);
       if (fits_close_file(bias.fptr,&status)) {
 	sprintf(event,"File close failed: %s",bias.name);
@@ -939,7 +972,6 @@ int ImCorrect(int argc,char *argv[])
 	printerror(status);
       }
     }
-
 
     /* read flat image */	
     if (flag_flatten) {
@@ -1047,8 +1079,74 @@ int ImCorrect(int argc,char *argv[])
 	printerror(status);
       }
     }
-		
-		
+
+    /* *********************************** */
+    /* *****  Linearity correction  ****** */
+    /* * read linearity LUT (FITS table) * */
+    /* *********************************** */
+
+    if (flag_linear){
+/*     If no other corrections have been requested then the CCDNUM is not yet known
+       probe the first input image to obtain CCDNUM information */
+       if (ccdnum == 0){
+          sprintf(event,"No calibration with CCDNUM (needed for linearity correction).");
+          reportevt(flag_verbose,STATUS,1,event);
+          sprintf(event,"Attempting to open first image to obtain information");
+          reportevt(flag_verbose,STATUS,1,event);
+          if (fits_open_file(&tmp_fptr,firstimage,mode,&status)){
+             sprintf(retry_firstimage,"%s.gz",firstimage);
+             status=0;
+             if (fits_open_file(&tmp_fptr,retry_firstimage,mode,&status)){
+                status=0;
+                sprintf(retry_firstimage,"%s.fz",firstimage);
+                status=0;
+                if (fits_open_file(&tmp_fptr,retry_firstimage,mode,&status)){
+                   status=0;
+                   sprintf(event,"Failed to open first image (%s) and obtain CCDNUM",firstimage);
+	           reportevt(flag_verbose,STATUS,5,event);
+                   exit(1);
+                }
+             }
+          }
+          /* Determine how many extensions */
+          if (fits_get_num_hdus(tmp_fptr,&nhdunum,&status)) {
+             sprintf(event,"Reading HDUNUM failed: %s",firstimage);
+             reportevt(flag_verbose,STATUS,5,event);
+             printerror(status);
+          }
+          /* Search through extensions and attempt to find a CCDNUM keyword */
+          ihdu=1;
+	  while((ihdu <= nhdunum)&&(ccdnum==0)){
+             if (fits_read_key_lng(tmp_fptr,"CCDNUM",&found_ccdnum,comment,&status)==KEY_NO_EXIST){
+                ihdu++;
+                fits_movabs_hdu(tmp_fptr, ihdu, &hdutype, &status);
+             }else{
+                ccdnum=(int)found_ccdnum;
+             }
+          }
+          if (fits_close_file(tmp_fptr,&status)) {
+             sprintf(event,"Closing input image failed: %s",firstimage);
+             reportevt(flag_verbose,STATUS,5,event);
+             printerror(status);
+          }
+          if (ccdnum != 0){
+             sprintf(event,"Found CCDNUM=%d",ccdnum);
+             reportevt(flag_verbose,STATUS,1,event);
+          }else{
+             sprintf(event,"All attempts to determine the CCDNUM have failed.  Not possible to determine linearity correction.");
+             reportevt(flag_verbose,STATUS,5,event);
+             exit(1);
+          }
+       }
+
+       /* Obtain the linearity correction LUT from the specified table of corrections */  
+
+       read_linearity_lut(linear_tab,ccdnum,&lutx,&luta,&lutb);
+       sprintf(event,"Successfully read linearity correction for CCDNUM=%d",ccdnum);
+       reportevt(flag_verbose,STATUS,1,event);
+
+    }
+
     /********************************************/
     /****** PROCESSING SECTION BEGINS HERE ******/
     /********************************************/
@@ -1178,6 +1276,9 @@ int ImCorrect(int argc,char *argv[])
       output.ampsecbn[2] = data.ampsecbn[2];
       output.ampsecbn[3] = data.ampsecbn[3];
 
+
+
+
       /* ************************************** */
       /* ***** OVERSCAN and TRIM Section ****** */
       /* ************************************** */
@@ -1294,6 +1395,9 @@ int ImCorrect(int argc,char *argv[])
 	  exit(0);
 	}
 	for (i=0;i<output.npixels;i++) output.varim[i]=0.0;
+        flag_newvarim=YES;
+      }else{
+        flag_newvarim=NO;
       }
       /* prepare space for the bad pixel mask and initialize */
       if (data.mask==NULL) {
@@ -1313,8 +1417,6 @@ int ImCorrect(int argc,char *argv[])
 	  for (i=0;i<output.npixels;i++) output.mask[i]=0;
 	}
       }
-      
-      
       
       /* *************************************************/
       /* ******** Confirm Correction Image Sizes  ********/
@@ -1389,18 +1491,23 @@ int ImCorrect(int argc,char *argv[])
 	  flag_imbias=0;
 	}
       }
-      if (flag_flatten) {
-	if (fits_read_keyword(data.fptr,"DESFLAT",comment,comment,&status)==
-	    KEY_NO_EXIST) {
-	  flag_imflatten=1;
-	  status=0;
-	  reportevt(flag_verbose,STATUS,1,"FLAT correcting");
-	}
-	else {
-	  reportevt(flag_verbose,STATUS,1,"Already FLAT corrected");
-	  flag_imflatten=0;
-	}
+
+/*    RAG need to add check for previous linearity correction */
+
+      if (flag_linear){
+         reportevt(flag_verbose,STATUS,1,"Linearity correcting");
+         flag_imlinear=1;
+         status=0;
       }
+
+/*    RAG need to add check for previous dark correction */
+
+      if (flag_dark){
+         reportevt(flag_verbose,STATUS,1,"Dark correcting");
+         flag_imdark=1;
+         status=0;
+      }
+
       if (flag_pupil) {
 	if (fits_read_keyword(data.fptr,"DESPUPC",comment,comment,
 			      &status)==KEY_NO_EXIST) {
@@ -1413,7 +1520,20 @@ int ImCorrect(int argc,char *argv[])
 	  flag_impupil=0;
 	}
       }
-	  
+
+      if (flag_flatten) {
+	if (fits_read_keyword(data.fptr,"DESFLAT",comment,comment,&status)==
+	    KEY_NO_EXIST) {
+	  flag_imflatten=1;
+	  status=0;
+	  reportevt(flag_verbose,STATUS,1,"FLAT correcting");
+	}
+	else {
+	  reportevt(flag_verbose,STATUS,1,"Already FLAT corrected");
+	  flag_imflatten=0;
+	}
+      }
+
       /* ************************************************/
       /* ********* Mask Missing Image Sections   ********/
       /* *********  and mark Saturated Pixels    ********/
@@ -1443,70 +1563,234 @@ int ImCorrect(int argc,char *argv[])
 //		      &scalefactor,&mode,&skysigma);
 //      }
 
+      /* ***** RAG 1st attempt rewrite ********************************/
+      /*  If any of the inital corrections are to be applied          */
+      /*  Bias/Linearity/Dark/Pupil/Flat
+      /* **************************************************************/
+
+      if ((flag_bias && flag_imbias)||
+          (flag_flatten && flag_imflatten)|| 
+	  (flag_pupil && flag_impupil)||
+          (flag_dark && flag_imdark)||
+          (flag_linear && flag_imlinear)){
+
+         if (flag_variance==DES_VARIANCE || flag_variance==DES_WEIGHT) {
+	    /* mark image structure as containing WEIGHT image */
+            /* note that VARIANCE and WEIGHT are treated the same */
+            output.variancetype=DES_WEIGHT;
+            sprintf(event,"Will create CCD statical %s image",imtypename[flag_variance]);
+            reportevt(flag_verbose,STATUS,1,event);
+         }else{
+	    /* mark image structure as containing SIGMA image */
+            output.variancetype=DES_SIGMA;
+            sprintf(event,"Will create CCD statical %s image",imtypename[output.variancetype]);
+            reportevt(flag_verbose,STATUS,1,event);
+         }
+
+         printf(" SATURATE values: %f %f \n",output.saturateA, output.saturateB);
+         saturatepixels=0;
+	 for (i=0;i<output.npixels;i++){
+
+            image_val=output.image[i];
+
+            /* Premask saturation  */
+
+            if (maxsaturate > 0.){
+               if (column_in_section((i%output.axes[0])+1,output.ampsecan)){
+                  /* amplifier A */
+                  if (image_val>=output.saturateA){
+                     output.mask[i] |= BADPIX_SATURATE;
+                     saturatepixels++;
+                     /* boost all saturated pixels above maxsaturate */
+                     if (image_val<1.5*maxsaturate){
+                        image_val=1.5*maxsaturate;
+                     }
+                  }
+               }else{
+                  /* amplifier B */
+                  if (output.image[i]>=output.saturateB){
+                     output.mask[i] |= BADPIX_SATURATE;
+                     saturatepixels++;
+                     /* boost all saturated pixels above maxsaturate */
+                     if (image_val<1.5*maxsaturate){
+                        image_val=1.5*maxsaturate;
+                     }
+                  }
+               }
+            }
+         
+            /* Bias Correction */
+
+            if (flag_bias && flag_imbias){
+               image_val-=bias.image[i];
+            }
+
+            if (flag_newvarim){
+               /* Obtain initial uncertainty estimate */
+/*               printf("Obtaining initial uncertainty estimate\n"); */
+               if (!output.mask[i]){
+                  if(column_in_section((i%output.axes[0])+1,output.ampsecan)){
+                     /* in AMP A section */	      
+	             uncval=Squ((double)output.rdnoiseA/(double)output.gainA);
+                     if (image_val > 0.){
+	                uncval+=((double)image_val/(double)output.gainA); 
+                     }
+                  }else{
+                     /* in AMP B section */	      
+                     uncval=Squ((double)output.rdnoiseB/(double)output.gainB);
+                     if (image_val > 0.){
+                        uncval+=((double)image_val/(double)output.gainB); 
+                     }
+                  }
+               }else{
+                  uncval=0.0;
+               }
+            }else{
+               /* If an old value was supposed to exist then get that value and
+                  get it into a proper form for propagating subsequent uncertainties */
+/*               printf("Using previous uncertainty estimate\n"); */
+               if (flag_variance==DES_VARIANCE || flag_variance==DES_WEIGHT) {
+                  if (output.varim[i]>0.){
+                     uncval=1.0/((double)output.varim[i]);
+                  }else{
+                     uncval=0.0;
+                  }
+               }else if (flag_variance==DES_SIGMA) {
+                  if (output.varim[i]>0.){
+                     uncval=Squ((double)output.varim[i]);
+                  }else{
+                     uncval=0.0;
+                  }
+               }
+            }
+            /* Add in uncertainty from bias subtraction if applicable */
+
+	    if (flag_bias && bias.varim[i]>0.0){uncval+=1.0/(double)bias.varim[i];}
+
+            /* Linearity Correction */
+   
+            if (flag_linear && flag_imlinear){
+               if (column_in_section((i%output.axes[0])+1,output.ampsecan)){
+                  image_val=lut_srch(image_val,luta,flag_lutinterp);
+               }else{ 
+                  image_val=lut_srch(image_val,lutb,flag_lutinterp);
+               }
+            }
+
+            /* Dark Correction */
+      
+            if (flag_dark && flag_imdark){ 
+	       image_val-=output.exptime*darkimage.image[i];
+            }
+
+
+            /* Pupil Correction */
+
+	    if (flag_pupil && flag_impupil){
+	       image_val-=pupil.image[i]*scalefactor;
+            }
+
+            /* Flat field Correction */
+
+	    if (flag_flatten && flag_imflatten){
+               if (flat.image[i]>0.){
+                  image_val/=flat.image[i];
+	          uncval/=Squ((double)flat.image[i]);
+	          if (flat.varim[i]>0.0) uncval+=1.0/((double)flat.varim[i]);
+               }else{
+                  image_val=0.0;
+	          uncval=0.0;
+	          output.mask[i] |= BADPIX_BPM;
+               }
+            }
+
+            /* Finished with this pixel */
+            /* Assign new pixel value into the output array */
+            output.image[i]=image_val;
+
+            /* Assign new weight/uncertainty into the output.varim array */
+            if (flag_variance==DES_VARIANCE || flag_variance==DES_WEIGHT) {
+               if (uncval>0.0){
+                  output.varim[i]=1.0/uncval;
+               }else{
+                  output.varim[i]=0.0;
+               }
+            }else if (flag_variance==DES_SIGMA) {
+               if (uncval>1.0e-10){
+                  output.varim[i]=sqrt(uncval);
+	       }else{
+                  output.varim[i]=1.0e+10;
+               }
+            }
+         }
+         sprintf(event,"Masked %d saturated pixels",saturatepixels);
+         reportevt(flag_verbose,STATUS,1,event);
+      }
+
       /* ************************************************/
       /* ******** BIAS, Pupil Ghost and FLATTEN  ********/
       /* ************************************************/	  
 
-      if ((flag_flatten && flag_imflatten) || (flag_bias && flag_imbias)
-	  || (flag_pupil && flag_impupil)) {
-	/* retrieve sky brightness in image */
-	scale=1.0;offset=0.0;
-	saturatepixels=0;
-	accept_mask = BADPIX_SATURATE|BADPIX_INTERP|BADPIX_STAR|BADPIX_TRAIL;
-	for (i=0;i<output.npixels;i++) {
-	  /* grab flat field scalefactor */
-	  if (flag_flatten && flag_imflatten) scale=flat.image[i];
-	  /* grab bias offset */
-	  if(scale <= 0){
-	    output.mask[i] |= BADPIX_BPM;
-	    output.varim[i] = 0;
-	    output.image[i] = 0;
-	  }
-	  else{
-	    if (flag_bias && flag_imbias) offset=bias.image[i];
-	    else offset=0;
-	    /* grab pupil offset */
-	    if (flag_pupil && flag_impupil) 
-	      offset+=pupil.image[i]*scalefactor;
-	    /* do math using mask  */
-	    if (!(output.mask[i])||(output.mask[i]&accept_mask)) {
-	      if(column_in_section((i%output.axes[0])+1,output.ampsecan)){
-		//	    if (i%output.axes[0]<=1024) { /* amplifier A */
-		if (output.image[i]>=output.saturateA) {
-		  output.mask[i] |= BADPIX_SATURATE;
-		  saturatepixels++;
-		  /* boost all saturated pixels above maxsaturate */
-		  if (output.image[i]<1.5*maxsaturate) 
-		    output.image[i]=1.5*(scale*maxsaturate+offset);
-		}
-	      }		
-	      else {/* amplifier B */
-		if (output.image[i]>=output.saturateB) {
-		  output.mask[i] |= BADPIX_SATURATE;
-		  saturatepixels++;
-		  /* boost all saturated pixels above maxsaturate */
-		  if (output.image[i]<1.5*maxsaturate) 
-		    output.image[i]=1.5*(scale*maxsaturate+offset);
-		}
-	      }
-	      output.image[i]=(output.image[i]-offset)/scale;
-	    }
-	    /* set pixel to 0.0 if it's in a bad pixel */
-	    else //if(!(output.mask[i]&BADPIX_INTERP))
-	      output.image[i]=0.0;
-	  }
-	}
-	sprintf(event,"Masked %d saturated pixels",saturatepixels);
-	reportevt(flag_verbose,STATUS,1,event);
-      } /* end BIAS and FLATTEN */
+//     if ((flag_flatten && flag_imflatten) || (flag_bias && flag_imbias)
+//	  || (flag_pupil && flag_impupil)) {
+//	/* retrieve sky brightness in image */
+//	scale=1.0;offset=0.0;
+//	saturatepixels=0;
+//	accept_mask = BADPIX_SATURATE|BADPIX_INTERP|BADPIX_STAR|BADPIX_TRAIL;
+//	for (i=0;i<output.npixels;i++) {
+//	  /* grab flat field scalefactor */
+//	  if (flag_flatten && flag_imflatten) scale=flat.image[i];
+//	  /* grab bias offset */
+//	  if(scale <= 0){
+//	    output.mask[i] |= BADPIX_BPM;
+//	    output.varim[i] = 0;
+//	    output.image[i] = 0;
+//	  }
+//	  else{
+//	    if (flag_bias && flag_imbias) offset=bias.image[i];
+//	    else offset=0;
+//	    /* grab pupil offset */
+//	    if (flag_pupil && flag_impupil) 
+//	      offset+=pupil.image[i]*scalefactor;
+//	    /* do math using mask  */
+//	    if (!(output.mask[i])||(output.mask[i]&accept_mask)) {
+//	      if(column_in_section((i%output.axes[0])+1,output.ampsecan)){
+//		//	    if (i%output.axes[0]<=1024) { /* amplifier A */
+//		if (output.image[i]>=output.saturateA) {
+//		  output.mask[i] |= BADPIX_SATURATE;
+//		  saturatepixels++;
+//		  /* boost all saturated pixels above maxsaturate */
+//		  if (output.image[i]<1.5*maxsaturate) 
+//		    output.image[i]=1.5*(scale*maxsaturate+offset);
+//		}
+//	      }		
+//	      else {/* amplifier B */
+//		if (output.image[i]>=output.saturateB) {
+//		  output.mask[i] |= BADPIX_SATURATE;
+//		  saturatepixels++;
+//		  /* boost all saturated pixels above maxsaturate */
+//		  if (output.image[i]<1.5*maxsaturate) 
+//		    output.image[i]=1.5*(scale*maxsaturate+offset);
+//		}
+//	      }
+//	      output.image[i]=(output.image[i]-offset)/scale;
+//	    }
+//	    /* set pixel to 0.0 if it's in a bad pixel */
+//	    else //if(!(output.mask[i]&BADPIX_INTERP))
+//	      output.image[i]=0.0;
+//	  }
+//	}
+//	sprintf(event,"Masked %d saturated pixels",saturatepixels);
+//	reportevt(flag_verbose,STATUS,1,event);
+//     } /* end BIAS and FLATTEN */
 
       /* ************************************************/
       /* *************** DARK Correction ****************/
       /* ************************************************/	  
 
-      if (flag_dark) 
-	for (i=0;i<output.npixels;i++)
-	  output.image[i]-=data.exptime*darkimage.image[i];
+//      if (flag_dark) 
+//	for (i=0;i<output.npixels;i++)
+//	  output.image[i]-=data.exptime*darkimage.image[i];
 
       /* end of DARK Correction */
 	    
@@ -1516,90 +1800,87 @@ int ImCorrect(int argc,char *argv[])
       /* ********************************************* */
 
 
-      /* NOTE:  must alter to use rdnoiseA/gainA to determine whether we are */
-      /* building weight image for the first time or simply adjusting it during */
-      /* an illumination correction */
 
-      if (flag_variance==DES_VARIANCE || flag_variance==DES_WEIGHT) {
-	/* mark image structure as containing WEIGHT image */
-	/* note that VARIANCE and WEIGHT are treated the same */
-	output.variancetype=DES_WEIGHT;
-	sprintf(event,"Creating CCD statical %s image", 
-		imtypename[flag_variance]);
-	reportevt(flag_verbose,STATUS,1,event);
-	for (i=0;i<output.npixels;i++) 
-	  //	      if ((flag_bpm && !output.mask[i]) || !flag_bpm) {
-	  if (!output.mask[i]) {
-	    imval = output.image[i];
-	    if(imval < 0) imval = 0.0;
-	    if(column_in_section((i%output.axes[0])+1,output.ampsecan)){
-	      //	    if (i%output.axes[0]<=1024) { /* in AMP A section */	      
-	      /* each image contributes Poisson noise, RdNoise */
-	      /*  and BIAS image noise */
-	      sumval=(imval/output.gainA+ 
-		      Squ(output.rdnoiseA/output.gainA));
-	    }
-	    else { /* in AMP B */
-	      /* each image contributes Poisson noise, RdNoise */
-	      /*  and BIAS image noise */
-	      sumval=(imval/output.gainB+
-		      Squ(output.rdnoiseB/output.gainB));
-	    }
-	    /* apply flat field correction */
-	    if (flag_flatten) sumval/=Squ(flat.image[i]);
-	    if (flag_illumination) sumval/=Squ(illumination.image[i]);
-	    /* add uncertainties in the bias, flat and illum corrections */
-	    if (flag_bias && bias.varim[i]>0.0) sumval+=1.0/bias.varim[i];
-	    if (flag_flatten && flat.varim[i]>0.0) 
-	      sumval+=1.0/flat.varim[i];
-	    /*
-	      if (flag_illumination && illumination.varim[i]>0.0) 
-	      sumval+=1.0/illumination.varim[i];
-	    */
-	    output.varim[i]=1.0/sumval;
-	  }
-	  else output.varim[i]=0.0;
-      }
-      else if (flag_variance==DES_SIGMA) {
-	/* mark image structure as containing SIGMA image */
-	output.variancetype=DES_SIGMA;
-	sprintf(event,"Creating CCD statical %s image",
-		imtypename[output.variancetype]);
-	reportevt(flag_verbose,STATUS,1,event);
-	for (i=0;i<output.npixels;i++) 
-	  //	      if ((flag_bpm && !output.mask[i]) || !flag_bpm) {
-	  if (!output.mask[i]) {
-	    imval = output.image[i];
-            if (imval < 0) imval = 0.0;
-	    if(column_in_section((i%output.axes[0])+1,output.ampsecan)){
-	      //    if (i%output.axes[0]<=1024) { /* in AMP A section */	      
-	      /* each image contributes Poisson noise, RdNoise */
-	      /*  and BIAS image noise */
-	      sumval=(imval/output.gainA+ 
-		      Squ(output.rdnoiseA/output.gainA));
-	    }
-	    else { /* in AMP B */
-	      /* each image contributes Poisson noise, RdNoise */
-	      /*  and BIAS image noise */
-	      sumval=(imval/output.gainB+
-		      Squ(output.rdnoiseB/output.gainB));
-	    }
-	    /* apply flat field correction */
-	    if (flag_flatten) sumval/=Squ(flat.image[i]);
-	    if (flag_illumination) sumval/=Squ(illumination.image[i]);
-	    /* add uncertainties in the bias, flat and illum corrections */
-	    if (flag_bias && bias.varim[i]>0.0) sumval+=1.0/bias.varim[i];
-	    if (flag_flatten && flat.varim[i]>0.0) 
-	      sumval+=1.0/flat.varim[i];
-	    /*
-	      if (flag_illumination && illumination.varim[i]>0.0) 
-	      sumval+=1.0/illumination.varim[i];
-	    */
-	    if (sumval>1.0e-10) sumval=sqrt(sumval);
-	    output.varim[i]=sumval;
-	  }
-	  else output.varim[i]=1.0e+10;
-      }
+//      if (flag_variance==DES_VARIANCE || flag_variance==DES_WEIGHT) {
+//	/* mark image structure as containing WEIGHT image */
+//	/* note that VARIANCE and WEIGHT are treated the same */
+//	output.variancetype=DES_WEIGHT;
+//	sprintf(event,"Creating CCD statical %s image", 
+//		imtypename[flag_variance]);
+//	reportevt(flag_verbose,STATUS,1,event);
+//	for (i=0;i<output.npixels;i++) 
+//	  //	      if ((flag_bpm && !output.mask[i]) || !flag_bpm) {
+//	  if (!output.mask[i]) {
+//	    imval = output.image[i];
+//	    if(imval < 0) imval = 0.0;
+//	    if(column_in_section((i%output.axes[0])+1,output.ampsecan)){
+//	      //	    if (i%output.axes[0]<=1024) { /* in AMP A section */	      
+//	      /* each image contributes Poisson noise, RdNoise */
+//	      /*  and BIAS image noise */
+//	      sumval=(imval/output.gainA+ 
+//		      Squ(output.rdnoiseA/output.gainA));
+//	    }
+//	    else { /* in AMP B */
+//	      /* each image contributes Poisson noise, RdNoise */
+//	      /*  and BIAS image noise */
+//	      sumval=(imval/output.gainB+
+//		      Squ(output.rdnoiseB/output.gainB));
+//	    }
+//	    /* apply flat field correction */
+//	    if (flag_flatten) sumval/=Squ(flat.image[i]);
+//	    if (flag_illumination) sumval/=Squ(illumination.image[i]);
+//	    /* add uncertainties in the bias, flat and illum corrections */
+//	    if (flag_bias && bias.varim[i]>0.0) sumval+=1.0/bias.varim[i];
+//	    if (flag_flatten && flat.varim[i]>0.0) 
+//	      sumval+=1.0/flat.varim[i];
+//	    /*
+//	      if (flag_illumination && illumination.varim[i]>0.0) 
+//	      sumval+=1.0/illumination.varim[i];
+//	    */
+//	    output.varim[i]=1.0/sumval;
+//	  }
+//	  else output.varim[i]=0.0;
+ //     }
+  //    else if (flag_variance==DES_SIGMA) {
+//	/* mark image structure as containing SIGMA image */
+//	output.variancetype=DES_SIGMA;
+//	sprintf(event,"Creating CCD statical %s image",
+//		imtypename[output.variancetype]);
+//	reportevt(flag_verbose,STATUS,1,event);
+//	for (i=0;i<output.npixels;i++) 
+//	  //	      if ((flag_bpm && !output.mask[i]) || !flag_bpm) {
+//	  if (!output.mask[i]) {
+//	    imval = output.image[i];
+ //           if (imval < 0) imval = 0.0;
+//	    if(column_in_section((i%output.axes[0])+1,output.ampsecan)){
+//	      //    if (i%output.axes[0]<=1024) { /* in AMP A section */	      
+//	      /* each image contributes Poisson noise, RdNoise */
+//	      /*  and BIAS image noise */
+//	      sumval=(imval/output.gainA+ 
+//		      Squ(output.rdnoiseA/output.gainA));
+//	    }
+//	    else { /* in AMP B */
+//	      /* each image contributes Poisson noise, RdNoise */
+//	      /*  and BIAS image noise */
+//	      sumval=(imval/output.gainB+
+//		      Squ(output.rdnoiseB/output.gainB));
+//	    }
+//	    /* apply flat field correction */
+//	    if (flag_flatten) sumval/=Squ(flat.image[i]);
+//	    if (flag_illumination) sumval/=Squ(illumination.image[i]);
+//	    /* add uncertainties in the bias, flat and illum corrections */
+//	    if (flag_bias && bias.varim[i]>0.0) sumval+=1.0/bias.varim[i];
+//	    if (flag_flatten && flat.varim[i]>0.0) 
+//	      sumval+=1.0/flat.varim[i];
+//	    /*
+//	      if (flag_illumination && illumination.varim[i]>0.0) 
+//	      sumval+=1.0/illumination.varim[i];
+//	    */
+//	    if (sumval>1.0e-10) sumval=sqrt(sumval);
+//	    output.varim[i]=sumval;
+//	  }
+//	  else output.varim[i]=1.0e+10;
+ //     }
 
       /* ***************************************************** */
       /* ********** remove source flux from image  *********** */
@@ -1783,9 +2064,9 @@ int ImCorrect(int argc,char *argv[])
 	}
       }	
       
-      /* *******************`******************* */
+      /* *************************************** */
       /* ******* PhotFlatten Correction ******** */
-      /* ***********************`*************** */
+      /* *************************************** */
 
       if (flag_photflatten) {
 	flag_imphotflatten=YES;
