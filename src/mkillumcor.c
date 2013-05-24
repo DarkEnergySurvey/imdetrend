@@ -9,6 +9,8 @@
  *  - Added code to ignore hot/dead (BADPIX_BPM) pixels
  *  - Introduced -ignoredeadpixels to ignore hot/dead pixels
  *
+ * 05/24/2013: modified by V. Kindratenko*
+ *  - Added -fast option
  */
 
 #include <time.h>
@@ -41,12 +43,14 @@ void print_usage(char *program_name)
   printf("    -verbose <0-3>\n");
   printf("    -help    (print usage and exit)\n");
   printf("    -version (print version and exit)\n");
+  printf("  Performance Options\n");
+  printf("    -fast\n");
 }
 
 static int flag_median  = YES;
 static int flag_aver    = NO;
 static int flag_deadpix = NO;
-
+static int flag_fast    = NO;
 
 int main(int argc,char *argv[])
 {
@@ -64,8 +68,7 @@ int main(int argc,char *argv[])
     mode,fwhm,scalefactor,*scalesort;
   double	value;
   desimage input,illum,fringe,illumcor_template,fringecor_template;	
-  void	rd_desimage(),shell(),reportevt(),image_compare(),
-    retrievescale();
+  void	rd_desimage(),shell(),reportevt(),image_compare(); 
   time_t	tm;
   enum { OPT_MINSIZE =1 ,OPT_MAXSIZE,OPT_MEDIAN,OPT_AVERAGE,OPT_RANSEED,OPT_IGNOREDEADPIXELS,
 	 OPT_OUTPUT_ILLUM,OPT_OUTPUT_FRINGE,OPT_SCALEREGION,OPT_ILLUMCOR_COMPARE,
@@ -77,9 +80,11 @@ int main(int argc,char *argv[])
     exit(0);
   }
 
+  command_line[0] = '\0';
   if(build_command_line(argc,argv,command_line,1000) <= 0){
     reportevt(2,STATUS,1,"Failed to record full command line.");
   }
+
   /* RAG: Added to print version of code to standard output (for logs) */
   sprintf(event,"%s",svn_id);
   reportevt(2,STATUS,1,event);
@@ -104,6 +109,7 @@ int main(int argc,char *argv[])
   int clop;
   int cloperr = 0;
   int command_line_errors = 0;
+
   while(1){
     int curind = optind;
     static struct option illumcor_options[] =
@@ -122,6 +128,7 @@ int main(int argc,char *argv[])
 	{"average",          no_argument,       &flag_aver,   YES},
 	{"median",           no_argument,       &flag_median, YES},
 	{"ignoredeadpixels", no_argument,       &flag_deadpix,YES},
+	{"fast",             no_argument,       &flag_fast,   YES},
 	{0,0,0,0}
       };
 
@@ -306,6 +313,7 @@ int main(int argc,char *argv[])
     }
     for (i=0;i<count;i++) randnum[i]=ran1(&ranseed);
   }
+
   /* ************************************************************ */
   /* smooth the input image to create the illumination correction */
   /* ************************************************************ */
@@ -361,11 +369,16 @@ int main(int argc,char *argv[])
 	  }
 	}
 	if (count > 0) {
-	  /* sort */
-	  shell(count,vecsort-1);
-	  /* odd or even number of pixels */
-	  if (count%2) illum.image[loc]=vecsort[count/2];
-	  else illum.image[loc]=0.5*(vecsort[count/2]+vecsort[count/2-1]);
+          if (flag_fast)
+            illum.image[loc] = quick_select(vecsort, count);
+          else
+          {
+	    /* sort */
+	    shell(count,vecsort-1);
+	    /* odd or even number of pixels */
+	    if (count%2) illum.image[loc]=vecsort[count/2];
+	    else illum.image[loc]=0.5*(vecsort[count/2]+vecsort[count/2-1]);
+	  }
 	}
       }
       /* end of processing loop */
@@ -383,7 +396,11 @@ int main(int argc,char *argv[])
     exit(0);
   }
 
-  retrievescale(&illum,scaleregionn,scalesort,flag_verbose,
+  if (flag_fast)
+    retrievescale_fast(&illum,scaleregionn,scalesort,flag_verbose,
+		&scalefactor,&mode,&fwhm);
+  else
+    retrievescale(&illum,scaleregionn,scalesort,flag_verbose,
 		&scalefactor,&mode,&fwhm);
 
   /* ************************************************************ */
@@ -437,7 +454,11 @@ int main(int argc,char *argv[])
     printf("\n");
   }
 
-  retrievescale(&fringe,scaleregionn,scalesort,flag_verbose,
+  if (flag_fast)
+    retrievescale_fast(&fringe,scaleregionn,scalesort,flag_verbose,
+		&scalefactor,&mode,&fwhm);
+  else
+    retrievescale(&fringe,scaleregionn,scalesort,flag_verbose,
 		&scalefactor,&mode,&fwhm);
 
   /* ************************************************************ */

@@ -18,6 +18,8 @@ Basic syntax: mksupersky <input list> <output image> <options>
     -image_compare <template>
     -verbose <0-3>
     -version (print version and exit)
+  Performance Options:
+    -fast
 
 Summary:
 
@@ -94,6 +96,10 @@ Output Options:
 
   -verbose <0-3>
 
+  Performance Options:
+    -fast
+      Uses faster method for computing median value.
+
 Known "Features":
   -The -replacebadpixels option has been put in place to attempt to deal 
    with pixels that are bad in all images.  The result has not yet been 
@@ -146,6 +152,8 @@ void print_usage(char *program_name)
   printf("    -verbose <0-3>\n");
   printf("    -help    (print usage and exit)\n");
   printf("    -version (print version and exit)\n");
+  printf("  Performance Options\n");
+  printf("    -fast\n");
   
 }
 
@@ -154,6 +162,7 @@ static int flag_rejectob  = YES;
 static int flag_combine   = MEDIAN;
 static int flag_dead      = NO;
 static int flag_omask     = NO;
+static int flag_fast      = NO;
 
 int MakeSuperSky(int argc, char *argv[])
 {
@@ -176,7 +185,7 @@ int MakeSuperSky(int argc, char *argv[])
     scaleregionn[4]={500,1500,1500,2500},scalenum;
   int avsignum,srcgrowrad_int,valnum,dy,dx,newx,newy,
     flag_image_compare=NO;
-  void	rd_desimage(),shell(),decodesection(),retrievescale(),
+  void	rd_desimage(),decodesection(),shell(),/*retrievescale(),retrievescale_fast(),*/
     headercheck(),printerror(),reportevt(),image_compare();
   double	avsigsum,val1sum,val2sum,weightsum,variancesum,
     variance_threshold=Squ(S2N_THRESH);
@@ -189,6 +198,7 @@ int MakeSuperSky(int argc, char *argv[])
 	OPT_REPLACEDEADPIXELS,OPT_AVSIGCLIP,OPT_AVERGAGE,OPT_MEDIAN,OPT_OUTPUTMASKS,
 	OPT_VARIANCETYPE,OPT_IMAGE_COMPARE,OPT_VERBOSE,OPT_HELP,OPT_VERSION};
   
+
   if (argc<2) {
     print_usage(argv[0]);
     exit(0);
@@ -197,6 +207,7 @@ int MakeSuperSky(int argc, char *argv[])
   if(build_command_line(argc,argv,command_line,1000) <= 0){
     reportevt(2,STATUS,1,"Failed to record full command line.");
   }
+
   /* RAG: Added to print version of code to standard output (for logs) */
   sprintf(event,"%s",svn_id);
   reportevt(2,STATUS,1,event);
@@ -245,6 +256,7 @@ int MakeSuperSky(int argc, char *argv[])
 	{"norejectobjects",   no_argument,       &flag_rejectob,     NO},
 	{"replacedeadpixels", no_argument,       &flag_dead,        YES},
 	{"outputmasks",       no_argument,       &flag_omask,       YES},
+	{"fast",              no_argument,       &flag_fast,        YES},
 	{0,0,0,0}
       };
 
@@ -323,7 +335,7 @@ int MakeSuperSky(int argc, char *argv[])
       abort();
     }
   }          
-    
+
   /* ********************************************** */
   /* ********* Handle Input Image/File  *********** */
   /* ********************************************** */
@@ -547,8 +559,12 @@ int MakeSuperSky(int argc, char *argv[])
     /* calculate the scalefactor, mode and fwhm in the scaleregion */
     /* also read the mask image */
     if (flag_scale || flag_rejectob) 
-      retrievescale(data+im,scaleregionn,scalesort,flag_verbose,
-		    scalefactor+im,&mode,&fwhm);
+      if (flag_fast)
+          retrievescale_fast(data+im,scaleregionn,scalesort,flag_verbose,
+			scalefactor+im,&mode,&fwhm);
+      else
+          retrievescale(data+im,scaleregionn,scalesort,flag_verbose,
+			scalefactor+im,&mode,&fwhm);
 
     /* check scalefactor */
     if (flag_scale) {
@@ -584,7 +600,6 @@ int MakeSuperSky(int argc, char *argv[])
     reportevt(flag_verbose,STATUS,5,event);
     exit(0);
   }
-
 
   /* *********************************************** */
   /* *********************************************** */
@@ -733,7 +748,11 @@ int MakeSuperSky(int argc, char *argv[])
 
   if (flag_scale) {
     for (im=0;im<imnum;im++) {
-      retrievescale(data+im,scaleregionn,scalesort,flag_verbose,
+      if (flag_fast)
+        retrievescale_fast(data+im,scaleregionn,scalesort,flag_verbose,
+		    scalefactor+im,&mode,&fwhm);
+      else
+        retrievescale(data+im,scaleregionn,scalesort,flag_verbose,
 		    scalefactor+im,&mode,&fwhm);
       /* mask entire image of scale factor cannot be determined */
       if (fabs(scalefactor[im])<1.0e-4) {
@@ -859,11 +878,17 @@ int MakeSuperSky(int argc, char *argv[])
 /*      printf("RAG: %d %d \n",i,valnum); */
 /*      fflush(stdout);                   */
       if (valnum>0) {
-	shell(valnum,vecsort-1);
-	/* odd number of images */
-	/* record median value */  
-	if (valnum%2) output.image[i]=vecsort[valnum/2]; 
-	else output.image[i]=0.5*(vecsort[valnum/2]+vecsort[valnum/2-1]);
+        if (flag_fast)
+          output.image[i] = quick_select(vecsort, valnum);
+          //half_sort(vecsort, valnum);
+        else
+        {
+	  shell(valnum,vecsort-1);
+	  /* odd number of images */
+	  /* record median value */  
+	  if (valnum%2) output.image[i]=vecsort[valnum/2]; 
+	  else output.image[i]=0.5f*(vecsort[valnum/2]+vecsort[valnum/2-1]);
+        }
 	variancesum=Squ((float)valnum)/variancesum;
 	/* mask pixels that have low S2N */
 	if (variancesum<variance_threshold) output.mask[i]=1;
@@ -933,7 +958,11 @@ int MakeSuperSky(int argc, char *argv[])
   /* **** RENORMALIZE IMAGE TO 1.0 ***** */
   /* *********************************** */
   /* *********************************** */
-  retrievescale(&output,scaleregionn,scalesort,flag_verbose,
+  if (flag_fast)
+      retrievescale_fast(&output,scaleregionn,scalesort,flag_verbose,
+		&scalefactor_output,&mode,&fwhm);
+  else
+      retrievescale(&output,scaleregionn,scalesort,flag_verbose,
 		&scalefactor_output,&mode,&fwhm);
 			
   /* ************************************************************ */
