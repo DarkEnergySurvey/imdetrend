@@ -736,7 +736,9 @@ int MakeBleedMask(const char *argv[])
       GSO << "Global image statistics failed:" << std::endl
 	  << Out.str() << std::endl;
       LX::ReportMessage(flag_verbose,STATUS,4,GSO.str());
-      return(1);
+      // Returning a non-error code here to avoid disturbing the 
+      // pipeline.
+      return(0);
     }
   else if(flag_verbose){
     Out << "Global image statistics converged after NITER=" << niter 
@@ -971,7 +973,8 @@ int MakeBleedMask(const char *argv[])
       Out.str("");
       Out << "DetectBleedTrails failed on pixel " << bleed_status << std::endl;
       LX::ReportMessage(flag_verbose,STATUS,4,Out.str());
-      return(1);
+      // Return non-error exit code to avoid disturbing the pipeline
+      return(0);
     }
 
   if(flag_verbose){
