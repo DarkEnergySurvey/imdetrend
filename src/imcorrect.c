@@ -51,24 +51,9 @@ Summary:
 Detailed Description:
 
 The detrending steps within imcorrect occur in the order listed below.
-In some cases corrections occur as a group with a null correction
-used for corrections not explicitly requested on the command line.
+Currently the corrections are applied in the order listed below.
 In the descriptions below, each correction is described in isolation
 and arithmatic expressions refer to the correction applied in isolation.
-
-Overscan Correction (-overscantype): 
-  The first to be applied is an overscan correction.  In the current 
-  DESDM framework this step is usually accomplished by DECam_crosstalk. 
-  The -overscantype option is still supported within mkflatcor but 
-  only functions correctly for -overscantype 0 which removes an estimate
-  for the instrumental bias by considering a line-by-line median in the 
-  BIASSEC for each amplifier.  After processing the overscan (as well
-  as the pre/post-scan sections) of the image are trimmed/removed.
-  If the DESOSCN keyword has been previously populated (i.e. an overscan 
-  correction has already been applied) then this option is ignored.
-  By default overscan correction is attempted unless the -nooverscan 
-  option is selected (or the DESOSCN keyword has been populated in the
-  input image).
 
 Bias Correction (-bias <biascor>):
   When used, a master bias image will be read and subtracted from each 
@@ -84,6 +69,23 @@ BPM (-bpm <image> or -obpm <image> ):
   Pixels flagged in the BPM are not considered when calculating scale 
   factors.  This mask is later propagated into the output image.
 
+Linerity Correction (-linear <lut>):
+  This options causes a lookup table (lut) to be read which describes a
+  linearity correction.  The format of this table is currently an 
+  multi-extension FITS file that contains one table per CCD.  Each
+  table is comprised of a list of pixel values and their associated
+  value to be corrected to in order to linearize that CCDs response.
+  Separate columns describe the correction for amplifiers A and B.
+
+Dark Current (-dark <image>)
+  WARNING: This option has never been tested. Currently the DESDM/CP 
+  pipelines do not apply a dark correction but if it were applied, dark 
+  subtraction would occur after the (bias and linearity correction).
+  Note this placement may not be exactly correct (especially since the
+  current version of mkdarkcor does not pre-apply a linearity correction. 
+  The form of the correction is: 
+           output(pix)=input(pix)-(exptime*darkcor(pix))
+
 Pupil Correction (-pupil <image>)
   When present an image of the pupil ghost is subtracted from each of the
   input images.  This is accomplished by determining the scale (median) of
@@ -95,14 +97,6 @@ Flat Field (-flatten <image>)
   When present a flat field correction is applied to the input image(s).
   The correction that occurs has the form:
            output(pix)=input(pix)/flat(pix)   
-
-Dark Current (-dark <image>)
-  WARNING: This option has never been tested and the order in which it 
-  would occur (i.e., its placement in the code) is suspect.  Currently
-  the DESDM/CP frameworks do not apply a dark correction but if it were
-  applied, dark subtraction would occur after the (bias/pupil/flat).  
-  The form of the correction is: 
-           output(pix)=input(pix)-(exptime*darkcor(pix))
 
 Pixel Area Correction (-photflatten <image>)
   The pixel area correction attempts to compensate for the varying area 
@@ -122,7 +116,6 @@ Fringe Correction (-fringe <image>)
   and the fringe image is scaled by this value prior to attempting to subtract
   the fringe patter.  The correction has the form:
            output(pix) = input(pix) - [ scale * fringe(pix) ] 
-
 
 Other Input Options:
 
@@ -177,9 +170,10 @@ Weight/Uncertainty Images (-variancetype and -noisemodel):
     - bias variance corrections --> SIGMA+=1.0/bias_var, 
     - flat field variance  --> SIGMA+=1.0/flat_var
 
-  The current implementation recomputes the weight image (i.e. does not
-  respect any incoming (previously calculated) weight image but rather
-  recomputes from scratch.
+  The current implementation respects an incoming uncertainty image.
+  The only (known) caveat to this is that the incoming uncertainty image is 
+  assumed to have the same type as that of the -variancetype option. 
+  (So don't mix -variancetypes between processing steps!)
 
   The -noisemodel flag determines whether the weight image will reflect
   the presence of sources.  The default, -noisemodel SKYONLY attempts to 
@@ -210,21 +204,40 @@ Other Output Options:
 
 
 Known Bugs/Features:
-  - The implementation of the dark correction is suspect.  No test data 
-    has been presented and the option has never been carefully tested.
+  - The implementation of the dark correction has a mild inconsistancy in
+     that mkdarkcor does not have the ability to pre-apply a linearity 
+     correction.  No test data has been presented and the option has never 
+     been carefully tested.
   - Current interpolation over bad columns assumes that a bad pixel mask 
-    with edges (marked as bad) at least 2 columns wide is used. 
+     with edges (marked as bad) at least 2 columns wide is used. 
   - Input weigth maps are not respected but always recalculated
   - The algorithm used to remove sources from the weight image (-noisemodel
-    SKYONLY) currently has the following idiosychrosies:
+     SKYONLY) currently has the following idiosychrosies:
        - works with a very small window near the chip edges.
        - when the full window is considered (i.e. more than -maxsize from
          an image edge) the selection of values is not truly random but 
          rather has a fixed pattern.
        - masked data are included among the samples used to generate the
          SKYONLY weights
-  - the overscan options (soon to be depricated) only work for -overscantype 0
-    (i.e. removal of the overscan with a row-by-row median)
+  - Currently I suspect the weights are mishandled for the illuminuation
+    correction.  (i.e. are backwards for type WEIGHT and missing a sqrt
+    for type SIGMA).
+
+    (THIS OPTION HAS BEEN REMOVED)
+  - Older implementation of Overscan Correction (-overscantype): 
+  The first to be applied is an overscan correction.  In the current 
+  DESDM framework this step is usually accomplished by DECam_crosstalk. 
+  The -overscantype option is still supported within mkflatcor but 
+  only functions correctly for -overscantype 0 which removes an estimate
+  for the instrumental bias by considering a line-by-line median in the 
+  BIASSEC for each amplifier.  After processing the overscan (as well
+  as the pre/post-scan sections) of the image are trimmed/removed.
+  If the DESOSCN keyword has been previously populated (i.e. an overscan 
+  correction has already been applied) then this option is ignored.
+  By default overscan correction is attempted unless the -nooverscan 
+  option is selected (or the DESOSCN keyword has been populated in the
+  input image).
+
 
 */
 
