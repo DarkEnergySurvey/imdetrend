@@ -30,6 +30,9 @@ Basic Syntax: imcorrect <input image or list> <options>
     -verbose <0-3>
     -version (Print version and exit)
     -help    (Print usage w/ options list)
+  Performance Options:
+    -fast
+
 
 Summary:
   This program applies corrections to remove instrumental effects from images.
@@ -238,6 +241,8 @@ Known Bugs/Features:
   option is selected (or the DESOSCN keyword has been populated in the
   input image).
 
+ * 05/28/2013: modified by V. Kindratenko*
+ *  - Added -fast option
 
 */
 
@@ -288,6 +293,8 @@ void print_usage(char *program_name)
       printf("    -verbose <0-3>\n");
       printf("    -version (Print version and exit)\n");
       printf("    -help    (Print this list and exit)\n");
+      printf("  Performance Options\n");
+      printf("    -fast\n");
 }
 
 
@@ -312,6 +319,7 @@ int ImCorrect(int argc,char *argv[])
       seed=-15,xlow,xhi,flag_mef=NO,flag_bpm_override=0,
       ymax,ymin,dy,dx,loc,count,ylen,xlen,k,totpix,l,overscantype=0;
     int flag_linear=NO,flag_lutinterp=YES,flag_imlinear=NO;
+    static int flag_fast=NO;
     static	int status=0;
     float       image_val;
     double	dbzero,dbscale,sumval,uncval;
@@ -422,6 +430,7 @@ int ImCorrect(int argc,char *argv[])
 	  {"MEF",             no_argument,       0,OPT_MEF},
 	  {"version",         no_argument,       0,OPT_VERSION},
 	  {"help",            no_argument,       0,OPT_HELP},
+	  {"fast",            no_argument,       &flag_fast,YES},
 	  {0,0,0,0}
 	};
       int clopx = 0;
@@ -1959,12 +1968,17 @@ int ImCorrect(int argc,char *argv[])
 		if (l>=xmax) l=xmax-1;
 		vecsort[count++]=output.varim[l+k*output.axes[0]];
 	      }
-	    /* sort */
-	    shell(count,vecsort-1);
-	    /* odd or even number of pixels */
-	    if (count%2) nosource.image[loc]=vecsort[count/2];
-	    else nosource.image[loc]=0.5*(vecsort[count/2]+
-					  vecsort[count/2-1]);
+
+	      if (flag_fast)
+                  nosource.image[loc] = quick_select(vecsort, count);
+	      else
+	      {
+		/* sort */
+		shell(count,vecsort-1);
+		/* odd or even number of pixels */
+		if (count%2) nosource.image[loc]=vecsort[count/2];
+		else nosource.image[loc]=0.5*(vecsort[count/2]+vecsort[count/2-1]);
+	      }
 	  }
 	}
 	/* copy source removed image over */

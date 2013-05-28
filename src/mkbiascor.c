@@ -14,6 +14,9 @@ Basic syntax: mkbiascor <input_list> <output_biascor_image> <options>
     -image_compare <template>
     -verbose <0-3>
     -version (print version and exit)
+  Performance Options:
+    -fast
+
 
 Summary:
   This routine combines a list of bias image frames from a single CCD to form 
@@ -85,7 +88,11 @@ Known "Features":
 /* significant shift in signal the average value also will be shifted.    */
 /* as a result calculation of variance can fail sigma limit test. In this */
 /* case the assigned variance will be calculated from sigma limit and not */
-/* be zero                                                                */
+/* be zero                                                                *
+
+ * 05/28/2013: modified by V. Kindratenko*
+ *  - Added -fast option
+*/
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -113,6 +120,8 @@ void print_usage()
   printf("  -verbose <0-3>\n");
   printf("  -help (print usage and exit)\n");
   printf("  -version (print version and exit)\n");
+  printf("  Performance Options\n");
+  printf("    -fast\n");
 }
 
 int 
@@ -142,6 +151,7 @@ MakeBiasCorrection(int argc,char *argv[])
   float	avsigclip_sigma,*vecsort=NULL,val,sigmalima=0,sigmalimb=0,
     offset,rms,maxdev,*imagepointer, *tempimage=NULL;
   int	minmaxclip_npix;
+  static int flag_fast=NO;
   double	sum2a,sum2b,sum1a,sum1b;
   void	rd_desimage(),shell(),decodesection(),headercheck(),
     reportevt(),image_compare();
@@ -205,6 +215,7 @@ MakeBiasCorrection(int argc,char *argv[])
 	{"median",        no_argument,       0, OPT_MEDIAN},
 	{"version",       no_argument,       0, OPT_VERSION},
 	{"help",          no_argument,       0, OPT_HELP},
+	{"fast",          no_argument,       &flag_fast,YES},
 	{0,0,0,0}
       };
 
@@ -793,11 +804,16 @@ MakeBiasCorrection(int argc,char *argv[])
       x=i%output.axes[0];y=i/output.axes[0];
       /* copy values into sorting vector */
       for (im=0;im<imnum;im++) vecsort[im]=data[im].image[i];
-      shell(imnum,vecsort-1);
-      /* odd number of images */
-      if (imnum%2) output.image[i]=vecsort[imnum/2]; /* record the median value */  
-      else output.image[i]=0.5*(vecsort[imnum/2]+vecsort[imnum/2-1]);
-	    
+      if (flag_fast)
+         output.image[i] = quick_select(vecsort, imnum);
+      else
+      {
+          shell(imnum,vecsort-1);
+          /* odd number of images */
+          if (imnum%2) output.image[i]=vecsort[imnum/2]; /* record the median value */  
+          else output.image[i]=0.5*(vecsort[imnum/2]+vecsort[imnum/2-1]);
+      }
+
       /* CALCULATE VARIANCE  */
       if (flag_variance) {
 	tempimage[i] = 0.0;

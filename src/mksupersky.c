@@ -116,6 +116,9 @@ Known "Features":
  *  - Introduced -replacedeadpixels to replace hot/dead (BADPIX_BPM) pixels
  *    with averages over some neighborhood
  *
+ * 05/24/2013: modified by V. Kindratenko*
+ *  - Added -fast option
+ *
  */
 
 #include "imdetrend.h"

@@ -3,6 +3,12 @@
  * to mkflatcor.c The dark signal is rescaled in such a way that all images have the same
  *  exposure time. This exposure time is written in the header of the resulting image.
  * So, the result is not per second, but per some median exposure time.
+
+  Performance Options:
+    -fast
+
+ * 05/28/2013: modified by V. Kindratenko*
+ *  - Added -fast option
  */
 
 
@@ -34,6 +40,8 @@ void print_usage()
   printf("  -verbose <0-3>\n");
   printf("  -help (print usage and exit)\n");
   printf("  -version (print version and exit)\n");
+  printf("  Performance Options\n");
+  printf("    -fast\n");
 }
 
 int MakeDarkCorrection(int argc,char *argv[])
@@ -43,6 +51,7 @@ int MakeDarkCorrection(int argc,char *argv[])
     mkpath(),flag_combine=MEDIAN,flag_variance=NO,flag_exposure=0,
     flag_image_compare=0,overscantype=0,flag_bias=NO;
   int flag_aver = 0,flag_median=0,flag_avsigclip = 0,flag_avminmaxclip = 0;
+  static int flag_fast=NO;
   int rag_check=0;
   static int status=0;
   int	ccdnum=0;
@@ -117,6 +126,7 @@ int MakeDarkCorrection(int argc,char *argv[])
 	{"median",        no_argument,       0, OPT_MEDIAN},
 	{"version",       no_argument,       0, OPT_VERSION},
 	{"help",          no_argument,       0, OPT_HELP},
+	{"fast",          no_argument,       &flag_fast,YES},
 	{0,0,0,0}
       };
 
@@ -813,11 +823,15 @@ int MakeDarkCorrection(int argc,char *argv[])
     for (i=0;i<output.npixels;i++) { /* for each pixel */
       /* copy values into sorting vector */
       for (im=0;im<imnum;im++) vecsort[im]=data[im].image[i];
-      shell(imnum,vecsort-1);
-      /* odd number of images */
-      if (imnum%2) output.image[i]=vecsort[imnum/2]; /* record the median value */  
-      else output.image[i]=0.5*(vecsort[imnum/2]+vecsort[imnum/2-1]);
-
+      if (flag_fast)
+         output.image[i] = quick_select(vecsort, imnum);
+      else
+      {
+          shell(imnum,vecsort-1);
+          /* odd number of images */
+          if (imnum%2) output.image[i]=vecsort[imnum/2]; /* record the median value */  
+          else output.image[i]=0.5*(vecsort[imnum/2]+vecsort[imnum/2-1]);
+      }
 
       /* CALCULATE VARIANCE  */
       if (flag_variance) {

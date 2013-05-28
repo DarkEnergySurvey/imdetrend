@@ -20,6 +20,9 @@ Basic syntax: mkflatcor <input_list> <output_flatcor_image> <options>
     -image_compare <template>
     -verbose <0-3>
     -version (print version and exit)
+  Performance Options:
+    -fast
+
 
 Summary:
   This routine combines a list of flat field image frames from a single CCD 
@@ -131,7 +134,11 @@ Known "Features":
  * as a result calculation of variance can fail sigma limit test. In this
  * case the assigned variance will be calculated from sigma limit and not
  * be zero
+
+ * 05/28/2013: modified by V. Kindratenko*
+ *  - Added -fast option
  */
+
 #include <float.h>
 #include <math.h>
 #include <time.h>
@@ -163,6 +170,8 @@ void print_usage()
   printf("  -verbose <0-3>\n");
   printf("  -help (print usage and exit)\n");
   printf("  -version (print version and exit)\n");
+  printf("  Performance Options\n");
+  printf("    -fast\n");
 }
 
 static int flag_scale = YES;
@@ -176,6 +185,7 @@ int MakeFlatCorrection(int argc,char *argv[])
     scaleregionn[4]={500,1500,1500,2500};
   int scalenum,flag_verbose=1,mkpath(),flag_image_compare=NO,overscantype=0,
     flag_aver = 0,flag_median=0,flag_avsigclip = 0,flag_avminmaxclip = 0;
+  static int flag_fast=NO;
   float	sigma1,sigma2,sigma3,sigma4,
     meanval1,meanval2,meanval3,meanval4;
   int	ampregiona[4]={0,1024,0,4096},ampregionb[4]={1024,2048,0,4096}; 
@@ -266,6 +276,7 @@ int MakeFlatCorrection(int argc,char *argv[])
 	{"version",       no_argument,       0,         OPT_VERSION},
 	{"help",          no_argument,       0,         OPT_HELP},
         {"noscale",       no_argument,       &flag_scale, 0},
+	{"fast",          no_argument,       &flag_fast,YES},
 	{0,0,0,0}
       };
 
@@ -1122,15 +1133,22 @@ int MakeFlatCorrection(int argc,char *argv[])
 	
   if (flag_combine==MEDIAN) {
     for (i=0;i<output.npixels;i++) { /* for each pixel */
-      output.image[i]=0;
+      output.image[i]=0.0f;
       if (!flag_bpm || !bpm.mask[i] ) {
 	/* copy values into sorting vector */
 	for (im=0;im<imnum;im++) vecsort[im]=data[im].image[i]/scaleval[im];
-	shell(imnum,vecsort-1);
-	/* odd number of images */
-	if (imnum%2) output.image[i]=vecsort[imnum/2]; 
-	/* record the median value */  
-	else output.image[i]=0.5*(vecsort[imnum/2]+vecsort[imnum/2-1]);
+
+        if (flag_fast)
+           output.image[i] = quick_select(vecsort, imnum);
+        else
+        {
+	  shell(imnum,vecsort-1);
+	  /* odd number of images */
+	  if (imnum%2) output.image[i]=vecsort[imnum/2]; 
+	  /* record the median value */  
+	  else output.image[i]=0.5*(vecsort[imnum/2]+vecsort[imnum/2-1]);
+	}
+
 	/* CALCULATE VARIANCE  */
 	if (flag_variance) {
 	  sel_pix = 0;
@@ -1152,7 +1170,7 @@ int MakeFlatCorrection(int argc,char *argv[])
 	  tempimage[i]=sigmapv;
 	  if(sel_pix == 0) tempimage[i]= Squ(sigmalim);
 	} /* end if variance */
-      } else { output.image[i] = 0.0;
+      } else { output.image[i] = 0.0f;
 	if (flag_variance) tempimage[i] = Squ(sigmalim);
       }
     }
