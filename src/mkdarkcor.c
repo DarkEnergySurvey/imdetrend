@@ -709,7 +709,10 @@ int MakeDarkCorrection(int argc,char *argv[])
    *   on exptime/averageExpTime, put in output image exposure time
    *   averageExpTime
    */
-  shell(imnum,exptime-1);
+  if (flag_fast)
+    float_qsort(exptime, imnum);
+  else
+    shell(imnum,exptime-1);
   medianexptime = exptime[imnum/2];
   if(flag_exposure) medianexptime = timereq;
   sprintf(event,"median exp. time= %f ",medianexptime);
@@ -869,7 +872,10 @@ int MakeDarkCorrection(int argc,char *argv[])
       tailcut = (int) (0.15*imnum);  /* cut tails 30% to estimate sigma */
       if (tailcut < 1) tailcut = 1;  /* this requires at list 4 images to combine */
       for (im=0;im<imnum;im++)vecsort[im]=data[im].image[i];
-      shell(imnum,vecsort-1);
+      if (flag_fast)
+        float_qsort(vecsort, imnum);
+      else
+        shell(imnum,vecsort-1);
       /* what is left is 2 sigma for Gaussian distribution */
       sigmapv = 0.5*(vecsort[imnum-tailcut-1] - vecsort[tailcut]);
       if (imnum%2) meanpv=vecsort[imnum/2]; /* record the median value */
@@ -921,7 +927,10 @@ int MakeDarkCorrection(int argc,char *argv[])
       x=i%output.axes[0];y=i/output.axes[0];
       output.image[i]=0.;
       for (im=0;im<imnum;im++) vecsort[im]=data[im].image[i];
-      shell(imnum,vecsort-1);            /* sort the vector */
+      if (flag_fast)
+        float_qsort(vecsort, imnum);
+      else
+        shell(imnum,vecsort-1);            /* sort the vector */
       if (2*minmaxclip_npix >=imnum - 2) {
 	sprintf(event,"CLIPPEDAVERAGE minmaxclip_npix can not be more than imnum/2 Reset to 1");
 	minmaxclip_npix = 1;

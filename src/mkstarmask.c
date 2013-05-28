@@ -4,6 +4,7 @@
 #include "imsupport.h"
 #include <math.h>
 #include <string.h>
+
 static const char *svn_id = "$Id$";
 
 void mkstarmask(input,output,filter,astrostdsfile,horiztrails,exposure,flag_verbose,flag_nointerpolate)
@@ -175,9 +176,11 @@ void mkstarmask(input,output,filter,astrostdsfile,horiztrails,exposure,flag_verb
 	      reportevt(flag_verbose,STATUS,4,"Calloc of scalesort failed");
 	      exit(0); 
 	    }
-	    retrievescale(output,scaleregionn,scalesort,flag_verbose,&scalefactor,
+            //if (flag_fast)
+	    //  retrievescale_fast(output,scaleregionn,scalesort,flag_verbose,&scalefactor,&mode,&sigma) ;
+            //else 
+	      retrievescale(output,scaleregionn,scalesort,flag_verbose,&scalefactor,
 			  &mode,&sigma) ; 
-
 	    if(fabs(sigma)<7.0)
 	      { sprintf (event,"retreivescale sigma too small calling pixelhisto\n");
 		reportevt(flag_verbose,STATUS,2,event);
@@ -518,12 +521,15 @@ void  pixelhisto(image,scaleregionn,scalesort,flag_verbose,scalefactor,
   }
   else {
     /* sort list */
-    shell(i,scalesort-1);
+    //if (flag_fast)
+    //  float_qsort(scalesort, i);
+    //else
+      shell(i,scalesort-1);
     /* grab the median */
     if (i%2) *scalefactor=scalesort[i/2];
     else *scalefactor=0.5*(scalesort[i/2]+scalesort[i/2-1]);
     if (scalesort[0]>100){
-      for (num=0;num<i;num++)scalesort[num] -=  *scalefactor ;
+      for (num=0;num<i;num++) scalesort[num] -=  *scalefactor ;
     }
     /* build a histogram */
     for (num=0;num<i;num++)

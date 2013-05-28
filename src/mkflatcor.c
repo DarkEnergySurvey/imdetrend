@@ -981,7 +981,11 @@ int MakeFlatCorrection(int argc,char *argv[])
 	  reportevt(flag_verbose,STATUS,1,event);
 	}
 	/* get scale value for image */
-	retrievescale(data+im,scaleregionn,scalesort,flag_verbose,
+       if (flag_fast)
+	 retrievescale_fast(data+im,scaleregionn,scalesort,flag_verbose,
+		      scaleval+im,&mode,&fwhm); 
+       else
+	 retrievescale(data+im,scaleregionn,scalesort,flag_verbose,
 		      scaleval+im,&mode,&fwhm); 
 	/* apply correction */
 	for (i=0;i<data[im].npixels;i++)
@@ -997,7 +1001,11 @@ int MakeFlatCorrection(int argc,char *argv[])
     /* ************************************* */
     /*printf("imagename=%s",data[im].name);*/
     if (flag_scale) { 
-      retrievescale(data+im,scaleregionn,scalesort,flag_verbose,
+      if (flag_fast)
+        retrievescale_fast(data+im,scaleregionn,scalesort,flag_verbose,
+		    scaleval+im,&mode,&fwhm);
+      else
+        retrievescale(data+im,scaleregionn,scalesort,flag_verbose,
 		    scaleval+im,&mode,&fwhm); 
       if (flag_twilight){
 	for (i=1;i<data[im].npixels;i++) {   
@@ -1189,7 +1197,10 @@ int MakeFlatCorrection(int argc,char *argv[])
       output.image[i]=0;
       if (!flag_bpm || !bpm.mask[i] ) {
 	for (im=0;im<imnum;im++) vecsort[im]=data[im].image[i]/scaleval[im];
-	shell(imnum,vecsort-1);            /* sort the vector */
+        if (flag_fast)
+          float_qsort(vecsort, imnum);
+        else
+	  shell(imnum,vecsort-1);            /* sort the vector */
 	if (2*minmaxclip_npix >=imnum - 1) {
 	  sprintf(event,"CLIPPEDAVERAGE minmaxclip_npix can not be more than imnum/2 Reset to 1");
 	  minmaxclip_npix = 1;
@@ -1243,7 +1254,10 @@ int MakeFlatCorrection(int argc,char *argv[])
 	tailcut = (int) (0.15*imnum);  /* cut tails 30% to estimate sigma */
 	if (tailcut < 1) tailcut = 1;  /* this requires at list 4 images to combine */
 	for (im=0;im<imnum;im++)vecsort[im]=data[im].image[i]/scaleval[im];
-	shell(imnum,vecsort-1);
+        if (flag_fast)
+          float_qsort(vecsort, imnum);
+        else
+	  shell(imnum,vecsort-1);
 	sigmapv = 0.5*(vecsort[imnum -1 -tailcut] - vecsort[tailcut]);
 	if (imnum%2) meanpv=vecsort[imnum/2]; /* record the median value */
 	else meanpv=0.5*(vecsort[imnum/2]+vecsort[imnum/2-1]);
@@ -1290,7 +1304,11 @@ int MakeFlatCorrection(int argc,char *argv[])
 
   /* now let's confirm the final scaling */
   if (flag_scale) {
-    retrievescale(&output,scaleregionn,scalesort,flag_verbose,
+    if (flag_fast)
+      retrievescale_fast(&output,scaleregionn,scalesort,flag_verbose,
+		  &maxval,&mode,&fwhm);
+    else
+      retrievescale(&output,scaleregionn,scalesort,flag_verbose,
 		  &maxval,&mode,&fwhm); 
     if (flag_verbose) {
       sprintf(event,"Image=%s & Region = [%d:%d,%d:%d] & Scale=%f calcimscale",

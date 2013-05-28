@@ -1564,7 +1564,11 @@ int ImCorrect(int argc,char *argv[])
       /* get scale value for image */
       /* note that this scalefactor is pre-bias correction */
       /* but post overscan correction */
-      retrievescale(&output,scaleregionn,scalesort,flag_verbose,
+      if (flag_fast)
+        retrievescale_fast(&output,scaleregionn,scalesort,flag_verbose,
+		    &scalefactor,&mode,&skysigma);
+      else
+        retrievescale(&output,scaleregionn,scalesort,flag_verbose,
 		    &scalefactor,&mode,&skysigma);
       /* cycle through image masking all pixels below threshold */
 //      thresholdval=scalefactor*BADPIX_THRESHOLD;
@@ -2064,7 +2068,11 @@ int ImCorrect(int argc,char *argv[])
 	reportevt(flag_verbose,STATUS,1,"Applying Fringe correction");
 	    
 	/* retrieve overall scaling from image */
-	retrievescale(&output,scaleregionn,scalesort,flag_verbose,
+       if (flag_fast)
+	 retrievescale_fast(&output,scaleregionn,scalesort,flag_verbose,
+		      &scalefactor,&mode,&skysigma);
+       else
+	 retrievescale(&output,scaleregionn,scalesort,flag_verbose,
 		      &scalefactor,&mode,&skysigma);
 	for (i=0;i<output.npixels;i++) 
 	  output.image[i]-=scalefactor*fringe.image[i];
@@ -2100,7 +2108,11 @@ int ImCorrect(int argc,char *argv[])
 	if (flag_verbose) 
 	  reportevt(flag_verbose,STATUS,1,
 		    "Applying Photflatten correction");
-	retrievescale(&output,scaleregionn,scalesort,flag_verbose,
+       if (flag_fast)
+	 retrievescale_fast(&output,scaleregionn,scalesort,flag_verbose,
+		      &skybrite,&mode,&skysigma);
+       else
+	 retrievescale(&output,scaleregionn,scalesort,flag_verbose,
 		      &skybrite,&mode,&skysigma);
 	for (i=0;i<output.npixels;i++) 
 	  output.image[i]=(output.image[i]-skybrite)*photflat.image[i]+
@@ -2113,7 +2125,11 @@ int ImCorrect(int argc,char *argv[])
       /* *************************************** */
       if (flag_updateskybrite || flag_updateskysigma) {
 	/* retrieve overall scaling from image */
-	retrievescale(&output,scaleregionn,scalesort,flag_verbose,
+       if (flag_fast)
+	 retrievescale_fast(&output,scaleregionn,scalesort,flag_verbose,
+		      &skybrite,&mode,&skysigma);
+       else
+	 retrievescale(&output,scaleregionn,scalesort,flag_verbose,
 		      &skybrite,&mode,&skysigma);
 	sprintf(event,"Image SKYBRITE = %10.4e & SKYSIGMA = %10.4e",
 		skybrite,skysigma);
