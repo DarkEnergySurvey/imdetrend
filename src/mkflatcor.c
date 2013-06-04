@@ -13,6 +13,7 @@ Basic syntax: mkflatcor <input_list> <output_flatcor_image> <options>
     -scale <scale region>
     -noscale
     -bias <image>
+    -linear <lut>
     -pupil <image>
     -bpm <image>
     -flattype <flatcor or tflatcor> 
@@ -41,6 +42,14 @@ Detailed Description:
       When used, a master bias image will be read and subtracted from each 
       input frame.  The image used is FITS file with dimensions that match
       the post overscan image size (i.e. biascor image should be trimmed).
+
+    Linearity Correction (-linear <lut>):
+      This options causes a lookup table (lut) to be read which describes a
+      linearity correction.  The format of this table is currently an 
+      multi-extension FITS file that contains one table per CCD.  Each
+      table is comprised of a list of pixel values and their associated
+      value to be corrected to in order to linearize that CCDs response.
+      Separate columns describe the correction for amplifiers A and B.
 
     BPM (-bpm <image>):
       If this options is used then a bad pixel mask (BPM) is propogated into
@@ -162,6 +171,7 @@ void print_usage()
   printf("  -scale <scale region>\n");
   printf("  -noscale\n");
   printf("  -bias <image>\n");
+  printf("  -linear <lut>\n"); 
   printf("  -bpm <image>\n");
   printf("  -pupil <image>\n");
   printf("  -flattype <flatcor or tflatcor> \n");
@@ -185,6 +195,7 @@ int MakeFlatCorrection(int argc,char *argv[])
     scaleregionn[4]={500,1500,1500,2500};
   int scalenum,flag_verbose=1,mkpath(),flag_image_compare=NO,overscantype=0,
     flag_aver = 0,flag_median=0,flag_avsigclip = 0,flag_avminmaxclip = 0;
+  int flag_linear=NO,flag_lutinterp=YES;
   static int flag_fast=NO;
   float	sigma1,sigma2,sigma3,sigma4,
     meanval1,meanval2,meanval3,meanval4;
@@ -192,9 +203,10 @@ int MakeFlatCorrection(int argc,char *argv[])
   static int status=0;
   char	comment[1000],imagename[1000],command[1000],event[10000],
     longcomment[2500],scaleregion[100],filter[200]="",command_line[1000],
+    linear_tab[1000],firstimage[1000],retry_firstimage[1000],
     obstype[200],*strip_path(),inname_temp[1000],outname_temp[1000],
     imtypename[6][10]={"","IMAGE","VARIANCE","MASK","SIGMA","WEIGHT"};
-  fitsfile *fptr;
+  fitsfile *fptr,*tmp_fptr;
   int	ccdnum=0;
   double	sumvariance,sumval,sum1,sum2a, sum2b, *flatstats;
   FILE	*inp;
@@ -202,7 +214,10 @@ int MakeFlatCorrection(int argc,char *argv[])
   float	gasdev(),avsigclip_sigma,*vecsort=NULL,*scaleval,*scalesort=NULL,maxval,
     val,sigmalim=0,mean,mode,fwhm,rms,offset,maxdev,
     *imagepointer, *tempimage=NULL;
-  desimage *data,datain,output,bias,bpm,pupil,template;
+    desimage *data,datain,output,bias,bpm,pupil,template;
+  float image_val;
+  float *lutx;
+  double *luta,*lutb;
   void	rd_desimage(),shell(),decodesection(),headercheck(),
     printerror(),readimsections(),overscan(),retrievescale(),
     image_compare(),desimstat(),DataStats();
@@ -211,12 +226,13 @@ int MakeFlatCorrection(int argc,char *argv[])
   float sigmapv, meanpv, minpv, maxpv, entries;
   int sel_pix, tailcut, loca, locb;
   int	minmaxclip_npix;
+  int  ihdu,nhdunum;
+  long found_ccdnum;
 
   enum {OPT_AVERAGE=1,OPT_AVSIGCLIP,OPT_AVMINMAXCLIP,OPT_MEDIAN,OPT_SCALE,OPT_NOSCALE,
-	OPT_BIAS,OPT_BPM,OPT_PUPIL,OPT_FLATTYPE,OPT_VARIANCETYPE,OPT_IMAGE_COMPARE,
+	OPT_BIAS,OPT_LINEAR,OPT_BPM,OPT_PUPIL,OPT_FLATTYPE,OPT_VARIANCETYPE,OPT_IMAGE_COMPARE,
 	OPT_VERBOSE,OPT_HELP,OPT_VERSION};
   
-
   /*  */
   if (argc<2) {
     print_usage();
@@ -266,6 +282,7 @@ int MakeFlatCorrection(int argc,char *argv[])
 	{"variancetype",  required_argument, 0,         OPT_VARIANCETYPE},
 	{"image_compare", required_argument, 0,         OPT_IMAGE_COMPARE},
         {"bias",          required_argument, 0,         OPT_BIAS},
+        {"linear",        required_argument, 0,         OPT_LINEAR},
 	{"verbose",       required_argument, 0,         OPT_VERBOSE},
 	{"scale",         required_argument, 0,         OPT_SCALE},
 	{"flattype",      required_argument, 0,         OPT_FLATTYPE},
@@ -361,6 +378,23 @@ int MakeFlatCorrection(int argc,char *argv[])
 	exit(1);
       }
       break;
+    case OPT_LINEAR: // -linear
+       cloperr = 0;
+       flag_linear=YES;
+       if(optarg){
+          if (!check_image_name(optarg,CHECK_FITS,flag_verbose)) {
+             cloperr = 1;
+          }
+          else sprintf(linear_tab,"%s",optarg);
+       }
+       else cloperr = 1;
+       if(cloperr){
+          reportevt(flag_verbose,STATUS,5,
+                    "Linearity correction look-up table must follow -linear");
+          command_line_errors++;
+          exit(1);
+       }
+       break;
     case OPT_FLATTYPE: // -flattype
       if(optarg){
 	if (!strcmp(optarg,"tflatcor"))  { flag_twilight=1;
@@ -546,7 +580,7 @@ int MakeFlatCorrection(int argc,char *argv[])
     if (inp==NULL) {
       sprintf(event,"File %s not found",inname_temp);
       reportevt(flag_verbose,STATUS,5,event);
-      exit(0);
+      exit(1);
     }
     /* *********************************************************** */
     /* * cycle through image list checking existence and OBSTYPE * */
@@ -558,9 +592,15 @@ int MakeFlatCorrection(int argc,char *argv[])
 	sprintf(event,"File must contain list of FITS or compressed FITS images: %s",
 		inname_temp);
 	reportevt(flag_verbose,STATUS,5,event);
-	exit(0);
+	exit(1);
       }
       else { /* open file and check header */
+        if (imnum == 1){
+           /* If this is the first image then save the name in the event that
+              no other corrections besides linearity correction are requested
+              (so that a file is present for the CCDNUM to be probed for)     */
+           sprintf(firstimage,"%s",imagename);
+        }
 	if (fits_open_file(&fptr,imagename,READONLY,&status))  {
 	  sprintf(event,"Input image didn't open: %s",imagename);
 	  reportevt(flag_verbose,STATUS,5,event);
@@ -662,7 +702,73 @@ int MakeFlatCorrection(int argc,char *argv[])
     headercheck(&bpm,"NOCHECK",&ccdnum,"DESMKBPM",flag_verbose);
   }	
   
-  
+ 
+  /* *********************************** */
+  /* *****  Linearity correction  ****** */
+  /* * read linearity LUT (FITS table) * */
+  /* *********************************** */
+
+  if (flag_linear){
+/*   If no other corrections have been requested then the CCDNUM is not yet known
+     probe the first input image to obtain CCDNUM information */
+     if (ccdnum == 0){
+        sprintf(event,"No calibration with CCDNUM (needed for linearity correction).");
+        reportevt(flag_verbose,STATUS,1,event);
+        sprintf(event,"Attempting to open first image to obtain information");
+        reportevt(flag_verbose,STATUS,1,event);
+        if (fits_open_file(&tmp_fptr,firstimage,mode,&status)){
+           sprintf(retry_firstimage,"%s.gz",firstimage);
+           status=0;
+           if (fits_open_file(&tmp_fptr,retry_firstimage,mode,&status)){
+              status=0;
+              sprintf(retry_firstimage,"%s.fz",firstimage);
+              status=0;
+              if (fits_open_file(&tmp_fptr,retry_firstimage,mode,&status)){
+                 status=0;
+                 sprintf(event,"Failed to open first image (%s) and obtain CCDNUM",firstimage);
+                 reportevt(flag_verbose,STATUS,5,event);
+                 exit(1);
+              }
+           }
+        }
+        /* Determine how many extensions */
+        if (fits_get_num_hdus(tmp_fptr,&nhdunum,&status)) {
+           sprintf(event,"Reading HDUNUM failed: %s",firstimage);
+           reportevt(flag_verbose,STATUS,5,event);
+           printerror(status);
+        }
+        /* Search through extensions and attempt to find a CCDNUM keyword */
+        ihdu=1;
+        while((ihdu <= nhdunum)&&(ccdnum==0)){
+           if (fits_read_key_lng(tmp_fptr,"CCDNUM",&found_ccdnum,comment,&status)==KEY_NO_EXIST){
+              ihdu++;
+              fits_movabs_hdu(tmp_fptr, ihdu, &hdutype, &status);
+           }else{
+              ccdnum=(int)found_ccdnum;
+           }
+        }
+        if (fits_close_file(tmp_fptr,&status)) {
+           sprintf(event,"Closing input image failed: %s",firstimage);
+           reportevt(flag_verbose,STATUS,5,event);
+           printerror(status);
+        }
+        if (ccdnum != 0){
+           sprintf(event,"Found CCDNUM=%d",ccdnum);
+           reportevt(flag_verbose,STATUS,1,event);
+        }else{
+           sprintf(event,"All attempts to determine the CCDNUM have failed.  Not possible to determine linearity correction.");
+           reportevt(flag_verbose,STATUS,5,event);
+           exit(1);
+        }
+     }
+
+     /* Obtain the linearity correction LUT from the specified table of corrections */
+
+     read_linearity_lut(linear_tab,ccdnum,&lutx,&luta,&lutb);
+     sprintf(event,"Successfully read linearity correction for CCDNUM=%d",ccdnum);
+     reportevt(flag_verbose,STATUS,1,event);
+
+  }
   
   /* ******************************************* */
   /* ********  READ and PROCESS RAW FLATS ****** */
@@ -784,7 +890,7 @@ int MakeFlatCorrection(int argc,char *argv[])
       decodesection(datain.datasec,datain.datasecn,flag_verbose);
     */
 	  
-    if (flag_verbose==3) {
+    if (flag_verbose>=3) {
       /*
 	sprintf(event,"BIASSECA=%s AMPSECA=%s BIASSECB=%s AMPSECB=%s TRIMSEC=%s DATASEC=%s",
 	datain.biasseca,datain.ampseca,datain.biassecb,datain.ampsecb,
@@ -952,7 +1058,7 @@ int MakeFlatCorrection(int argc,char *argv[])
       if (fits_read_keyword(datain.fptr,"DESBIAS",comment,comment,
 			    &status)==KEY_NO_EXIST) {
 	status=0;
-	if (flag_verbose==3) {
+	if (flag_verbose>=3) {
 	  sprintf(event,"Bias subtracting");
 	  reportevt(flag_verbose,STATUS,1,event);
 	}
@@ -964,9 +1070,25 @@ int MakeFlatCorrection(int argc,char *argv[])
 	} else for (i=0;i<data[im].npixels;i++)
 	  data[im].image[i]-=bias.image[i];
       }
-      else if (flag_verbose==3)
+      else if (flag_verbose>=3)
 	reportevt(flag_verbose,STATUS,1,"Already bias subtracted");
     } /* end if flag_bias */
+
+    /* ************************************* */
+    /* ****** Linearity Correction ********* */
+    /* ************************************* */
+
+    if (flag_linear){
+       for (i=0;i<data[im].npixels;i++){
+          image_val=data[im].image[i];
+          if (column_in_section((i%data[im].axes[0])+1,data[im].ampsecan)){
+             image_val=lut_srch(image_val,luta,flag_lutinterp);
+          }else{
+             image_val=lut_srch(image_val,lutb,flag_lutinterp);
+          }
+          data[im].image[i]=image_val;
+       }
+    }
 
     /* ************************************* */
     /* ****** PUPIL GHOST Correction ******* */
