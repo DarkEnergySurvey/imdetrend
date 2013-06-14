@@ -1,4 +1,4 @@
-/*
+/*--main
 Basic syntax: maskcosmics <input image> <options>
   Input data:
     <input image> = Input FITS image to be used to mask cosmics rays.
