@@ -20,11 +20,12 @@ Summary:
   is given to the masked cosmics rays written in the weight map image plane).
   Routine search for the FWHM on the image header and adjusts crfract and crsig2
   in the following manner:
-  if FWHM < 2.7 pixels, it reports STATUS 3 warning and does not try to find
+
+  if FWHM < 3.3 pixels, it reports STATUS 3 warning and does not try to find
   cosmics rays.
-  if 2.7 > FWHM < 3.3 pixels, it defines crfract = 0.15 and crsig2 = 2.0 for
+  if 3.3 >= FWHM < 4.0 pixels, it defines crfract = 0.15 and crsig2 = 1.5 for
   optimal cosmics rays detection in this FWHM range.
-  if FWHM >= 3.3 pixels, it defines crfract = 0.2 and crsig2 = 2.0 for optimal
+  if FWHM >= 4.0 pixels, it defines crfract = 0.2 and crsig2 = 2.0 for optimal
   cosmics rays detections in this FWHM range.
   If no FWHM present in image header, it defaults to crfract = 0.1 and 
   crsig2 =1.0, but this values are not optimal for cosmics rays detection.
@@ -85,8 +86,8 @@ void print_usage(char *program_name)
   printf("%s <input image> <options>\n",program_name);
   printf("  Masking Options\n");
   printf("    -crays \n");
-  printf("    -crfract <cosmic ray flux fraction> (default 0.40)\n");
-  printf("    -crsig2 <cosmic variance> (default 20)\n");
+  printf("    -crfract <cosmic ray flux fraction> (default 0.2)\n");
+  printf("    -crsig2 <cosmic variance> (default 2)\n");
   printf("  Output Options\n");
   printf("    -verbose <0-3>\n");
   printf("    -help    (print usage and exit)\n");
@@ -415,51 +416,54 @@ int main(int argc,char *argv[])
   /**********************************************************/
 
   /*    
-    #if seeing <= 2.7pix , crfract = 0.1, crsig = 1. I am being safe and I am not trying to detect CRs on
-    images with seeing < 2.7.
-    #if seeing < 3.3 pix > 2.7 , crfract = 0.15, crsig2 = 2 (not the best CR detection rate)
-    #If seeing >= 3.3 pix crfract = 0.2, crsig2 = 2
+    #if seeing <= 3.0pix No CR detection done to image
+    #if if 3.0 < FWHM < 4.0 pix, crfract = 0.15, crsig2 = 2
+    #If seeing >= 4.0 pix crfract = 0.2, crsig2 = 2
   */
 
   if (!flag_crfract){
-     if (flag_nofwhm){
-        crfract=0.1;
+    crfract=0.1;
+    if (flag_nofwhm){
         sprintf(event,"No seeing measurement present.  Defaulting to CRFRACT=%.2f\n",crfract);
         reportevt(flag_verbose,STATUS,3,event);
-     }else{
-        if (fwhm > 2.7 && fwhm < 3.3) {
-           crfract = 0.15;
-        }else if(fwhm >= 3.3) {
-           crfract = 0.2;
-        }else{
-           sprintf(event,"Image with FWHM=%.2f (<2.7 pix) is not suitable for automatic detection of CR\n",fwhm);
-           reportevt(flag_verbose,STATUS,3,event);
-           exit(0);
-        }
-     }
-     sprintf(event," Value for CRFRACT set automaically based on seeing to CRFACT=%.2f\n",crfract);
-     reportevt(flag_verbose,STATUS,1,event);
+    }
+  }else{
+    if (fwhm > 3.3 && fwhm < 4.0) {
+      crfract = 0.15;
+    }else if (fwhm >= 4.0) {
+      crfract = 0.2;
+    }else{
+      sprintf(event,"Image with FWHM=%.2f (<3.3 pix) is not suitable for automatic detection of CR\n",fwhm);
+      reportevt(flag_verbose,STATUS,3,event);
+      exit(0);
+    }
   }
+  sprintf(event," Value for CRFRACT set automaically based on seeing to CRFACT=%.2f\n",crfract);
+  reportevt(flag_verbose,STATUS,1,event);
+  
 
   if (!flag_crsig2){
-     if (flag_nofwhm){
-        crsig2=1.0;
-        sprintf(event,"No seeing measurement present.  Defaulting to CRSIG2=%.2f\n",crsig2);
-        reportevt(flag_verbose,STATUS,3,event);
-     }else{
-        if (fwhm > 2.7){
-           crsig2 = 2.0;
-        }else{
-           sprintf(event,"Image with FWHM=%.2f (<2.7 pix) is not suitable for automatic detection of CR\n",fwhm);
-           reportevt(flag_verbose,STATUS,3,event);
-           exit(0);
-        }
-     }
-     sprintf(event," Value for CRSIG2 set automaically based on seeing to CRSIG2=%.2f\n",crsig2);
-     reportevt(flag_verbose,STATUS,1,event);
+    crsig2=1.0;
+    if (flag_nofwhm){
+      sprintf(event,"No seeing measurement present.  Defaulting to CRSIG2=%.2f\n",crsig2);
+      reportevt(flag_verbose,STATUS,3,event);
+    }
+  }else{
+    if (fwhm > 3.3 && fwhm < 4.0){
+      crsig2 = 1.5;
+    }else if (fwhm >= 4.0) {
+      crsig2 = 2.0;
+    }else{
+      sprintf(event,"Image with FWHM=%.2f (<3.3 pix) is not suitable for automatic detection of CR\n",fwhm);
+      reportevt(flag_verbose,STATUS,3,event);
+      exit(0);
+    }
   }
+  sprintf(event," Value for CRSIG2 set automaically based on seeing to CRSIG2=%.2f\n",crsig2);
+  reportevt(flag_verbose,STATUS,1,event);
 
-  sprintf(event,"Using crfract=%.2f and crsig2=%.2f \n", crfract, crsig2);
+
+  sprintf(event,"Values used according to FWHM from image are: crfract=%.2f and crsig2=%.2f \n", crfract, crsig2);
   reportevt(flag_verbose,STATUS,1,event);
 
  
