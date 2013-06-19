@@ -187,7 +187,8 @@ EXE_REST =  ../bin/imcorrect			\
 	../bin/mkflatcor			\
 	../bin/mksupersky			\
         ../bin/mkbleedmask                     \
-        ../bin/mkmask                          \
+        ../bin/mkskystack                     \
+        ../bin/mkmask                         \
         ../bin/maskcosmics          
 
 EXE = ${EXE_REST}
@@ -258,6 +259,8 @@ all: $(EXE)
 	$(CC) $(CFLAGS) -o $@ $^  $(NR2) $(FITSIO) -lm
 ../bin/mkbleedmask: MakeBleedMask.o BleedTrail.o ${LIBIMSUPPORT} fitswcs.o   
 	$(CPPC) -o $@ $^ -L$(DES_PREREQ)/lib $(WCS_C) $(TPIX_FITS) $(FITSIO) -lCCfits -lm
+../bin/mkskystack: mkskystack.o ${LIBIMSUPPORT} 
+	$(CC) $(CFLAGS) -o $@ $^  -L$(DES_PREREQ)/lib $(NR2) $(FITSIO) -lCCfits -lm
 ../bin/mkmask: mkmask.o mkstarmask.o fitswcs.o ${LIBIMSUPPORT} 
 	$(CC) $(CFLAGS) -o $@ $^  $(NR2) $(WCS_C) $(TPIX_FITS) $(FITSIO) -lm
 ../bin/maskcosmics: maskcosmics.o mkstarmask.o fitswcs.o ${LIBIMSUPPORT} 
