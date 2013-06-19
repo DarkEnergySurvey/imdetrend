@@ -127,7 +127,6 @@ Known "Features":
 #include <time.h>
 #include <getopt.h>
 
-
 #include "argutils.h"
 
 #define S2N_THRESH 75   /* minimum signal to noise threshold for pixel */
@@ -246,20 +245,20 @@ int MakeSuperSky(int argc, char *argv[])
     int curind = optind;
     static struct option supersky_options[] =
       {
-	{"scaleregion",       required_argument, 0,             OPT_SCALEREGION},
-	{"srcgrowrad",        required_argument, 0,             OPT_SRCGROWRAD},
-	{"avsigclip",         required_argument, 0,             OPT_AVSIGCLIP},
-	{"variancetype",      required_argument, 0,             OPT_VARIANCETYPE},
-        {"image_compare",     required_argument, 0,             OPT_IMAGE_COMPARE},
-	{"verbose",           required_argument, 0,             OPT_VERBOSE},
-	{"version",           no_argument,       0,             OPT_VERSION},
-	{"help",              no_argument,       0,             OPT_HELP},
+	{"scaleregion",       required_argument, 0,                 OPT_SCALEREGION},
+	{"srcgrowrad",        required_argument, 0,                 OPT_SRCGROWRAD},
+	{"avsigclip",         required_argument, 0,                 OPT_AVSIGCLIP},
+	{"variancetype",     required_argument, 0,                  OPT_VARIANCETYPE},
+        {"image_compare",     required_argument, 0,                 OPT_IMAGE_COMPARE},
+	{"verbose",           required_argument, 0,                 OPT_VERBOSE},
+	{"version",           no_argument,       0,                 OPT_VERSION},
+	{"help",              no_argument,       0,                 OPT_HELP},
 	{"average",           no_argument,       &flag_combine, AVERAGE},
-	{"median",            no_argument,       &flag_combine, MEDIAN},
-        {"noscale",           no_argument,       &flag_scale,   NO},
-	{"norejectobjects",   no_argument,       &flag_rejectob,NO},
-	{"replacedeadpixels", no_argument,       &flag_dead,    YES},
-	{"outputmasks",       no_argument,       &flag_omask,   YES},
+	{"median",            no_argument,       &flag_combine,  MEDIAN},
+        {"noscale",           no_argument,       &flag_scale,        NO},
+	{"norejectobjects",   no_argument,       &flag_rejectob,     NO},
+	{"replacedeadpixels", no_argument,       &flag_dead,        YES},
+	{"outputmasks",       no_argument,       &flag_omask,       YES},
 	{"fast",              no_argument,       &flag_fast,        YES},
 	{0,0,0,0}
       };
@@ -304,9 +303,8 @@ int MakeSuperSky(int argc, char *argv[])
     case OPT_IMAGE_COMPARE: // -image_compare
       flag_image_compare=YES;
       sprintf(template.name,"%s",optarg);
-      if (strncmp(&(template.name[strlen(template.name)-5]),".fits",5)  
-	  && strncmp(&(template.name[strlen(template.name)-8]),".fits.gz",8)
-	  && strncmp(&(template.name[strlen(template.name)-8]),".fits.fz",8))  {
+      if (!strncmp(&(template.name[strlen(template.name)-5]),".fits",5)  
+	  && !strncmp(&(template.name[strlen(template.name)-8]),".fits.gz",8))  {
 	sprintf(event,"Template image must be FITS: %s",template.name);
 	reportevt(flag_verbose,STATUS,5,event);
 	exit(1);
@@ -389,8 +387,7 @@ int MakeSuperSky(int argc, char *argv[])
   /* ****************************************************************** */
     
   if (!strncmp(&(inname_temp[strlen(inname_temp)-5]),".fits",5)  
-      || !strncmp(&(inname_temp[strlen(inname_temp)-8]),".fits.gz",8)
-      || !strncmp(&(inname_temp[strlen(inname_temp)-8]),".fits.fz",8))  {
+      || !strncmp(&(inname_temp[strlen(inname_temp)-8]),".fits.gz",8))  {
     sprintf(event,"mksupersky requires an input image list: %s",inname_temp);
     reportevt(flag_verbose,STATUS,5,event);
     exit(0);
@@ -408,11 +405,10 @@ int MakeSuperSky(int argc, char *argv[])
     /* *********************************************************** */
     while (fscanf(inp,"%s",imagename)!=EOF) {
       imnum++;
-      if ((strncmp(&(imagename[strlen(imagename)-5]),".fits",5) &&
-	   strncmp(&(imagename[strlen(imagename)-8]),".fits.fz",8))
-	  || !strncmp(&(imagename[strlen(imagename)-8]),".fits.gz",8)){
-	sprintf(event,"%s must contain list of FITS or compressed FITS images: %s",
-		inname_temp,imagename);
+      if (strncmp(&(imagename[strlen(imagename)-5]),".fits",5)
+	  || (!strncmp(&(imagename[strlen(imagename)-8]),".fits.gz",8))){
+	sprintf(event,"File must contain list of FITS or compressed FITS images: %s",
+		inname_temp);
 	reportevt(flag_verbose,STATUS,5,event);
 	exit(1);
       }
@@ -472,7 +468,7 @@ int MakeSuperSky(int argc, char *argv[])
   }
 
 	
-  /* vector for medianB combining the images */
+  /* vector for median combining the images */
   if (flag_combine==MEDIAN) {
     vecsort=(float *)calloc(imnum,sizeof(float));
     if (vecsort==NULL) {
@@ -866,7 +862,7 @@ int MakeSuperSky(int argc, char *argv[])
       }
     }
   }
-  
+	
   if (flag_combine==MEDIAN) {
     if (flag_verbose==3) 
       reportevt(flag_verbose, STATUS,1,"Combining images using MEDIAN");
