@@ -1298,9 +1298,6 @@ int ImCorrect(int argc,char *argv[])
       output.ampsecbn[2] = data.ampsecbn[2];
       output.ampsecbn[3] = data.ampsecbn[3];
 
-
-
-
       /* ************************************** */
       /* ***** OVERSCAN and TRIM Section ****** */
       /* ************************************** */
@@ -1628,9 +1625,9 @@ int ImCorrect(int argc,char *argv[])
                      output.mask[i] |= BADPIX_SATURATE;
                      saturatepixels++;
                      /* boost all saturated pixels above maxsaturate */
-                     if (image_val<1.5*maxsaturate){
-                        image_val=1.5*maxsaturate;
-                     }
+//                     if (image_val<1.5*maxsaturate){
+//                        image_val=1.5*maxsaturate;
+//                     } 
                   }
                }else{
                   /* amplifier B */
@@ -1638,9 +1635,9 @@ int ImCorrect(int argc,char *argv[])
                      output.mask[i] |= BADPIX_SATURATE;
                      saturatepixels++;
                      /* boost all saturated pixels above maxsaturate */
-                     if (image_val<1.5*maxsaturate){
-                        image_val=1.5*maxsaturate;
-                     }
+//                     if (image_val<1.5*maxsaturate){
+//                      image_val=1.5*maxsaturate; 
+//                   } 
                   }
                }
             }
@@ -1752,6 +1749,8 @@ int ImCorrect(int argc,char *argv[])
          sprintf(event,"Masked %d saturated pixels",saturatepixels);
          reportevt(flag_verbose,STATUS,1,event);
       }
+
+//      printf(" RAG FLAG_VARIANCE (@end of main corrections) %d\n",flag_variance);
 
       /* ************************************************/
       /* ******** BIAS, Pupil Ghost and FLATTEN  ********/
@@ -1999,6 +1998,7 @@ int ImCorrect(int argc,char *argv[])
 	printf("\n");
       }
 	
+//      printf(" RAG FLAG_VARIANCE (@prior to interpolation) %d\n",flag_variance);
 
       /* ********************************************************** */
       /* ******** INTERPOLATE Image and Variance Section ********** */
@@ -2063,40 +2063,79 @@ int ImCorrect(int argc,char *argv[])
       /* **** FRINGE Correction ***** */
       /* **************************** */
 
-      if (flag_fringe) {
-	flag_imfringe=YES;
-	reportevt(flag_verbose,STATUS,1,"Applying Fringe correction");
-	    
-	/* retrieve overall scaling from image */
-       if (flag_fast)
-	 retrievescale_fast(&output,scaleregionn,scalesort,flag_verbose,
-		      &scalefactor,&mode,&skysigma);
-       else
-	 retrievescale(&output,scaleregionn,scalesort,flag_verbose,
-		      &scalefactor,&mode,&skysigma);
-	for (i=0;i<output.npixels;i++) 
-	  output.image[i]-=scalefactor*fringe.image[i];
+      if (flag_fringe){
+         flag_imfringe=YES;
+         reportevt(flag_verbose,STATUS,1,"Applying Fringe correction");
+         /* retrieve overall scaling from image */
+         if (flag_fast){
+            retrievescale_fast(&output,scaleregionn,scalesort,flag_verbose,
+                               &scalefactor,&mode,&skysigma);
+         }else{
+            retrievescale(&output,scaleregionn,scalesort,flag_verbose,
+                          &scalefactor,&mode,&skysigma);
+         }
+         for (i=0;i<output.npixels;i++){
+            output.image[i]-=scalefactor*fringe.image[i];
+         }
       }	
 	
       /* ********************************** */
       /* **** ILLUMINATION Correction ***** */
       /* ********************************** */
 
-      if (flag_illumination) {
-	flag_imillumination=YES;
-	if (flag_verbose && flag_variance) 
-	  reportevt(flag_verbose,STATUS,1,
-		    "Applying Illumination correction to image and variance image");
-	else if (flag_verbose) 
-	  reportevt(flag_verbose,STATUS,1,
-		    "Applying Illumination correction");
-	for (i=0;i<output.npixels;i++) 
-	  output.image[i]/=illumination.image[i];
-        // FIXME FIXME  - need to figure out variance type here.
-	if (flag_variance) {
-	  for (i=0;i<output.npixels;i++) 
-	    output.varim[i]/=Squ(illumination.image[i]);
-	}
+      if (flag_illumination){
+         flag_imillumination=YES;
+         if (flag_verbose && flag_variance){
+            reportevt(flag_verbose,STATUS,1,"Applying Illumination correction to image and variance image");
+         }else if (flag_verbose){
+            reportevt(flag_verbose,STATUS,1,"Applying Illumination correction");
+         }
+
+//         for (i=0;i<output.npixels;i++){
+//	    output.image[i]/=illumination.image[i];
+//            // FIXME FIXME  - need to figure out variance type here.
+//            if (flag_variance){
+//               for (i=0;i<output.npixels;i++){
+//                  output.varim[i]/=Squ(illumination.image[i]);
+//               }
+//	    }
+//         }
+
+//       RAG: believes below is a fix for FIXME FIXME above ...
+
+//         printf(" RAG FLAG_VARIANCE (@illumcor) %d\n",flag_variance);
+         for (i=0;i<output.npixels;i++){
+            if (illumination.image[i]>0.){
+               output.image[i]/=illumination.image[i];
+//               if (flag_variance==DES_VARIANCE || flag_variance==DES_WEIGHT) {//
+               if (flag_variance==DES_VARIANCE || flag_variance==DES_WEIGHT || output.variancetype==DES_VARIANCE || output.variancetype==DES_WEIGHT) {
+//                  if (i%1000000 == 0){printf(" RAG illumcor DES_WEIGHT %d\n",i);}
+                  if (output.varim[i]>0.){
+                     output.varim[i]*=Squ(illumination.image[i]);
+                  }else{
+                     output.varim[i]=0.0;
+                  }
+//               }else if (flag_variance==DES_SIGMA ){
+               }else if (flag_variance==DES_SIGMA || output.variancetype==DES_SIGMA){
+//                  if (i%1000000 == 0){printf(" RAG illumcor DES_SIGMA %d\n",i);}
+                  if (output.varim[i]<1.0e+10){
+                     output.varim[i]=sqrt(Squ(output.varim[i])/Squ(illumination.image[i]));
+                  }else{
+                     output.varim[i]=1.0e+10;
+                  }
+               }
+            }else{
+               output.image[i]=0.0;
+//               if (flag_variance==DES_SIGMA ){
+               if (flag_variance==DES_SIGMA || output.variancetype==DES_SIGMA){
+                  output.varim[i]=1.0e+10;
+//               }else if (flag_variance==DES_VARIANCE || flag_variance==DES_WEIGHT){
+               }else if (flag_variance==DES_VARIANCE || flag_variance==DES_WEIGHT || output.variancetype==DES_VARIANCE || output.variancetype==DES_WEIGHT) {
+                  output.varim[i]=0.0;
+               }
+               output.mask[i] |= BADPIX_BPM;
+            }
+         }
       }	
       
       /* *************************************** */
