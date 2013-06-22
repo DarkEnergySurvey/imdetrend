@@ -821,7 +821,7 @@ int doWeight(float *image,short *bpm,float *weight)
           //Good pixels have a minimum weight
           if (weight[ip]<WEIGHT_MIN)
             {
-              if (bpm[ip]==0) bpm[ip] |= BADPIX_LOW;
+              if (bpm[i]==0) bpm[i] = BADPIX_LOW;
             }
 
           //Get local gain value
