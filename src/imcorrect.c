@@ -1360,82 +1360,104 @@ int ImCorrect(int argc,char *argv[])
       /* simply copy the data into the output array  */
       /* note that this assumes input image has already been
 	 overscan/trimmed*/
+
       /* need to make this robust-- check for trimming */
-      sprintf(event,"Copying %ld pixels of image array",output.npixels);
       output.image=(float *)calloc(output.npixels,sizeof(float));
       if (output.image==NULL) {
-	reportevt(flag_verbose,STATUS,5,"Calloc of output.image failed");
-	exit(0);
+         reportevt(flag_verbose,STATUS,5,"Calloc of output.image failed");
+         exit(1);
       }
+
+      /* Prepare the data to be operated upon. */
+      /* First the input image is transfered into the output image section */
+
       for (i=0;i<output.npixels;i++) output.image[i]=data.image[i];
-      if (data.mask!=NULL) {
-	sprintf(event,"%s and mask array",event);
-	output.mask=(short *)calloc(output.npixels,sizeof(short));
-	if (output.mask==NULL) {
-	  reportevt(flag_verbose,STATUS,5,"Calloc of output.mask failed");
-	  exit(0);
-	}
-	for (i=0;i<output.npixels;i++) output.mask[i]=data.mask[i];
-	if(flag_bpm){
-	  if(flag_bpm_override){
-	    sprintf(event,"%s by setting to input BPM",event);
-	    for (i=0;i<output.npixels;i++) output.mask[i] =  bpm.mask[i];
-	  }
-	  else{
-	    sprintf(event,"%s by merging image mask with input BPM",event);
-	    for (i=0;i<output.npixels;i++) output.mask[i] |= bpm.mask[i];
-	  }		  
-	}
-	else{
-	  sprintf(event,"%s from input image mask",event);
-	}
-      }
-      /* MUST FIX THIS!!!!! */
-      if (data.varim!=NULL) {
-	/* set variance flag */	
-	flag_variance=YES;  
-	sprintf(event,"%s and variance array",event);
-	output.varim=(float *)calloc(output.npixels,sizeof(float));
-	if (output.varim==NULL) {
-	  reportevt(flag_verbose,STATUS,5,"Calloc of output.varim failed");
-	  exit(0);
-	}
-	for (i=0;i<output.npixels;i++) output.varim[i]=data.varim[i];
-      }
+      sprintf(event," Copied %ld pixels of input image array ",output.npixels);
       reportevt(flag_verbose,STATUS,1,event);
-    
-    
-    
-      /* prepare space for variance image and initialize */
-      if (flag_variance && data.varim==NULL) {
-	output.varim=(float *)calloc(output.npixels,sizeof(float));
-	if (output.varim==NULL) {
-	  reportevt(flag_verbose,STATUS,5,"Calloc of output.varim failed");
-	  exit(0);
-	}
-	for (i=0;i<output.npixels;i++) output.varim[i]=0.0;
-        flag_newvarim=YES;
+
+      /* Now the mask section, if present, is initialized */
+
+/*      sprintf(event,"%s and mask array",event); */
+      output.mask=(short *)calloc(output.npixels,sizeof(short));
+      if (output.mask==NULL){
+         reportevt(flag_verbose,STATUS,5,"Calloc of output.mask failed");
+         exit(1);
+      }
+      if (data.mask!=NULL){
+         /* Case where a mask image was present... copy the input mask into place */
+         reportevt(flag_verbose,STATUS,1," Copying input mask array ");
+         for (i=0;i<output.npixels;i++) output.mask[i]=data.mask[i];
       }else{
-        flag_newvarim=NO;
+         /* Otherwise initialize the mask array */
+         reportevt(flag_verbose,STATUS,1," No input mask present, initializing output mask");
+         for (i=0;i<output.npixels;i++) output.mask[i]=0;
       }
-      /* prepare space for the bad pixel mask and initialize */
-      if (data.mask==NULL) {
-	reportevt(flag_verbose,STATUS,1,"Creating new output mask.");
-	/* prepare image for mask == assumes mask is not yet present*/
-	output.mask=(short *)calloc(output.npixels,sizeof(short));
-	if (output.mask==NULL) {
-	  reportevt(flag_verbose,STATUS,5,"Calloc of output.mask failed");
-	  exit(0);
-	}
-	if (flag_bpm){ /* copy mask over */
-	  reportevt(flag_verbose,STATUS,1,"Coping BPM into output mask.");
-	  for (i=0;i<output.npixels;i++) output.mask[i]=bpm.mask[i];
-	}
-	else{  /* start with clean slate */
-	  reportevt(flag_verbose,STATUS,1,"Zeroing output mask.");
-	  for (i=0;i<output.npixels;i++) output.mask[i]=0;
-	}
+
+      /* Further update the mask section depending on presence of BPM and options */
+     
+      if(flag_bpm){
+         if(flag_bpm_override){
+            /* case where BPM mask is supposed to override the existing mask -obpm */
+	    for (i=0;i<output.npixels;i++){
+               if (bpm.mask[i]){
+                  output.mask[i] = BADPIX_BPM;
+               }else{
+                  output.mask[i]=0;
+               }
+            }
+            reportevt(flag_verbose,STATUS,1," BPM override chosen.  Reinitialized mask to match BPM ");
+	 }else{
+            /* case where BPM mask is supposed to supplement (logically or) existing mask) -bpm */
+            for (i=0;i<output.npixels;i++){
+               if (bpm.mask[i]){
+                  output.mask[i]|=BADPIX_BPM;
+               }
+            }
+            reportevt(flag_verbose,STATUS,1," BPM merge chosen.  Merged BPM with initial mask ");
+         } 
       }
+
+      /* Now the variance image section.  First allocate the space. */
+
+      if ((data.varim!=NULL)||(flag_variance)){
+         output.varim=(float *)calloc(output.npixels,sizeof(float));
+         if (output.varim==NULL) {
+            reportevt(flag_verbose,STATUS,5,"Calloc of output.varim failed");
+            exit(1);
+         }
+      }
+      /* MUST FIX THIS!!!!!  RAG believe THIS???? is now fixed but then that assumes that I understood what THIS was */
+      if (data.varim!=NULL){
+         /* set variance flag */	
+         flag_variance=YES;  
+         flag_newvarim=NO;
+         for (i=0;i<output.npixels;i++) output.varim[i]=data.varim[i];
+         reportevt(flag_verbose,STATUS,1," Input variance image present. Copied input variance array");
+      }else{
+         /* for now initialize to zero */
+         if (flag_variance && data.varim==NULL) {
+	    for (i=0;i<output.npixels;i++) output.varim[i]=0.0;
+            flag_newvarim=YES;
+         }
+         /* still the possibility that no variance calculation is requested? */
+      }
+
+//      /* prepare space for the bad pixel mask and initialize */
+//      if (data.mask==NULL) {
+//	reportevt(flag_verbose,STATUS,1,"Creating new output mask.");
+//	/* prepare image for mask == assumes mask is not yet present*/
+//	output.mask=(short *)calloc(output.npixels,sizeof(short));
+//	if (output.mask==NULL) {
+//	  reportevt(flag_verbose,STATUS,5,"Calloc of output.mask failed");
+//	  exit(0);
+//	}
+//	if (flag_bpm){ /* copy mask over */
+//	  reportevt(flag_verbose,STATUS,1,"Coping BPM into output mask.");
+//	  for (i=0;i<output.npixels;i++) output.mask[i]=bpm.mask[i];
+//	}
+//	else{  /* start with clean slate */
+//	}
+//      }
       
       /* *************************************************/
       /* ******** Confirm Correction Image Sizes  ********/
