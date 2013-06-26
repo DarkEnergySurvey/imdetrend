@@ -70,6 +70,7 @@ Detailed Description:
 #define NSKYSAMP 128
 
 #define BADPIX_CGROW 128
+#define BPMDEF_BIAS_COL 64
 
 //Parameter for Qsort
 #define INSERTION_SORT_BOUND 16 /* boundary point to use insertion sort */
@@ -510,12 +511,103 @@ int main(int argc,char *argv[])
 
   // printf("sky values %d %d %f %d %f %f %f \n", sky.npixX,sky.npixY,sky.weightmin,sky.minsample,sky.minline,sky.underflow,sky.saturated);
 
-  error = doSky(2,1,&sky,output.image,output.mask,output.varim);
+  error = doSky(3,1,&sky,output.image,output.mask,output.varim);
   if (error)
     {
-      sprintf(event,"Error in Computing sky level for image: %s", input.name);
-      reportevt(flag_verbose,STATUS,5,event);
-      printerror(status);
+      sprintf(event,"Error in Computing sky level for image: %s. Exiting without attempting to detect Cosmics rays", input.name);
+      reportevt(flag_verbose,STATUS,4,event);
+      
+      /* Start building command line used*/
+      strcpy(updated_command_line,argv[0]);
+      strcat(updated_command_line," ");
+      strcat(updated_command_line,input.name);
+      
+      strcat(updated_command_line, ": Unable to fit sky. No cosmics ray detections done. Saving with no changes to either masks.");
+      
+      
+      sprintf(event,"Writing results to %s",output.name);
+      reportevt(flag_verbose,STATUS,1,event);
+      
+      /* make sure path exists for new image */
+      if (mkpath(output.name,flag_verbose)) {
+        sprintf(event,"Failed to create path to file: %s",output.name);
+        reportevt(flag_verbose,STATUS,5,event);
+        exit(0);
+      }
+      else {
+        sprintf(event,"Created path to file: %s",output.name);
+        reportevt(flag_verbose,STATUS,1,event);
+      }
+      
+      output.fptr = input.fptr;
+      /* write the corrected image*/
+      if (fits_write_img(output.fptr,TFLOAT,1,output.npixels,output.image,&status)) {
+        sprintf(event,"Writing image failed: %s",output.name);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
+      }
+	  
+      /* Write information into the header describing the processing */
+      /* get system time */
+      tm=time(NULL);
+      sprintf(comment,"%s",asctime(localtime(&tm)));
+      comment[strlen(comment)-1]=0;
+      if (fits_write_key_str(output.fptr,"DESCRMSK",comment, "Run Maskcosmics. Unable to fit sky",&status)) {
+        sprintf(event,"Writing processing history failed: %s", output.name);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
+      }
+      sprintf(longcomment,"DESDM:");
+      //  for (i=0;i<argc;i++) sprintf(longcomment,"%s %s",longcomment,argv[i]);
+      sprintf(longcomment,"%s %s",longcomment,updated_command_line);
+      reportevt(flag_verbose,STATUS,1,longcomment);
+      if (fits_write_history(output.fptr,longcomment,&status)) {
+        sprintf(event,"Writing longcomment failed: %s",output.name);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
+      }
+      
+      fits_movrel_hdu(output.fptr, 1, NULL, &status);
+      /*if (fits_write_img(output.fptr,TUSHORT,1,output.npixels,output.mask, &status)) {*/
+      if (fits_write_img(output.fptr,TUSHORT,1,output.npixels,output.mask, &status)) {
+        sprintf(event,"Writing image mask failed: %s",output.name);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
+      }
+      if (fits_update_key_str(output.fptr,"DES_EXT","MASK", "Extension type",&status)) {
+        reportevt(flag_verbose,STATUS,5,"Setting DES_EXT=MASK failed");
+        printerror(status);
+      }
+      
+      /* now store the variance image that has been created or updated */
+      fits_movrel_hdu(output.fptr, 1, NULL, &status);
+      if (fits_write_img(output.fptr,TFLOAT,1,output.npixels,output.varim, &status)) {
+        sprintf(event,"Writing variance image failed: %s",output.name);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
+      }
+      
+      if (fits_update_key_str(output.fptr,"DES_EXT","WEIGHT", "Extension type",&status)) {
+        sprintf(event,"Writing DES_EXT=WEIGHT failed: %s",output.name);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
+      }
+      
+      
+      /* close the corrected image */
+      if (fits_close_file(output.fptr,&status)) {
+        sprintf(event,"File close failed: %s",output.name);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
+      }
+      
+
+      printf("End of maskcosmics program");      
+      
+      printf("\n");
+      return(0);
+      
+      exit(0);
     }
 
 
@@ -573,7 +665,6 @@ int main(int argc,char *argv[])
   /* ******************************************** */
   /* **********   WRITE OUTPUT IMAGE  *********** */
   /* ******************************************** */
-
 
   /* Start building command line used*/
   strcpy(updated_command_line,argv[0]);
@@ -1172,110 +1263,114 @@ int doSky(int verbose,int dogain,skypar *sky,float *image,short *bpm,float *weig
     {
       iyref = iy*nyp;
       for (ix=0;ix<NXSKY;++ix)
-	{
-	  ixref = ix*nxp;
-	  io = 0;
-	  for (j=0;j<nyp;j+=nys)
-	    {
-	      for (i=0;i<nxp;i+=nxs)
-		{
-		  in = npixX*(iyref+j) + ixref+i;
-		  //first check image for NAN or INF values
-		  imval = image[in];
-		  if (isnan(imval)) continue;
+        {
+          ixref = ix*nxp;
+          io = 0;
+          for (j=0;j<nyp;j+=nys)
+            {
+              for (i=0;i<nxp;i+=nxs)
+                {
+                  in = npixX*(iyref+j) + ixref+i;
+                  //first check image for NAN or INF values
+                  imval = image[in];
+                  if (isnan(imval)) continue;
                   if (isinf(imval)) continue;
-		  if (imval>saturated) continue;
-		  if (imval<underflow) continue;
-		  if (weight[in]<=wgtmin) continue;
-		  if (bpm[in]) continue;
-		  pixel[io] = image[in];
-		  gindex[io] = io;
-		  ++io;
-		}
-	    }
-	  nsample = io;
-	  if (nsample<minsamp) 
-	    {
-	      skymap[iy][ix] = 0.0;
-	      skysig[iy][ix] = 0.0;
-	      gain[iy][ix] = 1.0;
-	      continue;
-	    }
+                  if (imval>saturated) continue;
+                  if (imval<underflow) continue;
+                  if (weight[in]<=wgtmin) continue;
+                  if (bpm[in]) continue;
+                  pixel[io] = image[in];
+                  gindex[io] = io;
+                  ++io;
+                }
+            }
+          nsample = io;
+          if (nsample<minsamp) 
+            {
+              skymap[iy][ix] = 0.0;
+              skysig[iy][ix] = 0.0;
+              gain[iy][ix] = 1.0;
+              continue;
+            }
       
-	  Qsort(gindex,pixel,nsample-1);
+          Qsort(gindex,pixel,nsample-1);
 
-	  n = 0.5*nsample;
-	  ie = gindex[n];
-	  ave = pixel[ie];
-	  //	  printf("Pixel average ie=%i %f\n",ie,pixel[ie]);
-	  n = 0.1587*nsample;
-	  ie = gindex[n];
-	  sigma1 = ave - pixel[ie];
-	  //printf("Lower ie=%i %f\n",ie,pixel[ie]);
-	  //Refine estimate
-	  lower = ave - 4.0*sigma1;
-	  for (n=0;n<nsample;++n)
-	    {
-	      ie = gindex[n];
-	      if (pixel[ie]>lower) break;
-	    }
-	  nl = n;
-	  upper = ave + 4.0*sigma1;
-	  for (n=nsample-1;n>0;--n)
-	    {
-	      ie = gindex[n];
-	      if (pixel[ie]<upper) break;
-	    }
-	  nu = n;
-	  //	  printf(" New lower limit=%i new upper=%i\n",nl,nu);
-	  n = 0.5*(nl+nu);
-	  ie = gindex[n];
-	  ave = pixel[ie];
+          n = 0.5*nsample;
+          ie = gindex[n];
+          ave = pixel[ie];
+          //printf("Pixel average ie=%i %f\n",ie,pixel[ie]);
+          n = 0.1587*nsample;
+          ie = gindex[n];
+          sigma1 = ave - pixel[ie];
+          //printf("Lower ie=%i %f\n",ie,pixel[ie]);
+          //Refine estimate
+          lower = ave - 4.0*sigma1;
+          for (n=0;n<nsample;++n)
+            {
+              ie = gindex[n];
+              if (pixel[ie]>lower) break;
+            }
+          nl = n;
+          upper = ave + 4.0*sigma1;
+          for (n=nsample-1;n>0;--n)
+            {
+              ie = gindex[n];
+              if (pixel[ie]<upper) break;
+            }
+          nu = n;
+          //printf(" New lower limit=%i new upper=%i\n",nl,nu);
+          n = 0.5*(nl+nu);
+          ie = gindex[n];
+          ave = pixel[ie];
 	  
-      //printf("ie=%i %f\n",ie,pixel[ie]);
+          //printf("ie=%i %f\n",ie,pixel[ie]);
 	  
-      n = 0.1587*(nu-nl) + nl;
-      ie = gindex[n];
-	  sigma1 = ave - pixel[ie];
+          n = 0.1587*(nu-nl) + nl;
+          ie = gindex[n];
+          sigma1 = ave - pixel[ie];
 	  
-      // printf("ie=%i %f\n",ie,pixel[ie]);
+          //printf("ie=%i %f\n",ie,pixel[ie]);
 	  
-      n = 0.8413*(nu-nl) + nl;
-	  ie = gindex[n];
-	  sigma2 = pixel[ie] - ave;
-	  err = sigma1/sqrt(nu-nl);
+          n = 0.8413*(nu-nl) + nl;
+          ie = gindex[n];
+          sigma2 = pixel[ie] - ave;
+          err = sigma1/sqrt(nu-nl);
 
-	  // printf("err=%i %f %f %f\n",ie,err,sigma1,sigma1*sigma1);
-	  
-	  skymap[iy][ix] = ave;
-	  skysig[iy][ix] = sigma1;
-	  //This is estimate of the gain based on sky fluctuations.  It should be correct if:
+          //printf("err=%i %f %f %f\n",ie,err,sigma1,sigma1*sigma1);
+          
+          skymap[iy][ix] = ave;
+          skysig[iy][ix] = sigma1;
+          //This is estimate of the gain based on sky fluctuations.  It should be correct if:
           // 1.  The quantum efficiency is the same for all pixels
           // 2.  The fluctuations are dominated by photon statistics
           // For a more precise calculation, one needs the raw exposures
-	  gain[iy][ix] = ave/(sigma1*sigma1);
+          gain[iy][ix] = ave/(sigma1*sigma1);
              
-      //if (verbose>=2) printf ("x=%i y=%i sky=%.2f +/- %.2f lower-sigma=%.2f upper-sigma=%.2f gain=%.3f\n",
-	  //	   ix,iy,skymap[iy][ix],err,skysig[iy][ix],sigma2,gain[iy][ix]);
-	  ++ntotp;
-	  sigtot += (sigma1*sigma1);
-           
-	}
+          if (verbose>=2) printf ("x=%i y=%i sky=%.2f +/- %.2f lower-sigma=%.2f upper-sigma=%.2f gain=%.3f\n",
+          	   ix,iy,skymap[iy][ix],err,skysig[iy][ix],sigma2,gain[iy][ix]);
+          ++ntotp;
+          sigtot += (sigma1*sigma1);
+          
+        }
     }
   sky->sigma=sqrt(sigtot/ntotp);
   //Fit for sky level
   sky->itype=0;
 
- 
+  //printf("skymap %f and skysigma %f\n",&skymap[0][0],&skysig[0][0]);
+  //printf("sky %i\n",sky->minline);
+
   error = fitsky(sky,&skymap[0][0],&skysig[0][0]);
-  //printf("fitsky\n");
+  printf("Executed fitsky\n");
 
 
   if (error) return(error);
+
+    
   if (verbose>=2)
     {
       printf("Sky sigma=%.2f sky0=%.2f skyx=%.2e skyy=%.2e rms=%.2f\n",
-			      sky->sigma,sky->skysol[0],sky->skysol[1]*npixX,sky->skysol[2]*npixY,sky->skysol[3]);
+             sky->sigma,sky->skysol[0],sky->skysol[1]*npixX,sky->skysol[2]*npixY,sky->skysol[3]);
     }
 
   //Fit for effective gain
@@ -1284,10 +1379,10 @@ int doSky(int verbose,int dogain,skypar *sky,float *image,short *bpm,float *weig
       sky->itype=1;
       error = fitsky(sky,&gain[0][0],&skysig[0][0]);
       if (verbose>=2)
-	{
-	  printf("Sky gain0=%.2f gainx=%.2e gainy=%.2e rms=%.2f\n",
-		  sky->gainsol[0],sky->gainsol[1]/npixX,sky->gainsol[2]/npixY,sky->gainsol[3]);
-	}
+        {
+          printf("Sky gain0=%.2f gainx=%.2e gainy=%.2e rms=%.2f\n",
+                 sky->gainsol[0],sky->gainsol[1]/npixX,sky->gainsol[2]/npixY,sky->gainsol[3]);
+        }
     }
 
   return(error);
@@ -1335,16 +1430,23 @@ int fitsky(skypar *sky,double *data,double *sigma)
   int icon;
 
 
+  //printf("skyminline %i\n",sky->minline);
   minline = sky->minline;
+  //printf("minline %i \n",minline);
 
   //Check for enough x values  
   kx = 0;
   for (ix=0;ix<NXSKY;++ix)
     {
       ky = 0;
-      for (iy=0;iy<NYSKY;++iy) if (sigma[iy*NXSKY+ix]>0.0) ++ky;
-      if (ky>0) ++ kx;
+      for (iy=0;iy<NYSKY;++iy) {
+        if (sigma[iy*NXSKY+ix]>0.0) {
+          ++ky;
+        }
+      }
+      if (ky>0) ++kx;
      }
+  //printf("kx %i\n",kx);
   if (kx<minline)
     {
       printf("Found %i x values for sky fit. Required %i\n",kx,minline);
