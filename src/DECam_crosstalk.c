@@ -10,7 +10,8 @@ Basic syntax: DECam_crosstalk <infile.fits> <outfile> <options>
     -crosstalk <crosstalk matrix- file>
     -crossatthresh <factor> 
     -linear    (expects xtalk matrix with only linear components)
-    -satmask
+    -presatmask
+    -postsatmask
     -photflag <0 or 1>
 
     -overscan
@@ -130,8 +131,8 @@ Detailed Description:
   Saturation:
     Since the images operated on are unprocssed, DECam_crosstalk represents 
     the only point where the pixel data have had no changes applied (and 
-    saturation can be unambiguously identified).  If the -satmask option 
-    is given, the SATURATEA and SATURATEB keywords are used to flag pixels 
+    saturation can be unambiguously identified).  If the -presatmask or -postsatmask 
+    option is given, the SATURATEA and SATURATEB keywords are used to flag pixels 
     with values greater than or equal to the saturation value.  These values 
     are recorded in a mask (as bitplane 2) and the number of saturate pixels 
     is recorded in the image header (NSATPIX).  Note, similar flagging can 
@@ -265,7 +266,8 @@ Known "Features":
 //char *strip_path(const char *path);
 int getlistitems(char *strlist, char *indxlist, int maxitems);
 static const char *svn_id = "$Id$";
-static int flag_sat = 0;
+static int flag_sat_beforextalk = 0;
+static int flag_sat_afterxtalk = 0;
 static int flag_linear = 0;
 static int flag_overscan = 0;
 static int flag_focus = 0;
@@ -277,7 +279,8 @@ void print_usage(char *program_name)
   printf("  -linear \n");
   printf("  -crossatthresh <factor> \n");
   printf("  -photflag <0 or 1>\n");
-  printf("  -satmask\n");
+  printf("  -presatmask\n");
+  printf("  -postsatmask\n");
   printf("  -overscan\n");
   printf("  -overscansample <-1 for MEDIAN, 0 for MEAN, 1 for MEAN w/MINMAX>, \n");
   printf("  -overscanfunction < -50 < N < -1 for cubic SPLINE, 0 for LINE_BY_LINE, 1 < N < 50 for legendre polynomial>\n");
@@ -425,7 +428,7 @@ int DECamXTalk(int argc,char *argv[])
     int clop;
     int cloperr = 0;
     int command_line_errors = 0;
-    flag_sat = 0;
+    flag_sat_beforextalk = flag_sat_afterxtalk = 0;
     flag_overscan = 0;
     while(1){
       int curind = optind;
@@ -445,7 +448,8 @@ int DECamXTalk(int argc,char *argv[])
 	  {"version",          no_argument,       0,          OPT_VERSION},
 	  {"help",             no_argument,       0,             OPT_HELP},
 	  {"linear",           no_argument,       &flag_linear,         1},
-	  {"satmask",          no_argument,       &flag_sat,            1},
+	  {"presatmask",       no_argument,       &flag_sat_beforextalk,1},
+	  {"postsatmask",      no_argument,       &flag_sat_afterxtalk, 1},
 	  {"overscan",         no_argument,       &flag_overscan,       1},
 	  {"focuschipsout",    no_argument,       &flag_focus,          1},
 	  {0,0,0,0}
@@ -664,7 +668,7 @@ int DECamXTalk(int argc,char *argv[])
 	// should never get here
 	abort();
       }
-    }  
+    }
 
     /* ********************************************** */
     /* ********* Initialize Crosstalk Matrices        */
@@ -1109,7 +1113,7 @@ int DECamXTalk(int argc,char *argv[])
     /* naxes[0]=axes[0];naxes[1]=axes[1]; */
     npixels=naxes[0]*naxes[1];
 
-    if (flag_sat) {
+    if (flag_sat_beforextalk || flag_sat_afterxtalk) {
       maskdata = (short *)calloc(npixels,sizeof(short));
       if (maskdata == NULL) {
 	sprintf(event,"Could not allocate maskdata(in)");
@@ -1202,6 +1206,10 @@ int DECamXTalk(int argc,char *argv[])
 	printerror(status);
         exit(0);
      }
+
+
+/*VK*/
+
 
      /* does this image need to be processed? */
      if ((ccdnum > 62 && !flag_focus) || (ccdlist[ccdnum] != 1 && hdulist[i] != 1)) {
@@ -1363,13 +1371,42 @@ int DECamXTalk(int argc,char *argv[])
 
       if (ccdnum < 63) {
 
-      /* Reset the mask if enabled */
-      if(flag_sat){
-	for(y = 0;y < npixels;y++)
-	  maskdata[y] = 0;
+      if (flag_sat_beforextalk || flag_sat_afterxtalk) {
+        nsata = nsatb = 0;
+        /* Reset the mask */
+        for(j = 0; j < npixels; j++)
+          maskdata[locout] = 0;
       }
-      nsata = 0;
-      nsatb = 0;
+
+      if (flag_sat_beforextalk) {
+	// Loop through *entire* input array.  This includes overscanned regions and 
+	// any additional padding. 
+	for (y=0;y<naxes[1];y++) 
+	for (x=0;x<naxes[0];x++) {
+	    locout=y*naxes[0]+x;
+	    // Determine whether the current position (wrt input array) is
+	    // within the Amp-specific data region by checking DATASEC[A,B]
+	    if(column_in_section(x+1,input_image.datasecan)){
+		satval = input_image.saturateA;
+		if(outdata[locout] > satval){
+		  if(outdata[locout] > ampAmax) ampAmax = outdata[locout];
+		  if(outdata[locout] < ampAmin) ampAmin = outdata[locout];
+		  maskdata[locout] = BADPIX_SATURATE;
+		  nsata++;
+		}
+	    }
+	    else if(column_in_section(x+1,input_image.datasecbn)){
+		satval = input_image.saturateB;
+		if(outdata[locout] > satval){
+		  if(outdata[locout] > ampBmax) ampBmax = outdata[locout];
+		  if(outdata[locout] < ampBmin) ampBmin = outdata[locout];
+		  maskdata[locout] = BADPIX_SATURATE;
+		  nsatb++;
+		}
+	      }
+	    }
+      }
+
       if (flag_crosstalk) {
         char thisAmpOrder = (input_image.datasecan[0] < input_image.datasecbn[0]) ? AmpAB : AmpBA;
 	// Loop through *entire* input array.  This includes overscanned regions and 
@@ -1378,7 +1415,7 @@ int DECamXTalk(int argc,char *argv[])
 	for (x=0;x<naxes[0];x++) {
 	    locout=y*naxes[0]+x;
 	    xtalkcorrection=0.0;
-    
+/* this is now out of _if (flag_crosstalk)_
 	    if(flag_sat){
 	      // Determine whether the current position (wrt input array) is
 	      // within the Amp-specific data region by checking DATASEC[A,B]
@@ -1401,6 +1438,7 @@ int DECamXTalk(int argc,char *argv[])
 		}
 	      }
 	    }
+*/
             if (column_in_section(x+1,input_image.datasecan)) { /* in amp A */
               ampextension=(ccdnum-1)*2; 
               for (j=1;j<63;j++) {
@@ -1441,7 +1479,6 @@ int DECamXTalk(int argc,char *argv[])
                 }
               }
               outdata[locout]-=xtalkcorrection;
-              
             }
             else if (column_in_section(x+1,input_image.datasecbn)) { /* in amp B */
               ampextension=(ccdnum-1)*2+1; 
@@ -1486,7 +1523,37 @@ int DECamXTalk(int argc,char *argv[])
             }
 	  }
       }
-      if (flag_verbose && flag_sat) {
+
+      if (flag_sat_afterxtalk) {
+	// Loop through *entire* input array.  This includes overscanned regions and 
+	// any additional padding. 
+	for (y=0;y<naxes[1];y++) 
+	for (x=0;x<naxes[0];x++) {
+	    locout=y*naxes[0]+x;
+	    // Determine whether the current position (wrt input array) is
+	    // within the Amp-specific data region by checking DATASEC[A,B]
+	    if(column_in_section(x+1,input_image.datasecan)){
+		satval = input_image.saturateA;
+		if(outdata[locout] > satval){
+		  if(outdata[locout] > ampAmax) ampAmax = outdata[locout];
+		  if(outdata[locout] < ampAmin) ampAmin = outdata[locout];
+		  maskdata[locout] = BADPIX_SATURATE;
+		  nsata++;
+		}
+	    }
+	    else if(column_in_section(x+1,input_image.datasecbn)){
+		satval = input_image.saturateB;
+		if(outdata[locout] > satval){
+		  if(outdata[locout] > ampBmax) ampBmax = outdata[locout];
+		  if(outdata[locout] < ampBmin) ampBmin = outdata[locout];
+		  maskdata[locout] = BADPIX_SATURATE;
+		  nsatb++;
+		}
+	      }
+	    }
+      }
+
+      if (flag_verbose && (flag_sat_beforextalk || flag_sat_afterxtalk)) {
 	sprintf(event,"image=%s,CCD[%d] NSATPIX=%d (NSATA,NSATB)=(%d,%d)",filename,
 		ccdnum,nsata+nsatb,nsata,nsatb);
 	reportevt(flag_verbose,STATUS,1,event);
@@ -1964,7 +2031,7 @@ int DECamXTalk(int argc,char *argv[])
         } 
 
       }      
-      if(flag_sat) { 
+      if(flag_sat_beforextalk || flag_sat_afterxtalk) { 
 	if (fits_write_key_str(output_image.fptr,"DESSAT",comment,
 			       "saturated pixels flagged",&status)) {
 	  sprintf(event,"Writing DESSAT failed: %s",nfilename);
@@ -1996,7 +2063,7 @@ int DECamXTalk(int argc,char *argv[])
 	printerror(status);
       }
 
-      if(flag_sat && ccdnum < 63){
+      if((flag_sat_beforextalk || flag_sat_afterxtalk) && ccdnum < 63){
 	/* Create extension for the mask */
 	if (fits_create_img(output_image.fptr,USHORT_IMG,2,output_image.axes,&status)) {
 	  sprintf(event,"Creating image mask failed.");
