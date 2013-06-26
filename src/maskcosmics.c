@@ -1277,10 +1277,6 @@ int doSky(int verbose,int dogain,skypar *sky,float *image,short *bpm,float *weig
                   if (isinf(imval)) continue;
                   if (imval>saturated) continue;
                   if (imval<underflow) continue;
-                  if ((bpm[in]&BPMDEF_BIAS_COL)==1) {
-                    printf("Found bpm = 64\n");
-                    continue;
-                  }
                   if (weight[in]<=wgtmin) continue;
                   if (bpm[in]) continue;
                   pixel[io] = image[in];
@@ -1302,11 +1298,11 @@ int doSky(int verbose,int dogain,skypar *sky,float *image,short *bpm,float *weig
           n = 0.5*nsample;
           ie = gindex[n];
           ave = pixel[ie];
-          printf("Pixel average ie=%i %f\n",ie,pixel[ie]);
+          //printf("Pixel average ie=%i %f\n",ie,pixel[ie]);
           n = 0.1587*nsample;
           ie = gindex[n];
           sigma1 = ave - pixel[ie];
-          printf("Lower ie=%i %f\n",ie,pixel[ie]);
+          //printf("Lower ie=%i %f\n",ie,pixel[ie]);
           //Refine estimate
           lower = ave - 4.0*sigma1;
           for (n=0;n<nsample;++n)
@@ -1322,25 +1318,25 @@ int doSky(int verbose,int dogain,skypar *sky,float *image,short *bpm,float *weig
               if (pixel[ie]<upper) break;
             }
           nu = n;
-          printf(" New lower limit=%i new upper=%i\n",nl,nu);
+          //printf(" New lower limit=%i new upper=%i\n",nl,nu);
           n = 0.5*(nl+nu);
           ie = gindex[n];
           ave = pixel[ie];
 	  
-          printf("ie=%i %f\n",ie,pixel[ie]);
+          //printf("ie=%i %f\n",ie,pixel[ie]);
 	  
           n = 0.1587*(nu-nl) + nl;
           ie = gindex[n];
           sigma1 = ave - pixel[ie];
 	  
-          printf("ie=%i %f\n",ie,pixel[ie]);
+          //printf("ie=%i %f\n",ie,pixel[ie]);
 	  
           n = 0.8413*(nu-nl) + nl;
           ie = gindex[n];
           sigma2 = pixel[ie] - ave;
           err = sigma1/sqrt(nu-nl);
 
-          printf("err=%i %f %f %f\n",ie,err,sigma1,sigma1*sigma1);
+          //printf("err=%i %f %f %f\n",ie,err,sigma1,sigma1*sigma1);
           
           skymap[iy][ix] = ave;
           skysig[iy][ix] = sigma1;
@@ -1365,7 +1361,7 @@ int doSky(int verbose,int dogain,skypar *sky,float *image,short *bpm,float *weig
   //printf("sky %i\n",sky->minline);
 
   error = fitsky(sky,&skymap[0][0],&skysig[0][0]);
-  printf("fitsky\n");
+  printf("Executed fitsky\n");
 
 
   if (error) return(error);
@@ -1434,9 +1430,9 @@ int fitsky(skypar *sky,double *data,double *sigma)
   int icon;
 
 
-  printf("skyminline %i\n",sky->minline);
+  //printf("skyminline %i\n",sky->minline);
   minline = sky->minline;
-  printf("minline %i \n",minline);
+  //printf("minline %i \n",minline);
 
   //Check for enough x values  
   kx = 0;
@@ -1450,7 +1446,7 @@ int fitsky(skypar *sky,double *data,double *sigma)
       }
       if (ky>0) ++kx;
      }
-  printf("kx %i\n",kx);
+  //printf("kx %i\n",kx);
   if (kx<minline)
     {
       printf("Found %i x values for sky fit. Required %i\n",kx,minline);
