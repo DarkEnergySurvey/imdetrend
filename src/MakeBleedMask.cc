@@ -594,26 +594,29 @@ int MakeBleedMask(const char *argv[])
   Morph::IndexType npix = Nx*Ny;
   Morph::IndexType Npix = npix;
 
+  std::vector<Morph::MaskDataType> original_mask(npix);
+  for(int omi = 0;omi < npix;omi++)
+    original_mask[omi] = Inimage.DES()->mask[omi];
+  
   // Flag bad values in the image (e.g. INF, NAN) - shouldn't have to do this,
   // but bad values in input images really mess up the statistics and cause
   // bleed detection to perform poorly.
   Morph::IndexType nbadpix = Morph::MaskBadPixelData(Inimage.DES()->image,
 						     Inimage.DES()->mask,Nx,Ny,BADPIX_BPM);
-  if(nbadpix)
-    {
-      // Set weights to zero for all of BPM 
-      if(Inimage.DES()->varim){
-	for(Morph::IndexType nni = 0;nni < npix;nni++){
-	  if(Inimage.DES()->mask[nni]&BADPIX_BPM)
-	    Inimage.DES()->varim[nni] = 0;
-	}
+  if(nbadpix){
+    // Set weights to zero for all of BPM 
+    if(Inimage.DES()->varim){
+      for(Morph::IndexType nni = 0;nni < npix;nni++){
+	if(Inimage.DES()->mask[nni]&BADPIX_BPM)
+	  Inimage.DES()->varim[nni] = 0;
       }
-      Out.str("");
-      Out << "Warning: Flagged " << nbadpix << " bad-valued pixels and set weights to zero."; 
-      LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
-      Out.str("");
     }
-  
+    Out.str("");
+    Out << "Warning: Flagged " << nbadpix << " bad-valued pixels and set weights to zero."; 
+    LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
+    Out.str("");
+  }
+
   // Set up trail_width - which is the length of the structuring element
   // in the scan direction. 
   // Check for FWHM keyword if width unset
@@ -858,191 +861,210 @@ int MakeBleedMask(const char *argv[])
   int NPIX_EDGEBLEED = 5000;
   // --------------------------
 
-  // Give a quick status message to indicate potential edgebleed.
-  if(flag_verbose){
-    Out.str("");
-    Out << "Checking for edgebleed.";
-    LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
-  }
   // define the levels at which the threshold the image
   // for detecting low pixels
   double hole_level = image_stats[Image::IMMEAN] - hole_detection_level*image_stats[Image::IMSIGMA];
   double high_level = std::numeric_limits<Morph::ImageDataType>::max();
 
 
-  // This sets BADPIX_LOW (in a temporary mask) for the low pixels
-  std::vector<Morph::MaskDataType> hole_mask(npix,0);
-  Morph::ThresholdImage(Inimage.DES()->image,&hole_mask[0],Nx,Ny,
-			hole_level,high_level,BADPIX_LOW,BADPIX_SATURATE);
+  Morph::BlobsType SatBlobs;
+  std::vector<Morph::IndexType> SatBlobImage(npix,0);
+  Morph::GetBlobs(&temp_mask[0],Nx,Ny,BADPIX_SATURATE,SatBlobImage,SatBlobs);
+  SatBlobImage.resize(0);
+  Morph::BlobsType::iterator satblobit = SatBlobs.begin();
+  bool suspect_edge_bleed = false;
+  while((satblobit != SatBlobs.end()) && !suspect_edge_bleed){
+    Morph::BlobType &satblob(*satblobit++);
+    Morph::BoxType box;
+    std::sort(satblob.begin(),satblob.end());
+    Morph::GetBlobBoundingBox(satblob,Nx,Ny,box);
+    if(box[2] <= 20 && box[3] >= (Ny - 20))
+      suspect_edge_bleed = true;
+  }
+  if(suspect_edge_bleed){
+    // Give a quick status message to indicate potential edgebleed.
+    if(flag_verbose){
+      Out.str("");
+      Out << "Checking for possible edgebleed.";
+      LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
+    }
+    // This sets BADPIX_LOW (in a temporary mask) for the low pixels
+    std::vector<Morph::MaskDataType> hole_mask(npix,0);
+    std::vector<Morph::IndexType> hole_image(npix,0);
+    std::vector<std::vector<Morph::IndexType> > hole_blobs;
+    Morph::ThresholdImage(Inimage.DES()->image,&hole_mask[0],Nx,Ny,
+			  hole_level,high_level,BADPIX_LOW,BADPIX_SATURATE);  
+    // Update the temporary mask so that it knows about the image's BPM
+    for(int jj = 0;jj < npix;jj++)
+      if(Inimage.DES()->mask[jj] & BADPIX_BPM)
+	hole_mask[jj] |= BADPIX_BPM;
+    // Get the blobs of BADPIX_LOW while respecing the BPM
+    Morph::GetBlobsWithRejection(&hole_mask[0],Nx,Ny,BADPIX_LOW,BADPIX_BPM,
+				 0,hole_image,hole_blobs);
   
-  // Update the temporary mask so that it knows about the image's BPM
-  for(int jj = 0;jj < npix;jj++)
-    if(Inimage.DES()->mask[jj] & BADPIX_BPM)
-      hole_mask[jj] |= BADPIX_BPM;
-  
-  // Get the blobs of BADPIX_LOW while respecing the BPM
-  std::vector<Morph::IndexType> hole_image(npix,0);
-  std::vector<std::vector<Morph::IndexType> > hole_blobs;
-  Morph::GetBlobsWithRejection(&hole_mask[0],Nx,Ny,BADPIX_LOW,BADPIX_BPM,
-			       0,hole_image,hole_blobs);
-  
-  // Loop through the blobs and if a large (i.e. larger than NPIX_EDGEBLEED)
-  // blob is found, then check whether it collides with the image boundary.
-  // If so, it is a positive edgebleed detection;
-  // If not, then warn about strange low section in image
-  std::vector<Morph::BlobType>::iterator hbi   = hole_blobs.begin();
-  while(hbi != hole_blobs.end()){
-    int blobno = hbi - hole_blobs.begin() + 1;
-    Morph::BlobType &blob = *hbi++;
-    int nblobpix = blob.size();
-    if(nblobpix > NPIX_EDGEBLEED){ // blob is big enough to matter
-      std::vector<Morph::IndexType> box;
-      // Sort the blob before bounding box determination
-      std::sort(blob.begin(),blob.end());
-      Morph::GetBlobBoundingBox(blob,Nx,Ny,box);
-      if(box[0] < ampx){ // "left" side of chip
-	if(box[2] <= ybottom){ // box collides with bottom image boundary
-	  bl_bleed = true;
-	  if(box[3] > y00)
-	    y00 = box[3];
-	} else if(box[3] >= ytop){ // box collides with top image boundary
-	  tl_bleed = true;
-	  if(box[3] < y01)
-	    y01 = box[3];
-	} else { // box didn't collide with the image boundary; it's weird.
-	  Out.str("");
-	  Out << "Warning: Detected anomalous low section in image near ("
-	      << (box[0]+box[1])/2.0 << "," << (box[3]+box[2])/2.0 << ")";
-	  LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
-	}
-      } else { // "right" side of chip
-	if(box[2] <= ybottom){ // box collides with bottom image boundary
-	  br_bleed = true;
-	  if(box[3] > y10)
-	    y10 = box[3];
-	} else if(box[3] >= ytop){ // box collides with top image boundary
-	  tr_bleed = true;
-	  if(box[3] < y11)
-	    y11 = box[3];
-	} else{ // box didn't collide with the image boundary; it's weird
-	  Out.str("");
-	  Out << "Warning: Detected anomalous low section in image near ("
-	      << (box[0]+box[1])/2.0 << "," << (box[3]+box[2])/2.0 << ")";
-	  LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
+    // Loop through the blobs and if a large (i.e. larger than NPIX_EDGEBLEED)
+    // blob is found, then check whether it collides with the image boundary.
+    // If so, it is a positive edgebleed detection;
+    // If not, then warn about strange low section in image
+    std::vector<Morph::BlobType>::iterator hbi   = hole_blobs.begin();
+    while(hbi != hole_blobs.end()){
+      int blobno = hbi - hole_blobs.begin() + 1;
+      Morph::BlobType &blob = *hbi++;
+      int nblobpix = blob.size();
+      if(nblobpix > NPIX_EDGEBLEED){ // blob is big enough to matter
+	std::vector<Morph::IndexType> box;
+	// Sort the blob before bounding box determination
+	std::sort(blob.begin(),blob.end());
+	Morph::GetBlobBoundingBox(blob,Nx,Ny,box);
+	if(box[0] < ampx){ // "left" side of chip
+	  if(box[2] <= ybottom){ // box collides with bottom image boundary
+	    bl_bleed = true;
+	    if(box[3] > y00)
+	      y00 = box[3];
+	  } else if(box[3] >= ytop){ // box collides with top image boundary
+	    tl_bleed = true;
+	    if(box[3] < y01)
+	      y01 = box[3];
+	  } else { // box didn't collide with the image boundary; it's weird.
+	    Out.str("");
+	    Out << "Warning: Detected anomalous low section in image near ("
+		<< (box[0]+box[1])/2.0 << "," << (box[3]+box[2])/2.0 << ")";
+	    LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
+	  }
+	} else { // "right" side of chip
+	  if(box[2] <= ybottom){ // box collides with bottom image boundary
+	    br_bleed = true;
+	    if(box[3] > y10)
+	      y10 = box[3];
+	  } else if(box[3] >= ytop){ // box collides with top image boundary
+	    tr_bleed = true;
+	    if(box[3] < y11)
+	      y11 = box[3];
+	  } else{ // box didn't collide with the image boundary; it's weird
+	    Out.str("");
+	    Out << "Warning: Detected anomalous low section in image near ("
+		<< (box[0]+box[1])/2.0 << "," << (box[3]+box[2])/2.0 << ")";
+	    LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
+	  }
 	}
       }
     }
-  }
-  // ******** End Edge Bleed Detection ************
+    // ******** End Edge Bleed Detection ************
 
-  // If edge bleed is detected, then recalculate image statistics
-  // with edge bleed masked out - and then make sure to use global
-  // image statistics and *not* local statistics for the rest of the
-  // processing
-  if(bl_bleed || tl_bleed || br_bleed || tr_bleed){
-    // Dilate twice again if edge bleed.
-    Morph::DilateMask(&temp_mask[0],Nx,Ny,structuring_element,BADPIX_SATURATE);
-    Morph::DilateMask(&temp_mask[0],Nx,Ny,structuring_element,BADPIX_SATURATE);
-    global_stats_only = true;
-    std::vector<Morph::MaskDataType> temp_mask2(temp_mask.begin(),temp_mask.end());
-    if(bl_bleed){
+  
+    // If possible edge bleed is detected, then recalculate image statistics
+    // with edge bleed masked out - and then make sure to use global
+    // image statistics and *not* local statistics for the rest of the
+    // processing
+    if(bl_bleed || tl_bleed || br_bleed || tr_bleed){
+      // Dilate twice again if edge bleed.
+      //    Morph::DilateMask(&temp_mask[0],Nx,Ny,structuring_element,BADPIX_SATURATE);
+      //    Morph::DilateMask(&temp_mask[0],Nx,Ny,structuring_element,BADPIX_SATURATE);
+      global_stats_only = true;
+      std::vector<Morph::MaskDataType> temp_mask2(temp_mask.begin(),temp_mask.end());
+      if(bl_bleed){
+	Out.str("");
+	Out << "Warning: Detected possible edgebleed at (0:" << ampx-1 << ",0:" << y00 << ").";
+	LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
+	std::vector<Morph::IndexType> box(4,0);
+	box[0] = 0;
+	box[1] = ampx-1;
+	box[2] = 0;
+	box[3] = y00;
+	edgebleed_boxes.push_back(box);
+	for(Morph::IndexType by = box[2];by <= box[3];by++){
+	  Morph::IndexType iminy = by*Nx;
+	  for(Morph::IndexType bx = box[0];bx <= box[1];bx++){
+	    Morph::IndexType imin = iminy + bx;
+	    temp_mask2[imin] |= BADPIX_LOW;
+	  }
+	} 
+      }
+      if(tl_bleed){
+	Out.str("");
+	Out << "Warning: Detected possible edgebleed at (0:" << ampx-1 
+	    << "," << y01 << ":" << Ny-1 << ").";
+	LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
+	std::vector<Morph::IndexType> box(4,0);
+	box[0] = 0;
+	box[1] = ampx-1;
+	box[2] = y01;
+	box[3] = Ny-1;
+	edgebleed_boxes.push_back(box);      
+	for(Morph::IndexType by = box[2];by <= box[3];by++){
+	  Morph::IndexType iminy = by*Nx;
+	  for(Morph::IndexType bx = box[0];bx <= box[1];bx++){
+	    Morph::IndexType imin = iminy + bx;
+	    temp_mask2[imin] |= BADPIX_LOW;
+	  }
+	} 
+      }
+      if(br_bleed){
+	Out.str("");
+	Out << "Warning: Detected possible edgebleed at (" << ampx << ":" 
+	    << Nx-1 << ",0:" << y10 << ").";
+	LX::ReportMessage(flag_verbose,STATUS,3,Out.str());    
+	std::vector<Morph::IndexType> box(4,0);
+	box[0] = ampx;
+	box[1] = Nx-1;
+	box[2] = 0;
+	box[3] = y10;
+	edgebleed_boxes.push_back(box);
+	for(Morph::IndexType by = box[2];by <= box[3];by++){
+	  Morph::IndexType iminy = by*Nx;
+	  for(Morph::IndexType bx = box[0];bx <= box[1];bx++){
+	    Morph::IndexType imin = iminy + bx;
+	    temp_mask2[imin] |= BADPIX_LOW;
+	  }
+	} 
+      }
+      if(tr_bleed){
+	Out.str("");
+	Out << "Warning: Detected possible edgebleed at (" << ampx << ":" 
+	    << Nx-1 << "," << y11 << ":" << Ny - 1 << ")."; 
+	LX::ReportMessage(flag_verbose,STATUS,3,Out.str());    
+	std::vector<Morph::IndexType> box(4,0);
+	box[0] = ampx;
+	box[1] = Nx-1;
+	box[2] = y11;
+	box[3] = Ny-1;
+	edgebleed_boxes.push_back(box);      
+	for(Morph::IndexType by = box[2];by <= box[3];by++){
+	  Morph::IndexType iminy = by*Nx;
+	  for(Morph::IndexType bx = box[0];bx <= box[1];bx++){
+	    Morph::IndexType imin = iminy + bx;
+	    temp_mask2[imin] |= BADPIX_LOW;
+	  }
+	} 
+      }
       Out.str("");
-      Out << "Warning: Detected edgebleed at (0:" << ampx-1 << ",0:" << y00 << ").";
-      LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
-      std::vector<Morph::IndexType> box(4,0);
-      box[0] = 0;
-      box[1] = ampx-1;
-      box[2] = 0;
-      box[3] = y00;
-      edgebleed_boxes.push_back(box);
-      for(Morph::IndexType by = box[2];by <= box[3];by++){
-	Morph::IndexType iminy = by*Nx;
-	for(Morph::IndexType bx = box[0];bx <= box[1];bx++){
-	  Morph::IndexType imin = iminy + bx;
-	  temp_mask2[imin] |= BADPIX_LOW;
-	}
-      } 
+      if(Morph::GetSky(Inimage.DES()->image,&temp_mask2[0],Nx,Ny,
+		       minpix,nbgit,ground_rejection_factor,1e-3,
+		       BADPIX_SATURATE | BADPIX_CRAY | BADPIX_BPM | BADPIX_STAR | 
+		       BADPIX_TRAIL | BADPIX_LOW,BADPIX_INTERP,image_stats,image_npix_box,niter,&Out)){
+	std::ostringstream GSO;
+	GSO << "Global image statistics failed:" << std::endl
+	    << Out.str() << std::endl;
+	LX::ReportMessage(flag_verbose,STATUS,4,GSO.str());
+	bleedmask_status = 1;
+	UpdateImageHeader(Inimage,argv,0,do_interp,do_star_interp,
+			  do_starmask,bleedmask_status);
+	return(WriteOutputImage(Inimage,ofilename,flag_verbose));
+      } else if(flag_verbose){
+	Out << "Global image statistics converged (again) after NITER=" << niter 
+	    << (niter==1 ? " iteration." : " iterations.") << std::endl; 
+	LX::ReportMessage(flag_verbose,QA,1,Out.str());
+	Out.str("");
+	Out << Util::stripdirs(filename) << "   BKGD=" << image_stats[Image::IMMEAN] << ", "
+	    << "BKGD_SIGMA=" << image_stats[Image::IMSIGMA] << std::endl;
+	LX::ReportMessage(flag_verbose,QA,1,Out.str());
+      }
+      bl_bleed = false;
+      br_bleed = false;
+      tl_bleed = false;
+      tr_bleed = false;
     }
-    if(tl_bleed){
-      Out.str("");
-      Out << "Warning: Detected edgebleed at (0:" << ampx-1 
-	  << "," << y01 << ":" << Ny-1 << ").";
-      LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
-      std::vector<Morph::IndexType> box(4,0);
-      box[0] = 0;
-      box[1] = ampx-1;
-      box[2] = y01;
-      box[3] = Ny-1;
-      edgebleed_boxes.push_back(box);      
-      for(Morph::IndexType by = box[2];by <= box[3];by++){
-	Morph::IndexType iminy = by*Nx;
-	for(Morph::IndexType bx = box[0];bx <= box[1];bx++){
-	  Morph::IndexType imin = iminy + bx;
-	  temp_mask2[imin] |= BADPIX_LOW;
-	}
-      } 
-    }
-    if(br_bleed){
-      Out.str("");
-      Out << "Warning: Detected edgebleed at (" << ampx << ":" 
-	  << Nx-1 << ",0:" << y10 << ").";
-      LX::ReportMessage(flag_verbose,STATUS,3,Out.str());    
-      std::vector<Morph::IndexType> box(4,0);
-      box[0] = ampx;
-      box[1] = Nx-1;
-      box[2] = 0;
-      box[3] = y10;
-      edgebleed_boxes.push_back(box);
-      for(Morph::IndexType by = box[2];by <= box[3];by++){
-	Morph::IndexType iminy = by*Nx;
-	for(Morph::IndexType bx = box[0];bx <= box[1];bx++){
-	  Morph::IndexType imin = iminy + bx;
-	  temp_mask2[imin] |= BADPIX_LOW;
-	}
-      } 
-    }
-    if(tr_bleed){
-      Out.str("");
-      Out << "Warning: Detected edgebleed at (" << ampx << ":" 
-	  << Nx-1 << "," << y11 << ":" << Ny - 1 << ")."; 
-      LX::ReportMessage(flag_verbose,STATUS,3,Out.str());    
-      std::vector<Morph::IndexType> box(4,0);
-      box[0] = ampx;
-      box[1] = Nx-1;
-      box[2] = y11;
-      box[3] = Ny-1;
-      edgebleed_boxes.push_back(box);      
-      for(Morph::IndexType by = box[2];by <= box[3];by++){
-	Morph::IndexType iminy = by*Nx;
-	for(Morph::IndexType bx = box[0];bx <= box[1];bx++){
-	  Morph::IndexType imin = iminy + bx;
-	  temp_mask2[imin] |= BADPIX_LOW;
-	}
-      } 
-    }
-    Out.str("");
-    if(Morph::GetSky(Inimage.DES()->image,&temp_mask2[0],Nx,Ny,
-		     minpix,nbgit,ground_rejection_factor,1e-3,
-		     BADPIX_SATURATE | BADPIX_CRAY | BADPIX_BPM | BADPIX_STAR | 
-		     BADPIX_TRAIL | BADPIX_LOW,BADPIX_INTERP,image_stats,image_npix_box,niter,&Out)){
-      std::ostringstream GSO;
-      GSO << "Global image statistics failed:" << std::endl
-	  << Out.str() << std::endl;
-      LX::ReportMessage(flag_verbose,STATUS,4,GSO.str());
-      bleedmask_status = 1;
-      UpdateImageHeader(Inimage,argv,0,do_interp,do_star_interp,
-			do_starmask,bleedmask_status);
-      return(WriteOutputImage(Inimage,ofilename,flag_verbose));
-    } else if(flag_verbose){
-      Out << "Global image statistics converged (again) after NITER=" << niter 
-	  << (niter==1 ? " iteration." : " iterations.") << std::endl; 
-      LX::ReportMessage(flag_verbose,QA,1,Out.str());
-      Out.str("");
-      Out << Util::stripdirs(filename) << "   BKGD=" << image_stats[Image::IMMEAN] << ", "
-	  << "BKGD_SIGMA=" << image_stats[Image::IMSIGMA] << std::endl;
-      LX::ReportMessage(flag_verbose,QA,1,Out.str());
-    }
-  }
+  } // suspect_edge_bleed
 
   // Experimental - push saturated,interpolated pixels back up to detectable levels. This undos 
   // imcorrect's interpolation over 1-pixel gaps.
@@ -1050,8 +1072,8 @@ int MakeBleedMask(const char *argv[])
   //   //  double trail_level = image_stats[Image::IMMAX];
   for(int pixi = 0;pixi < Nx*Ny;pixi++){
     if((Inimage.DES()->mask[pixi]&BADPIX_SATURATE)&&(Inimage.DES()->mask[pixi]&BADPIX_INTERP)){
-      Inimage.DES()->mask[pixi]^=BADPIX_INTERP;
-      temp_mask[pixi] ^= BADPIX_INTERP;
+      Inimage.DES()->mask[pixi] ^= BADPIX_INTERP;
+      temp_mask[pixi]           ^= BADPIX_INTERP;
       Inimage.DES()->image[pixi] = trail_level;
     }
   }
@@ -1070,32 +1092,18 @@ int MakeBleedMask(const char *argv[])
   // Loop through each blob, get image stats inside extended 
   // blob bounding box.
   //
-  // Step 0 - Initiate loop over blobs
-  //  bbbi   = blobs.begin();
   std::vector<Morph::BlobType>::iterator bbbi   = blobs.begin();
   while(bbbi != blobs.end()){
     int blobno = bbbi - blobs.begin() + 1;
     Morph::BlobType &blob = *bbbi++;
     int nblobpix = blob.size();
-    //    std::cout << "Dilated Blob(" << blobno << ") size = " << nblobpix << std::endl; 
-    // Step 1 - Get blob bounding box
     std::vector<Morph::IndexType> box;
     std::sort(blob.begin(),blob.end());
     Morph::GetBlobBoundingBox(blob,Nx,Ny,box);
-    //    std::cout << "Blob(" << blobno << ") box = (" 
-    //	      << box[0] << ":" << box[1] << ","
-    //	      << box[2] << ":" << box[3] << std::endl; 
-    //  adds the box to our list of blob boxes
     blob_boxes.push_back(box);
-
-    // Step 2 - Expand bounding boxes
     int bleed_over = (trail_width/2) - trail_arm + 1;
-    //    assert(bleed_over > 0);
-    //    assert((box[0] <= box[1]) && (box[2] <= box[3]));
     box[2] = box[2] - static_cast<Morph::IndexType>(box_growth_factor*bleed_over);
     box[3] = box[3] + static_cast<Morph::IndexType>(box_growth_factor*bleed_over);
-    //    box[2] -= 4;
-    //    box[3] += 4;
     if(box[2] < 0)   box[2] = 0;
     if(box[3] >= Ny) box[3] = Ny - 1;
     candidate_trail_boxes.push_back(box);
@@ -1110,11 +1118,9 @@ int MakeBleedMask(const char *argv[])
       std::cout << "BackGround Box(" << blobno << "): [" << box[0] << ":" << box[1] << ","
 		<< box[2] << ":" << box[3] << "]" << std::endl;
     }
-    // Step 3 - Get image statistics inside box
     Morph::IndexType npix_box;
     Morph::StatType stats;
     bool use_image_stats = false;
-    //    if((nblobpix < trail_arm) || ){
     if(global_stats_only){
       use_image_stats = true;
     } else {
@@ -1184,7 +1190,6 @@ int MakeBleedMask(const char *argv[])
       }
     }
     // Record statistics for this box in persistent data structure
-    //    box_stats.push_back(stats);
     box_stats.push_back(stats);
   }
   // profiler.FunctionExit("LocalStats");
@@ -1248,10 +1253,37 @@ int MakeBleedMask(const char *argv[])
     Morph::IndexType index = tmi - temp_mask.begin();
     *tmi++ = Inimage.DES()->mask[index];
   }
+  // This will close up small 1-pixel gaps in the trail.
   Morph::BlobsType trail_blobs;
+  Morph::GetBlobs(Inimage.DES()->mask,Nx,Ny,trail_mask,blob_image,trail_blobs);
+  Morph::BlobsType::iterator tbi = trail_blobs.begin();
+  while(tbi != trail_blobs.end()){
+    Morph::BoxType box;
+    Morph::BlobType &trailblob(*tbi++);
+    std::sort(trailblob.begin(),trailblob.end());
+    Morph::GetBlobBoundingBox(trailblob,Nx,Ny,box);
+    for(int tj = box[2];tj <= box[3];tj++){
+      for(int ti = box[0];ti <= box[1];ti++){
+	if(((ti < (Nx-1)) && (ti > 0))){
+	  int pixel_index    = tj*Nx+ti;
+	  if(!(Inimage.DES()->mask[pixel_index]&BADPIX_TRAIL)){
+	    int left_neighbor  = pixel_index - 1;
+	    int right_neighbor = pixel_index + 1;
+	    if(Inimage.DES()->mask[left_neighbor]&BADPIX_TRAIL &&
+	       Inimage.DES()->mask[right_neighbor]&BADPIX_TRAIL){
+	      Inimage.DES()->mask[pixel_index] |= BADPIX_TRAIL;
+	      bleed_status++;
+	    }
+	  }
+	}
+      }
+    }
+  }
+  trail_blobs.resize(0);
   Morph::GetBlobs(Inimage.DES()->mask,Nx,Ny,trail_mask,blob_image,trail_blobs);
   int interp_status = bleed_trail_detection_filter.LinearInterpolateOverTrailsInBlobs(trail_blobs);
   
+
 
   //   bleed_status = DetectBleedTrailsInBlobs(Inimage.DES()->image,
   //   					  &temp_image[0],
@@ -1350,13 +1382,14 @@ int MakeBleedMask(const char *argv[])
   //
   // First get the trail blobs
   blob_image.resize(npix,0);
-  trail_blobs.resize(0);
+  trail_blobs.resize(0);					
+  bool edge_bleed_detected = false;
+  std::vector<Morph::IndexType> edge_bleed_blob_indices;
   Morph::GetBlobs(Inimage.DES()->mask,Nx,Ny,trail_mask,blob_image,trail_blobs);
   // Loop through the trail blobs and 
   bbbi   = trail_blobs.begin();
-  bool suspect_edge_bleed = false;
   while(bbbi != trail_blobs.end()){
-    int blobno = bbbi - trail_blobs.begin() + 1;
+    int blobno = bbbi - trail_blobs.begin();
     Morph::BlobType &blob = *bbbi++;
     // Step 1 - Get blob bounding box
     std::vector<Morph::IndexType> box;
@@ -1364,71 +1397,99 @@ int MakeBleedMask(const char *argv[])
     Morph::GetBlobBoundingBox(blob,Nx,Ny,box);
     //  adds the box to our list of blob boxes
     trail_boxes.push_back(box);
-    // if the box comes near the edge, then check for edgebleed later
-    if((box[2] <= npix_edge) || (box[3] >= (Ny - npix_edge-1)))
-      suspect_edge_bleed = true;
+    // if the box comes near the edge, edgebleed is confirmed
+    if((box[2] <= npix_edge) && (box[3] >= (Ny - npix_edge-1))){
+      edge_bleed_detected = true;
+      edge_bleed_blob_indices.push_back(blobno);
+      if(box[0] < ampx)
+	bl_bleed = true;
+      if(box[1] >= ampx)
+	br_bleed = true;
+    }
   }
+  std::vector<Morph::IndexType>::iterator ebbii = edge_bleed_blob_indices.begin();
+  while(ebbii != edge_bleed_blob_indices.end()){
+    Morph::BlobType &edgebleedblob(trail_blobs[*ebbii++]);
+    Morph::BlobType::iterator ebbi = edgebleedblob.begin();
+    while(ebbi != edgebleedblob.end()){
+      Morph::IndexType blob_pixel_index = *ebbi++;
+      Morph::IndexType blob_pixel_x = blob_pixel_index%Nx;
+      Morph::IndexType blob_pixel_y = blob_pixel_index/Nx;
+      blob_pixel_x = Nx - blob_pixel_x - 1;
+      blob_pixel_index = blob_pixel_y*Nx + blob_pixel_x;
+      Inimage.DES()->mask[blob_pixel_index] |= BADPIX_TRAIL;
+    }
+  }
+  blob_image.resize(0);
+  trail_blobs.resize(0);
+  Morph::GetBlobs(Inimage.DES()->mask,Nx,Ny,trail_mask,blob_image,trail_blobs);
+
 
   // Since edge bleeds have already been detected, this code just marks them
   // in the output mask.
-  if(bl_bleed){
-    std::vector<Morph::IndexType> box(4,0);
-    box[0] = 0;
-    box[1] = ampx-1;
-    box[2] = 0;
-    box[3] = y00;
-    for(Morph::IndexType by = box[2];by <= box[3];by++){
-      Morph::IndexType iminy = by*Nx;
-      for(Morph::IndexType bx = box[0];bx <= box[1];bx++){
-	Morph::IndexType imin = iminy + bx;
-	Inimage.DES()->mask[imin] |= BADPIX_TRAIL;
-      }
-    } 
+  if(edge_bleed_detected){
+    Out.str("");
+    Out << "Warning: Edgebleed confirmed, masking out affected edge.";
+    LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
+    if(bl_bleed){
+      std::vector<Morph::IndexType> box(4,0);
+      box[0] = 0;
+      box[1] = ampx-1;
+      box[2] = 0;
+      box[3] = y00;
+      for(Morph::IndexType by = box[2];by <= box[3];by++){
+	Morph::IndexType iminy = by*Nx;
+	for(Morph::IndexType bx = box[0];bx <= box[1];bx++){
+	  Morph::IndexType imin = iminy + bx;
+	  Inimage.DES()->mask[imin] |= BADPIX_TRAIL;
+	}
+      } 
+    }
+    if(tl_bleed){
+      std::vector<Morph::IndexType> box(4,0);
+      box[0] = 0;
+      box[1] = ampx-1;
+      box[2] = y01;
+      box[3] = Ny-1;
+      //      edgebleed_boxes.push_back(box);      
+      for(Morph::IndexType by = box[2];by <= box[3];by++){
+	Morph::IndexType iminy = by*Nx;
+	for(Morph::IndexType bx = box[0];bx <= box[1];bx++){
+	  Morph::IndexType imin = iminy + bx;
+	  Inimage.DES()->mask[imin] |= BADPIX_TRAIL;
+	}
+      } 
+    }
+    if(br_bleed){
+      std::vector<Morph::IndexType> box(4,0);
+      box[0] = ampx;
+      box[1] = Nx-1;
+      box[2] = 0;
+      box[3] = y10;
+      //      edgebleed_boxes.push_back(box);
+      for(Morph::IndexType by = box[2];by <= box[3];by++){
+	Morph::IndexType iminy = by*Nx;
+	for(Morph::IndexType bx = box[0];bx <= box[1];bx++){
+	  Morph::IndexType imin = iminy + bx;
+	  Inimage.DES()->mask[imin] |= BADPIX_TRAIL;
+	}
+      } 
+    }
+    if(tr_bleed){
+      std::vector<Morph::IndexType> box(4,0);
+      box[0] = ampx;
+      box[1] = Nx-1;
+      box[2] = y11;
+      box[3] = Ny-1;
+      for(Morph::IndexType by = box[2];by <= box[3];by++){
+	Morph::IndexType iminy = by*Nx;
+	for(Morph::IndexType bx = box[0];bx <= box[1];bx++){
+	  Morph::IndexType imin = iminy + bx;
+	  Inimage.DES()->mask[imin] |= BADPIX_TRAIL;
+	}
+      } 
+    }  
   }
-  if(tl_bleed){
-    std::vector<Morph::IndexType> box(4,0);
-    box[0] = 0;
-    box[1] = ampx-1;
-    box[2] = y01;
-    box[3] = Ny-1;
-    //      edgebleed_boxes.push_back(box);      
-    for(Morph::IndexType by = box[2];by <= box[3];by++){
-      Morph::IndexType iminy = by*Nx;
-      for(Morph::IndexType bx = box[0];bx <= box[1];bx++){
-	Morph::IndexType imin = iminy + bx;
-	Inimage.DES()->mask[imin] |= BADPIX_TRAIL;
-      }
-    } 
-  }
-  if(br_bleed){
-    std::vector<Morph::IndexType> box(4,0);
-    box[0] = ampx;
-    box[1] = Nx-1;
-    box[2] = 0;
-    box[3] = y10;
-    //      edgebleed_boxes.push_back(box);
-    for(Morph::IndexType by = box[2];by <= box[3];by++){
-      Morph::IndexType iminy = by*Nx;
-      for(Morph::IndexType bx = box[0];bx <= box[1];bx++){
-	Morph::IndexType imin = iminy + bx;
-	Inimage.DES()->mask[imin] |= BADPIX_TRAIL;
-      }
-    } 
-  }
-  if(tr_bleed){
-    std::vector<Morph::IndexType> box(4,0);
-    box[0] = ampx;
-    box[1] = Nx-1;
-    box[2] = y11;
-    box[3] = Ny-1;
-    for(Morph::IndexType by = box[2];by <= box[3];by++){
-      Morph::IndexType iminy = by*Nx;
-      for(Morph::IndexType bx = box[0];bx <= box[1];bx++){
-	Morph::IndexType imin = iminy + bx;
-	Inimage.DES()->mask[imin] |= BADPIX_TRAIL;
-      }
-    } 
-  }  
   // profiler.FunctionExit("EdgeBleed");
   
   
