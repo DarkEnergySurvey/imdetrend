@@ -69,6 +69,7 @@ Detailed Description:
 #define NYSKY 8
 #define NSKYSAMP 128
 
+/*BADPIX_CGROW is defined only for this code. It is not used anywhere else*/
 #define BADPIX_CGROW 128
 #define BPMDEF_BIAS_COL 64
 
@@ -176,7 +177,7 @@ int main(int argc,char *argv[])
    time_t	tm;
    float	interp_noise=1.0,interp_fwhm=0.0;
    int	flag_output=0,flag_crays=0,flag_stars=0,flag_srcgrowrad=0, flag_crfract = 0, flag_crsig2 = 0,
-     num = 0,filemode=0,goodpix,badpix,hdutype;
+     num = 0,filemode=0,goodpix,badpix,hdutype,flag_small_fwhm=0;
    enum {OPT_CRAYS=1,OPT_CRFRACT,OPT_CRSIG2,OPT_FLAG_HORIZTRAILS,
          OPT_NOINTERPOLATE,OPT_OUTPUT,OPT_VERBOSE,OPT_HELP,OPT_VERSION};
 
@@ -425,8 +426,8 @@ int main(int argc,char *argv[])
   if (!flag_crfract){
     crfract=0.1;
     if (flag_nofwhm){
-        sprintf(event,"No seeing measurement present.  Defaulting to CRFRACT=%.2f\n",crfract);
-        reportevt(flag_verbose,STATUS,3,event);
+        sprintf(event,"No FWHM measurement present. Defaulting to CRFRACT=%.2f\n",crfract);
+        reportevt(flag_verbose,STATUS,4,event);
     }
   }else{
     if (fwhm > 3.3 && fwhm < 4.0) {
@@ -434,8 +435,8 @@ int main(int argc,char *argv[])
     }else if (fwhm >= 4.0) {
       crfract = 0.2;
     }else{
-      sprintf(event,"Image with FWHM=%.2f (<3.3 pix) is not suitable for automatic detection of CR\n",fwhm);
-      reportevt(flag_verbose,STATUS,3,event);
+      sprintf(event,"Image with FWHM=%.2f (<3.3 pix) is not suitable for automatic detection of CR.\n",fwhm);
+      reportevt(flag_verbose,STATUS,4,event);
       exit(0);
     }
   }
@@ -446,7 +447,7 @@ int main(int argc,char *argv[])
   if (!flag_crsig2){
     crsig2=1.0;
     if (flag_nofwhm){
-      sprintf(event,"No seeing measurement present.  Defaulting to CRSIG2=%.2f\n",crsig2);
+      sprintf(event,"No FWHM measurement present.  Defaulting to CRSIG2=%.2f\n",crsig2);
       reportevt(flag_verbose,STATUS,3,event);
     }
   }else{
@@ -455,12 +456,12 @@ int main(int argc,char *argv[])
     }else if (fwhm >= 4.0) {
       crsig2 = 2.0;
     }else{
-      sprintf(event,"Image with FWHM=%.2f (<3.3 pix) is not suitable for automatic detection of CR\n",fwhm);
-      reportevt(flag_verbose,STATUS,3,event);
+      sprintf(event,"Image with FWHM=%.2f (<3.3 pix) is not suitable for automatic detection of CR.\n",fwhm);
+      reportevt(flag_verbose,STATUS,4,event);
       exit(0);
     }
   }
-  sprintf(event," Value for CRSIG2 set automaically based on seeing to CRSIG2=%.2f\n",crsig2);
+  sprintf(event," Value for CRSIG2 set automaically based on FWHM to CRSIG2=%.2f\n",crsig2);
   reportevt(flag_verbose,STATUS,1,event);
 
 
@@ -780,7 +781,7 @@ void dogrow(int masksrch,int npix,int maskset,float *image,short *bpm,float *wei
   int kount[2]={0,0};
   int mask2;
 
-  mask2 = masksrch | maskset;
+  mask2 |= masksrch | maskset;
   for (n=0;n<naxis1*naxis2;++n)
     {
       if ((bpm[n]&masksrch)==0) continue;
@@ -799,8 +800,11 @@ void dogrow(int masksrch,int npix,int maskset,float *image,short *bpm,float *wei
         {
           for (iy=iyl;iy<=iyu;++iy)
             {
+              //printf("ix = %i, iy = %i\n",ix,iy);
               in = iy*naxis1 + ix;
               if (bpm[in]&mask2) continue;
+              //if (bpm[in]&mask2) continue;
+              //printf("pixel value to mask %i\n",in);
               ++kount[1];
               /* this is a hack. It originally sets the bpm bit to "maskset"
                  but we don;t want to add a new bit to the badpixel mask
@@ -808,13 +812,31 @@ void dogrow(int masksrch,int npix,int maskset,float *image,short *bpm,float *wei
                  bpm[in] |= maskset;
                  In order to do this, I am hacking the above assigment to
                  masksrch instead of maskset (how originally was) */
+              //bpm[in] |= maskset;
+              //printf("bpm val = %i\n", bpm[in]);
               bpm[in] |= maskset;
               weight[in] = 0.0;
             }
         }
     }
+  
+  /*change all the BADPIX_CGROW in the bpm to BADPIX_CRAY*/
+  for (n=0;n<naxis1*naxis2;++n)
+    {
+      if (bpm[n]&masksrch) {
+        //printf("Found a CRAY masked pixel\n");
+        continue;
+      }
+      if (bpm[n]&maskset) {
+        //printf("CGROW badpixel found........\n");
+        bpm[n] = masksrch;
+      }
+    }
+
+
   printf("Grow found %i pixels with mask=%#08x \n",kount[0],masksrch);
-  // printf("Grow added %i pixels with mask=%#08x \n",kount[1],maskset);
+  printf("Grow added %i pixels with mask=%#08x \n",kount[1],masksrch);
+  printf("Grow is masking %i pixels around a Cosmics ray detection.\n",npix);
   return;
 }
 
