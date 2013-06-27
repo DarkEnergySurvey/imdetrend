@@ -25,6 +25,7 @@ Basic syntax: DECam_crosstalk <infile.fits> <outfile> <options>
     -ccdlist <comma-separated list of CCDs to process, 1-70 range>
     -hdulist <comma-separated list of HDUs to process, 2-71 range>
     -focuschipsout
+    -replace <filename>
     -verbose <0-3>
 
 Summary:
@@ -272,6 +273,19 @@ static int flag_linear = 0;
 static int flag_overscan = 0;
 static int flag_focus = 0;
 
+// header value replacement list
+typedef struct _replacement_list_
+{
+  int ccd;
+  char key[64], type, sVal[128];
+  struct _replacement_list_ *next;
+} rlist;
+
+rlist *init_replacement_list(char *replace_file, int flag_verbose);
+int apply_replacement_list(rlist *rlhead, int flag_verbose);
+void free_replacement_list(rlist *rlhead);
+
+
 void print_usage(char *program_name)
 {
   printf("%s <infile.fits> <outfile> <options>\n",program_name);
@@ -290,6 +304,7 @@ void print_usage(char *program_name)
   printf("  -ccdlist <comma-separated list of CCDs to process>\n");
   printf("  -hdulist <comma-separated list of HDUs to process>\n");
   printf("  -focuschipsout\n");
+  printf("  -replace <filename>\n");
   printf("  -verbose <0-3>\n");
   printf("  -help (print help message and exit)\n");
   printf("  -version (print version and exit)\n");
@@ -335,10 +350,10 @@ int DECamXTalk(int argc,char *argv[])
     char	filename[500],outname_temp[500],trash[200],nfilename[500],tag1[100],tag2[100],
       newname[500],filetype[50],obstype[80],comment[100],oldcomment[100],command_line[1000],
       longcomment[10000],event[10000],newimagename[500],*xtalk_file=NULL,*xtalk_filename=NULL,
-      flag_hdus_or_ccds = 0, ccdlist[CCDNUM2], hdulist[CCDNUM2], AmpOrder[CCDNUM1];
+      *replace_file=NULL,flag_hdus_or_ccds = 0, ccdlist[CCDNUM2], hdulist[CCDNUM2], AmpOrder[CCDNUM1];
     int	anynull,nfound,i,hdunum,hdutype,j,k,x,y,chdu, ccdnum,locout,
       flag_crosstalk=0,flag_verbose=1,flag_phot=0,flag_crossatthresh=0,bitpix,naxis,
-      ext1,ext2,ampextension,ampA,ampB,locA,locB,ampoffset1,nkeys,
+      flag_replace=0,ext1,ext2,ampextension,ampA,ampB,locA,locB,ampoffset1,nkeys,
       ampoffset2,nsata=0,nsatb=0,flag_osorder=0,
       maxhdunum=HDUNUM, nhdus, needpath=1,
       mkpath(),getheader_flt(),getheader_str();
@@ -364,13 +379,14 @@ int DECamXTalk(int argc,char *argv[])
     overscan_config osconfig;
     short *maskdata = NULL, *maskdata2 = NULL;
     int myl;
+    rlist *rl = NULL;  // linked list of header replacment values 
     char	delkeys[100][10]={"PRESECA","PRESECB","POSTSECA",
 				  "POSTSECB","TRIMSECA","TRIMSECB","TRIMSEC",
 				  "BIASSECA","BIASSECB",""};
 
     enum {OPT_CROSSTALK=1,OPT_PHOTFLAG,OPT_SATMASK,OPT_OVERSCAN,OPT_OVERSCANSAMPLE,OPT_OVERSCANFUNCTION,
 	  OPT_OVERSCANORDER,OPT_OVERSCANTRIM,OPT_MAXHDUNUM,OPT_CCDLIST,OPT_HDULIST,OPT_CROSSATTHRESH,
-          OPT_FOCUSCHIPSOUT,OPT_VERBOSE,OPT_HELP,OPT_VERSION};
+          OPT_FOCUSCHIPSOUT,OPT_REPLACE,OPT_VERBOSE,OPT_HELP,OPT_VERSION};
     
     if(build_command_line(argc,argv,command_line,1000) <= 0){
       reportevt(2,STATUS,1,"Failed to record full command line.");
@@ -430,7 +446,8 @@ int DECamXTalk(int argc,char *argv[])
     int command_line_errors = 0;
     flag_sat_beforextalk = flag_sat_afterxtalk = 0;
     flag_overscan = 0;
-    while(1){
+
+    while(1) {
       int curind = optind;
       static struct option xtalk_options[] =
 	{
@@ -444,6 +461,7 @@ int DECamXTalk(int argc,char *argv[])
 	  {"ccdlist",          required_argument, 0,          OPT_CCDLIST},
 	  {"hdulist",          required_argument, 0,          OPT_HDULIST},
 	  {"crossatthresh",    required_argument, 0,    OPT_CROSSATTHRESH},
+	  {"replace",          required_argument, 0,          OPT_REPLACE},
 	  {"verbose",          required_argument, 0,          OPT_VERBOSE},
 	  {"version",          no_argument,       0,          OPT_VERSION},
 	  {"help",             no_argument,       0,             OPT_HELP},
@@ -641,6 +659,18 @@ int DECamXTalk(int argc,char *argv[])
 	  exit(1);
 	}
 	break;
+      case OPT_REPLACE: // -replace
+	cloperr = 0;
+	flag_replace=1;
+	if(optarg){
+	  replace_file=optarg;
+	}
+	else{
+	  cloperr = 1;
+	  reportevt(flag_verbose,STATUS,5,"Option -replace requires an argument specifying the header replacement list file.");
+	  exit(1);
+	}
+	break;
       case OPT_VERBOSE: // -verbose
 	// already parsed verbosity
 	break;
@@ -669,6 +699,9 @@ int DECamXTalk(int argc,char *argv[])
 	abort();
       }
     }
+
+    if (flag_replace)
+        rl = init_replacement_list(replace_file, flag_verbose);
 
     /* ********************************************** */
     /* ********* Initialize Crosstalk Matrices        */
@@ -785,7 +818,7 @@ int DECamXTalk(int argc,char *argv[])
 	    printf("\n");
          }
        }
-    } 
+    }
 	
     /* ********************************************** */
     /* ********* Handle Input Image/File  *********** */
@@ -833,7 +866,6 @@ int DECamXTalk(int argc,char *argv[])
 
 
     /* process all images (hdus & ccds) unless -ccdlist or -hdulist */
-
     if (!flag_hdus_or_ccds)
         for (i = 0; i < CCDNUM2; i++) 
             ccdlist[i] = hdulist[i] = 1;
@@ -974,8 +1006,8 @@ int DECamXTalk(int argc,char *argv[])
     /**********    Enables Crosstalk Correction  **************/
     /**********************************************************/
     nhdus = 0;  /* nhdus should always be <= maxhdunum */
-
     if (flag_verbose) printf("  Reading image data from %s\n", filename);
+
     for (i=2;i<=hdunum;i++) {
 
       /* Move to the correct HDU */
@@ -1207,10 +1239,6 @@ int DECamXTalk(int argc,char *argv[])
         exit(0);
      }
 
-
-/*VK*/
-
-
      /* does this image need to be processed? */
      if ((ccdnum > 62 && !flag_focus) || (ccdlist[ccdnum] != 1 && hdulist[i] != 1)) {
         if (nthheader != NULL) free(nthheader);
@@ -1231,6 +1259,11 @@ int DECamXTalk(int argc,char *argv[])
 	  printf("*************************************************\n");
 	}
       }
+
+    // apply header value replacement, if needed and available
+    if (flag_replace && rl != NULL)
+    {
+    }
 
      if (fits_get_img_param(fptr,2, &bitpix, &naxis, naxes, &status)) {
 	sprintf(event,"Image params not found in %s",filename);
@@ -1381,26 +1414,26 @@ int DECamXTalk(int argc,char *argv[])
       if (flag_sat_beforextalk) {
 	// Loop through *entire* input array.  This includes overscanned regions and 
 	// any additional padding. 
-	for (y=0;y<naxes[1];y++) 
-	for (x=0;x<naxes[0];x++) {
-	    locout=y*naxes[0]+x;
+	for (y=0;y<input_image.axes[1];y++) 
+	for (x=0;x<input_image.axes[0];x++) {
+	    locout=y*input_image.axes[0]+x;
 	    // Determine whether the current position (wrt input array) is
 	    // within the Amp-specific data region by checking DATASEC[A,B]
 	    if(column_in_section(x+1,input_image.datasecan)){
 		satval = input_image.saturateA;
-		if(outdata[locout] > satval){
-		  if(outdata[locout] > ampAmax) ampAmax = outdata[locout];
-		  if(outdata[locout] < ampAmin) ampAmin = outdata[locout];
-		  maskdata[locout] = BADPIX_SATURATE;
+		if(input_image.image[locout] > satval){
+		  if(input_image.image[locout] > ampAmax) ampAmax = input_image.image[locout];
+		  if(input_image.image[locout] < ampAmin) ampAmin = input_image.image[locout];
+		  input_image.mask[locout] = BADPIX_SATURATE;
 		  nsata++;
 		}
 	    }
 	    else if(column_in_section(x+1,input_image.datasecbn)){
 		satval = input_image.saturateB;
-		if(outdata[locout] > satval){
-		  if(outdata[locout] > ampBmax) ampBmax = outdata[locout];
-		  if(outdata[locout] < ampBmin) ampBmin = outdata[locout];
-		  maskdata[locout] = BADPIX_SATURATE;
+		if(input_image.image[locout] > satval){
+		  if(input_image.image[locout] > ampBmax) ampBmax = input_image.image[locout];
+		  if(input_image.image[locout] < ampBmin) ampBmin = input_image.image[locout];
+		  input_image.mask[locout] = BADPIX_SATURATE;
 		  nsatb++;
 		}
 	      }
@@ -1524,36 +1557,7 @@ int DECamXTalk(int argc,char *argv[])
 	  }
       }
 
-      if (flag_sat_afterxtalk) {
-	// Loop through *entire* input array.  This includes overscanned regions and 
-	// any additional padding. 
-	for (y=0;y<naxes[1];y++) 
-	for (x=0;x<naxes[0];x++) {
-	    locout=y*naxes[0]+x;
-	    // Determine whether the current position (wrt input array) is
-	    // within the Amp-specific data region by checking DATASEC[A,B]
-	    if(column_in_section(x+1,input_image.datasecan)){
-		satval = input_image.saturateA;
-		if(outdata[locout] > satval){
-		  if(outdata[locout] > ampAmax) ampAmax = outdata[locout];
-		  if(outdata[locout] < ampAmin) ampAmin = outdata[locout];
-		  maskdata[locout] = BADPIX_SATURATE;
-		  nsata++;
-		}
-	    }
-	    else if(column_in_section(x+1,input_image.datasecbn)){
-		satval = input_image.saturateB;
-		if(outdata[locout] > satval){
-		  if(outdata[locout] > ampBmax) ampBmax = outdata[locout];
-		  if(outdata[locout] < ampBmin) ampBmin = outdata[locout];
-		  maskdata[locout] = BADPIX_SATURATE;
-		  nsatb++;
-		}
-	      }
-	    }
-      }
-
-      if (flag_verbose && (flag_sat_beforextalk || flag_sat_afterxtalk)) {
+      if (flag_verbose && flag_sat_beforextalk) {
 	sprintf(event,"image=%s,CCD[%d] NSATPIX=%d (NSATA,NSATB)=(%d,%d)",filename,
 		ccdnum,nsata+nsatb,nsata,nsatb);
 	reportevt(flag_verbose,STATUS,1,event);
@@ -1580,9 +1584,9 @@ int DECamXTalk(int argc,char *argv[])
  	  reportevt(flag_verbose,STATUS,1,event);
  	}
  	//  The "input" image to OverScan is the output image from the xtalk 
- 	// Upon output , output_image is set up with the overscanned version
+ 	// Upon output, output_image is set up with the overscanned version
  	// of the input_image. 
- 	OverScan(&input_image, &output_image, osconfig,flag_verbose);
+ 	OverScan(&input_image, &output_image, osconfig, flag_verbose);
  	
 	output_image.datasecan[0] = (input_image.ampsecan[0] < input_image.ampsecan[1] ?
 				    input_image.ampsecan[0] : input_image.ampsecan[1]);
@@ -1622,12 +1626,12 @@ int DECamXTalk(int argc,char *argv[])
  	output_image.axes[1]    = input_image.axes[1];
 	output_image.npixels    = input_image.npixels;  
  	strncpy(output_image.datasec,input_image.datasec,100);
-	// 	output_image.gainA      = input_image.gainA;
-	// 	output_image.gainB      = input_image.gainB;
-	// 	output_image.rdnoiseA   = input_image.rdnoiseA;
-	// 	output_image.rdnoiseB   = input_image.rdnoiseB;
-	// 	output_image.saturateA  = input_image.saturateA;
-	// 	output_image.saturateB  = input_image.saturateB;
+	output_image.gainA      = input_image.gainA;
+	output_image.gainB      = input_image.gainB;
+	output_image.rdnoiseA   = input_image.rdnoiseA;
+	output_image.rdnoiseB   = input_image.rdnoiseB;
+	output_image.saturateA  = input_image.saturateA;
+	output_image.saturateB  = input_image.saturateB;
        }
        //       strncpy(output_image.trimsec,input_image.trimsec,100);
        //       strncpy(output_image.biasseca,input_image.biasseca,100);
@@ -1639,6 +1643,35 @@ int DECamXTalk(int argc,char *argv[])
       /* **************** Write New Single CCD Image ******************** */
       /* ************ Store Processing History in Header **************** */
       /* **************************************************************** */
+
+      if (flag_sat_afterxtalk && ccdnum < 63) {
+    // Loop through output array. This DOES NOT include overscanned regions and 
+    // any additional padding. 
+    for (y=0;y<output_image.axes[1];y++)
+    for (x=0;x<output_image.axes[0];x++) {
+        locout=y*output_image.axes[0]+x;
+        // Determine whether the current position (wrt input array) is
+        // within the Amp-specific data region by checking DATASEC[A,B]
+        if(column_in_section(x+1,output_image.datasecan)){
+        satval = output_image.saturateA;
+        if(output_image.image[locout] > satval){
+          if(output_image.image[locout] > ampAmax) ampAmax = output_image.image[locout];
+          if(output_image.image[locout] < ampAmin) ampAmin = output_image.image[locout];
+          output_image.mask[locout] = BADPIX_SATURATE;
+          nsata++;
+        }
+        }
+        else if(column_in_section(x+1,output_image.datasecbn)){
+        satval = output_image.saturateB;
+        if(output_image.image[locout] > satval){
+          if(output_image.image[locout] > ampBmax) ampBmax = output_image.image[locout];
+          if(output_image.image[locout] < ampBmin) ampBmin = output_image.image[locout];
+          output_image.mask[locout] = BADPIX_SATURATE;
+          nsatb++;
+        }
+          }
+        }
+      }
 
       /* generate output filename */
       if (strstr(outname_temp, "%02d") != NULL)
@@ -2135,16 +2168,18 @@ int DECamXTalk(int argc,char *argv[])
     /* free memory */
     if (zeroheader != NULL) free(zeroheader);
 
-    if (indata != NULL) {
-       for (i = 0; i < CCDNUM1; i++)
-           if (indata[i] != NULL) free(indata[i]);
-       free(indata);
+    if (indata != NULL) 
+    {
+        for (i = 0; i < CCDNUM1; i++)
+            if (indata[i] != NULL) free(indata[i]);
+        free(indata);
     }
 
-    if (exclkey != NULL) {
-       for (i = 0; i < nexc; i++)
-           if (exclkey[i] != NULL) free(exclkey[i]);
-       free(exclkey);
+    if (exclkey != NULL) 
+    {
+        for (i = 0; i < nexc; i++)
+            if (exclkey[i] != NULL) free(exclkey[i]);
+        free(exclkey);
     }
 
     if (maskdata != NULL) free(maskdata);
@@ -2152,6 +2187,8 @@ int DECamXTalk(int argc,char *argv[])
 
     if (outdata2 != NULL) free(outdata2);
     if (maskdata2 != NULL) free(maskdata2);
+
+    if (rl != NULL) free_replacement_list(rl);
 
     return(0);
 }
@@ -2324,6 +2361,57 @@ int getlistitems(char *strlist, char *indxlist, int maxitems)
     }
 
     return count;
+}
+
+rlist *init_replacement_list(char *replace_file, int flag_verbose)
+{
+    FILE *inp;
+    rlist *rl = NULL, *rlhead = NULL;;
+    int i, ccd;
+    char event[10000], buf[1024];
+    char key[64], type, sVal[128];
+
+    if (flag_verbose >= 3)
+    {
+        sprintf(event,"Reading file %s\n", replace_file);
+        reportevt(flag_verbose, STATUS, 1, event);
+    }
+
+    if ((inp = fopen(replace_file, "r")) == NULL) 
+    {
+        sprintf(event,"Replacement header file %s not found", replace_file);
+        reportevt(flag_verbose, STATUS, 5, event);
+        return NULL;
+    }
+
+    while (fgets(buf, 1024, inp) != NULL)
+    {
+        i = 0;
+        while (buf[i] != '#' && buf[i] != '\n' && buf[i] != '\0') i++;
+        buf[i] = '\0';
+
+        if (sscanf(buf, "%d %s %c %s", &ccd, key, &type, sVal) == 4) 
+        {
+              printf("%d %s %c %s\n", ccd, key, type, sVal);
+        }
+    }
+
+    if (fclose(inp))
+    {
+        sprintf(event,"File close failed: %s", replace_file);
+        reportevt(flag_verbose, STATUS, 5, event);
+    }
+
+    return rlhead;
+}
+
+int apply_replacement_list(rlist *rlhead, int flag_verbose)
+{
+    return 0;
+}
+
+void free_replacement_list(rlist *rlhead)
+{
 }
 
 
