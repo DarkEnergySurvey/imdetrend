@@ -277,7 +277,7 @@ static int flag_focus = 0;
 typedef struct _replacement_list_
 {
   int ccd;
-  char key[FLEN_KEYWORD], type, sVal[FLEN_VALUE];
+  char key[FLEN_KEYWORD], sVal[FLEN_VALUE];
   struct _replacement_list_ *next;
 } rlist;
 
@@ -1291,8 +1291,8 @@ int DECamXTalk(int argc,char *argv[])
         if(getheader_flt(nthheader,"SATURATA",&input_image.saturateA,flag_verbose)){
             sprintf(event,"SATURATA not found in header.");
             reportevt(flag_verbose,STATUS,5,event);
-            printerror(status);	  
-        }      
+            printerror(status);
+        }
         if(getheader_flt(nthheader,"SATURATB",&input_image.saturateB,flag_verbose)){
             sprintf(event,"SATURATB not found in header.");
             reportevt(flag_verbose,STATUS,5,event);
@@ -2371,9 +2371,9 @@ rlist *init_replacement_list(char *replace_file, int flag_verbose)
 {
     FILE *inp;
     rlist *rl = NULL, *rlhead = NULL;;
-    int i, ccd;
+    int i, j, k, ccd;
     char event[10000], buf[1024];
-    char key[FLEN_KEYWORD], type, sVal[FLEN_VALUE];
+    char key[FLEN_KEYWORD], sVal[FLEN_VALUE];
 
     if (flag_verbose >= 3)
     {
@@ -2394,7 +2394,7 @@ rlist *init_replacement_list(char *replace_file, int flag_verbose)
         while (buf[i] != '#' && buf[i] != '\n' && buf[i] != '\0') i++;
         buf[i] = '\0';
 
-        if (sscanf(buf, "%d %s %c %s", &ccd, key, &type, sVal) == 4) 
+        if (sscanf(buf, "%d %s %s", &ccd, key, sVal) == 3)
         {
             if (rlhead == NULL)
             {
@@ -2415,9 +2415,27 @@ rlist *init_replacement_list(char *replace_file, int flag_verbose)
             }
 
             rl->ccd = ccd;
-            rl->type = type;
+            //rl->type = type;
             strncpy(rl->key, key, FLEN_KEYWORD);
-            strncpy(rl->sVal, sVal, FLEN_VALUE);
+
+            if (sVal[0] == '\'')
+            {
+                for (j = 0; j < FLEN_VALUE; j++)
+                    rl->sVal[j] = '\0';
+                for (j = 0; j < 80; j++)
+                    if (buf[j] == '\'')
+                        break;
+                rl->sVal[0] = buf[j];
+                for (k = j+1; k < 80; k++)
+                {
+                    rl->sVal[k-j] = buf[k];
+                    if (buf[k] == '\'')
+                        break;
+                }
+            }
+            else
+                strncpy(rl->sVal, sVal, FLEN_VALUE);
+
             rl->next = NULL;
 
             //printf("adding: %d %s %c %s\n", rl->ccd, rl->key, rl->type, rl->sVal);
@@ -2436,10 +2454,12 @@ rlist *init_replacement_list(char *replace_file, int flag_verbose)
 int apply_replacement_list(char *header, rlist *rl, int flag_verbose)
 {
     char tmpbuf[200];
-    int ccdnum;
+    int i, j, k, ccdnum;
     int replaced = 0;
+    char key[FLEN_KEYWORD], sVal[FLEN_VALUE], sCom[128];
+    char event[10000], old_str[81], new_str[81];
 
-//printf("\n\nBEFORE\n%s\nEND\n\n\n", header);
+    //printf("\n\nBEFORE\n%s\nEND\n\n\n", header);
 
     getheader_str(header, "CCDNUM", tmpbuf, flag_verbose);
     sscanf(tmpbuf, "%d", &ccdnum);
@@ -2448,24 +2468,73 @@ int apply_replacement_list(char *header, rlist *rl, int flag_verbose)
     {
         if (rl->ccd == ccdnum)
         {
-/*
-            if (!getheader_str(header, rl->key, tmpbuf, flag_verbose))
+            for (i = 0; i < strlen(header)/80; i++)
             {
-                // replace
-            }
-            else
-            {
-                // append
-            }
+                sscanf(&header[i*80], "%s", key);
+                key[8] = '\0';
+                if (strcmp(key, rl->key) == 0)
+                {
+                    // replace
+                    //printf("Found %s for ccd=%i\n", rl->key, rl->ccd);
+                    strncpy(old_str, &header[i*80], 80);
+                    old_str[80] = '\0';
 
-            replaced++;
-*/
+                    // copy comment
+                    for (j = 0; j < 80; j++)
+                        sCom[j] = ' ';
+                    for (j = 9; j < 80; j++)
+                        if (header[i*80+j] == '/')
+                            break;
+                    for (k = j; k < 80; k++)
+                        sCom[k-j] = header[i*80+k];
+
+                    // clean to end
+                    for (j = 9; j < 80; j++)
+                        header[i*80+j] = ' ';
+
+                    // generate new string
+                    int cu = 10;
+                    if (rl->sVal[0] == '\'')  // string type
+                    {
+                        //header[i*80+(cu++)] = '\'';
+                        for (j = 0; j < strlen(rl->sVal) && cu < 79; j++)
+                            header[i*80+(cu++)] = rl->sVal[j];
+                        //if (cu < 80) header[i*80+(cu++)] = '\'';
+                        while (cu < 30)
+                            header[i*80+(cu++)] = ' ';
+                    }
+                    else // number type
+                    {
+                        while (cu < 30-strlen(rl->sVal))
+                            header[i*80+(cu++)] = ' ';
+                        for (j = 0; j < strlen(rl->sVal); j++)
+                            header[i*80+(cu++)] = rl->sVal[j];
+                    }
+
+                    if (cu < 80) header[i*80+(cu++)] = ' ';
+
+                    for (k = 0; cu < 80; k++)
+                        header[i*80+(cu++)] = sCom[k];
+
+                    replaced++;
+
+                    if (flag_verbose >= 3)
+                    {
+                        strncpy(new_str, &header[i*80], 80);
+                        new_str[80] = '\0';
+                        sprintf(event,"Replaced <%s> with <%s>\n", old_str, new_str);
+                        reportevt(flag_verbose, STATUS, 1, event);
+                    }
+
+                    break;
+                }
+            }
         }
 
         rl = rl->next;
     }
 
-//printf("\n\nAFTER\n%s\nEND\n\n\n", header);
+    //printf("\n\nAFTER\n%s\nEND\n\n\n", header);
 
     return replaced;
 }
