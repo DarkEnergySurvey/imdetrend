@@ -271,6 +271,7 @@ void print_usage(char *program_name)
       printf("  Image Corrections:\n");
       printf("    -bpm <image>\n");
       printf("    -obpm <image>\n");
+      printf("    -fixcol (Adjusts columns flagged as fixable) \n");
       printf("    -bias <image>\n");
       printf("    -linear <lut>\n");
       printf("    -pupil <image>\n");
@@ -308,8 +309,8 @@ int ImCorrect(int argc,char *argv[])
     scaleregionn[4]={500,1500,1500,2500},
     miniscaleregionn[4],scalenum,ccdnum=0,
       flag_overscan=YES,flag_bias=NO,flag_flatten=NO,flag_verbose=1,
-      flag_output=NO,flag_list=NO,flag_bpm=0,flag_variance=NO,flag_newvarim=NO,
-      flag_noisemodel=DES_SKYONLY,
+      flag_output=NO,flag_list=NO,flag_bpm=0,flag_fixcol=NO,
+      flag_variance=NO,flag_newvarim=NO,flag_noisemodel=DES_SKYONLY,
       imnum,imoutnum,im,hdutype,flag_interpolate_col=NO,
       flag_illumination=NO,flag_fringe=NO,flag_dark=NO,
       flag_pupil=NO,flag_impupil=NO,flag_photflatten=NO,
@@ -322,9 +323,8 @@ int ImCorrect(int argc,char *argv[])
     static int flag_fast=NO;
     static	int status=0;
     float       image_val;
-    double	dbzero,dbscale,sumval,uncval;
-    long	axes[2],naxes[2],pixels,npixels,bscale,bzero,bitpix,fpixel,
-      ranseed=-564;
+    double	dbzero,dbscale,sumval,uncval=0.;
+    long	axes[2],naxes[2],pixels,npixels,bscale,bzero,bitpix,fpixel,ranseed=-564;
     char	comment[1000],longcomment[10000],filter[100]="",imagename[1000],
       firstimage[1000],retry_firstimage[1000],
       bpmname[1000],rootname[1000],varimname[1000],outputlist[1000],input_list_name[1000],
@@ -333,7 +333,8 @@ int ImCorrect(int argc,char *argv[])
       imtypename[6][10]={"","IMAGE","VARIANCE","MASK","SIGMA","WEIGHT"};
     float	scale,offset,gasdev(),scale_interpolate,maxsaturate,imval,
       overscanA=0.0,overscanB=0.0,scalefactor,mode,ran1(),
-      *randnum=NULL,*vecsort,*scalesort,skybrite,skysigma,thresholdval;
+      *randnum=NULL,*vecsort,*scalesort,skybrite,skybrite_fr,skybrite_pf,
+      skysigma,skysigma_fr,skysigma_pf,thresholdval;
     desimage bias,photflat,flat,darkimage,data,output,bpm,illumination,
       fringe,pupil,nosource;
     float *lutx;
@@ -357,10 +358,10 @@ int ImCorrect(int argc,char *argv[])
     /* list of keywords to be removed from the header after imcorrect */
     char	delkeys[100][10]={"CCDSUM","TRIMSEC","BIASSECA","BIASSECB",""};
 
-    enum {OPT_BPM=1,OPT_OBPM,OPT_BIAS,OPT_LINEAR,OPT_PUPIL,OPT_FLATTEN,OPT_DARKCOR,OPT_PHOTFLATTEN,
-          OPT_ILLUMINATION,OPT_FRINGE, OPT_SCALEREGION,OPT_OUTPUT,OPT_MEF,OPT_VARIANCETYPE,
-          OPT_NOISEMODEL,OPT_INTERPOLATE_COL,OPT_MINSIZE,OPT_MAXSIZE,OPT_UPDATESKY,
-          OPT_VERBOSE,OPT_VERSION,OPT_HELP,OPT_RANSEED};
+    enum {OPT_BPM=1,OPT_OBPM,OPT_FIXCOL,OPT_BIAS,OPT_LINEAR,OPT_PUPIL,OPT_FLATTEN,OPT_DARKCOR,
+          OPT_PHOTFLATTEN,OPT_ILLUMINATION,OPT_FRINGE, OPT_SCALEREGION,OPT_OUTPUT,OPT_MEF,
+          OPT_VARIANCETYPE,OPT_NOISEMODEL,OPT_INTERPOLATE_COL,OPT_MINSIZE,OPT_MAXSIZE,
+          OPT_UPDATESKY,OPT_VERBOSE,OPT_VERSION,OPT_HELP,OPT_RANSEED};
     
     nosource.image = NULL;
     imoutnum = 0;
@@ -426,6 +427,7 @@ int ImCorrect(int argc,char *argv[])
 	  {"maxsize",         required_argument, 0,OPT_MAXSIZE},
 	  {"ranseed",         required_argument, 0,OPT_RANSEED},
 	  {"verbose",         required_argument, 0,OPT_VERBOSE},
+	  {"fixcol",          no_argument,       0,OPT_FIXCOL},
 	  {"updatesky",       no_argument,       0,OPT_UPDATESKY},
 	  {"MEF",             no_argument,       0,OPT_MEF},
 	  {"version",         no_argument,       0,OPT_VERSION},
@@ -483,6 +485,9 @@ int ImCorrect(int argc,char *argv[])
 	  exit(1);
 	}
 	break;
+      case OPT_FIXCOL: // -fixcol
+        flag_fixcol=YES;
+        break;
       case OPT_BIAS: // -bias
 	cloperr = 0;
 	flag_bias=YES;
@@ -1417,6 +1422,11 @@ int ImCorrect(int argc,char *argv[])
          } 
       }
 
+      /* Fixable Columns are handled here */
+      /* Currently this relies on BADPIX_SATURATE being set in a previous run (e.g. DECam_crosstalk) */
+
+/*      if (flag_fixcol) fixCol(bpm,output); */
+
       /* Now the variance image section.  First allocate the space. */
 
       if ((data.varim!=NULL)||(flag_variance)){
@@ -1608,10 +1618,10 @@ int ImCorrect(int argc,char *argv[])
 //		      &scalefactor,&mode,&skysigma);
 //      }
 
-      /* ***** RAG 1st attempt rewrite ********************************/
-      /*  If any of the inital corrections are to be applied          */
-      /*  Bias/Linearity/Dark/Pupil/Flat
-      /* **************************************************************/
+      /* ***** RAG 1st attempt rewrite ******************************* */
+      /*  If any of the inital corrections are to be applied           */
+      /*  Bias/Linearity/Dark/Pupil/Flat                               */
+      /* ************************************************************* */
 
       if ((flag_bias && flag_imbias)||
           (flag_flatten && flag_imflatten)|| 
@@ -2080,6 +2090,21 @@ int ImCorrect(int argc,char *argv[])
 	}
       }
 
+      /* *************************************** */
+      /* ********* CALCULATE SKYBRITE ********** */
+      /* *************************************** */
+      if (flag_updateskybrite || flag_updateskysigma) {
+	/* retrieve overall scaling from image */
+       if (flag_fast)
+	 retrievescale_fast(&output,scaleregionn,scalesort,flag_verbose,
+		      &skybrite,&mode,&skysigma);
+       else
+	 retrievescale(&output,scaleregionn,scalesort,flag_verbose,
+		      &skybrite,&mode,&skysigma);
+	sprintf(event,"Image SKYBRITE = %10.4e & SKYSIGMA = %10.4e",
+		skybrite,skysigma);
+	reportevt(flag_verbose,QA,1,event);
+      }
 	
       /* **************************** */
       /* **** FRINGE Correction ***** */
@@ -2091,10 +2116,10 @@ int ImCorrect(int argc,char *argv[])
          /* retrieve overall scaling from image */
          if (flag_fast){
             retrievescale_fast(&output,scaleregionn,scalesort,flag_verbose,
-                               &scalefactor,&mode,&skysigma);
+                               &scalefactor,&mode,&skysigma_fr);
          }else{
             retrievescale(&output,scaleregionn,scalesort,flag_verbose,
-                          &scalefactor,&mode,&skysigma);
+                          &scalefactor,&mode,&skysigma_fr);
          }
          for (i=0;i<output.npixels;i++){
             output.image[i]-=scalefactor*fringe.image[i];
@@ -2171,32 +2196,18 @@ int ImCorrect(int argc,char *argv[])
 		    "Applying Photflatten correction");
        if (flag_fast)
 	 retrievescale_fast(&output,scaleregionn,scalesort,flag_verbose,
-		      &skybrite,&mode,&skysigma);
+		      &skybrite_pf,&mode,&skysigma_pf);
        else
 	 retrievescale(&output,scaleregionn,scalesort,flag_verbose,
-		      &skybrite,&mode,&skysigma);
+		      &skybrite_pf,&mode,&skysigma_pf);
 	for (i=0;i<output.npixels;i++) 
-	  output.image[i]=(output.image[i]-skybrite)*photflat.image[i]+
-	    skybrite; 
+	  output.image[i]=(output.image[i]-skybrite_pf)*photflat.image[i]+
+	    skybrite_pf; 
       }	
 
 
-      /* *************************************** */
-      /* ********* CALCULATE SKYBRITE ********** */
-      /* *************************************** */
-      if (flag_updateskybrite || flag_updateskysigma) {
-	/* retrieve overall scaling from image */
-       if (flag_fast)
-	 retrievescale_fast(&output,scaleregionn,scalesort,flag_verbose,
-		      &skybrite,&mode,&skysigma);
-       else
-	 retrievescale(&output,scaleregionn,scalesort,flag_verbose,
-		      &skybrite,&mode,&skysigma);
-	sprintf(event,"Image SKYBRITE = %10.4e & SKYSIGMA = %10.4e",
-		skybrite,skysigma);
-	reportevt(flag_verbose,QA,1,event);
-      }
-
+      /* Calculation for sky brightness (SKYBRITE/SKYSIGMA) moved from here by RAG */
+      /* Needs to occur before fringe correction (or sky value is altered) */
 
       /* *********************** */
       /* **** SAVE RESULTS ***** */
