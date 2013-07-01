@@ -333,8 +333,8 @@ int ImCorrect(int argc,char *argv[])
       imtypename[6][10]={"","IMAGE","VARIANCE","MASK","SIGMA","WEIGHT"};
     float	scale,offset,gasdev(),scale_interpolate,maxsaturate,imval,
       overscanA=0.0,overscanB=0.0,scalefactor,mode,ran1(),
-      *randnum=NULL,*vecsort,*scalesort,skybrite,skybrite_fr,skybrite_pf,
-      skysigma,skysigma_fr,skysigma_pf,thresholdval;
+      *randnum=NULL,*vecsort,*scalesort,skybrite,skybrite_fr,skybrite_kv,skybrite_pf,
+      skysigma,skysigma_fr,skysigma_kv,skysigma_pf,thresholdval;
     desimage bias,photflat,flat,darkimage,data,output,bpm,illumination,
       fringe,pupil,nosource;
     float *lutx;
@@ -2097,12 +2097,12 @@ int ImCorrect(int argc,char *argv[])
 	/* retrieve overall scaling from image */
        if (flag_fast)
 	 retrievescale_fast(&output,scaleregionn,scalesort,flag_verbose,
-		      &skybrite,&mode,&skysigma);
+		      &skybrite_kv,&mode,&skysigma_kv);
        else
 	 retrievescale(&output,scaleregionn,scalesort,flag_verbose,
-		      &skybrite,&mode,&skysigma);
+		      &skybrite_kv,&mode,&skysigma_kv);
 	sprintf(event,"Image SKYBRITE = %10.4e & SKYSIGMA = %10.4e",
-		skybrite,skysigma);
+		skybrite_kv,skysigma_kv);
 	reportevt(flag_verbose,QA,1,event);
       }
 	
@@ -2454,14 +2454,14 @@ int ImCorrect(int argc,char *argv[])
 	}
       }
       if (flag_updateskysigma) 
-	if (fits_update_key_flt(output.fptr,"SKYSIGMA",skysigma,7,
+	if (fits_update_key_flt(output.fptr,"SKYSIGMA",skysigma_kv,7,
 				"Sky Sigma (ADU)",&status)) {
 	  sprintf(event,"Writing SKYSIGMA failed: %s",output.name+1);
 	  reportevt(flag_verbose,STATUS,5,event);
 	  printerror(status);
 	}
       if (flag_updateskybrite) 
-	if (fits_update_key_flt(output.fptr,"SKYBRITE",skybrite,7,
+	if (fits_update_key_flt(output.fptr,"SKYBRITE",skybrite_kv,7,
 				"Sky Brightness (ADU)",&status)) {
 	  sprintf(event,"Writing SKYBRITE failed: %s",output.name+1);
 	  reportevt(flag_verbose,STATUS,5,event);
