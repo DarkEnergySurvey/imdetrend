@@ -436,7 +436,7 @@ int main(int argc,char *argv[])
       crfract = 0.2;
     }else{
       sprintf(event,"Image with FWHM=%.2f (<3.3 pix) is not suitable for automatic detection of CR.\n",fwhm);
-      reportevt(flag_verbose,STATUS,4,event);
+      reportevt(flag_verbose,STATUS,3,event);
       exit(0);
     }
   }
@@ -457,7 +457,7 @@ int main(int argc,char *argv[])
       crsig2 = 2.0;
     }else{
       sprintf(event,"Image with FWHM=%.2f (<3.3 pix) is not suitable for automatic detection of CR.\n",fwhm);
-      reportevt(flag_verbose,STATUS,4,event);
+      reportevt(flag_verbose,STATUS,3,event);
       exit(0);
     }
   }
