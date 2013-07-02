@@ -318,8 +318,9 @@ int ImCorrect(int argc,char *argv[])
       flag_imphotflatten,flag_imillumination,flag_imfringe,
       flag_updateskybrite=NO,flag_updateskysigma=NO,minsize=4,maxsize=128,
       seed=-15,xlow,xhi,flag_mef=NO,flag_bpm_override=0,
-      ymax,ymin,dy,dx,loc,count,ylen,xlen,k,totpix,l,overscantype=0;
+      ymax,ymin,dy,dx,loc,ylen,xlen,k,totpix,l,overscantype=0;
     int flag_linear=NO,flag_lutinterp=YES,flag_imlinear=NO;
+    int count,maxcount,ncount,nlimit,rcount,rpos,amp_check,ramp_check;
     static int flag_fast=NO;
     static	int status=0;
     float       image_val;
@@ -1069,7 +1070,7 @@ int ImCorrect(int argc,char *argv[])
       }
     }
     /* create a mock bpm regardless */
-    else bpm=bias;	
+ /*   else bpm=bias;  */	
 		
     /* read illumination image */	
     if (flag_illumination) {
@@ -1425,7 +1426,7 @@ int ImCorrect(int argc,char *argv[])
       /* Fixable Columns are handled here */
       /* Currently this relies on BADPIX_SATURATE being set in a previous run (e.g. DECam_crosstalk) */
 
-/*      if (flag_fixcol) fixCol(bpm,output); */
+      if (flag_fixcol) fixCol(bpm,output); 
 
       /* Now the variance image section.  First allocate the space. */
 
@@ -1683,7 +1684,7 @@ int ImCorrect(int argc,char *argv[])
             if (flag_newvarim){
                /* Obtain initial uncertainty estimate */
 /*               printf("Obtaining initial uncertainty estimate\n"); */
-               if (!output.mask[i]){
+               if ((!output.mask[i])||(output.mask[i]==BADPIX_FIX)){
                   if(column_in_section((i%output.axes[0])+1,output.ampsecan)){
                      /* in AMP A section */	      
 	             uncval=Squ((double)output.rdnoiseA/(double)output.gainA);
@@ -1720,7 +1721,10 @@ int ImCorrect(int argc,char *argv[])
             }
             /* Add in uncertainty from bias subtraction if applicable */
 
-	    if (flag_bias && bias.varim[i]>0.0){uncval+=1.0/(double)bias.varim[i];}
+	    if (flag_bias && (bias.varim[i]>0.0) && 
+                ((!output.mask[i])||(output.mask[i]==BADPIX_FIX))){
+               uncval+=1.0/(double)bias.varim[i];
+            }
 
             /* Linearity Correction */
    
@@ -1751,7 +1755,9 @@ int ImCorrect(int argc,char *argv[])
                if (flat.image[i]>0.){
                   image_val/=flat.image[i];
 	          uncval/=Squ((double)flat.image[i]);
-	          if (flat.varim[i]>0.0) uncval+=1.0/((double)flat.varim[i]);
+	          if ((flat.varim[i]>0.0)&&((!output.mask[i])||(output.mask[i]==BADPIX_FIX))){
+                     uncval+=1.0/((double)flat.varim[i]);
+                  }
                }else{
                   image_val=0.0;
 	          uncval=0.0;
@@ -1951,25 +1957,26 @@ int ImCorrect(int argc,char *argv[])
 	  if (nosource.image==NULL) {
 	    reportevt(flag_verbose,STATUS,5,
 		      "Calloc of nosource.image failed");
-	    exit(0);
+	    exit(1);
 	  }
-	  count=Squ(2*maxsize);
-	  vecsort=(float *)calloc(count,sizeof(float));
+	  ncount=(int)Squ(2*maxsize);
+	  vecsort=(float *)calloc(ncount,sizeof(float));
 	  if (vecsort==NULL) {
 	    reportevt(flag_verbose,STATUS,5,"Calloc of vecsort failed");
-	    exit(0);
+	    exit(1);
 	  }
-	  randnum=(float *)calloc(count,sizeof(float));
+	  randnum=(float *)calloc(ncount,sizeof(float));
 	  if (randnum==NULL) {
 	    reportevt(flag_verbose,STATUS,5,"Calloc of randnum failed");
-	    exit(0);
+	    exit(1);
 	  }
-	  for (i=0;i<count;i++) randnum[i]=ran1(&ranseed);
+	  for (i=0;i<ncount;i++) randnum[i]=ran1(&ranseed);
 	}
 
 	/* ************************************************************ */
 	/* ********** smooth the input image to create sky image ****** */
 	/* ************************************************************ */
+        rcount=0;
 	for (y=0;y<output.axes[1];y++) {
 	  if (y%200==1 && flag_verbose) {printf(".");fflush(stdout);}
 	  dy=maxsize;
@@ -1986,36 +1993,65 @@ int ImCorrect(int argc,char *argv[])
 	    xmin=x-dx;if (xmin<0) xmin=0;
 	    xmax=x+dx;if (xmax>output.axes[0]) xmax=output.axes[0];
 	    loc=x+y*output.axes[0];
-	    /* extract median */
-	    count=0;
-	    ylen=ymax-ymin;
-	    xlen=xmax-xmin;
-	    totpix=ylen*xlen;
-	    /* use all the pixels */
-	    if (ylen*xlen<MAXPIXELS)
-	      for (k=ymin;k<ymax;k++) for (l=xmin;l<xmax;l++)
-					vecsort[count++]=output.varim[l+k*output.axes[0]];
-	    else /* randomly choose the pixels */
-	      while (count<MAXPIXELS) {
-		k=ymin+(int)(totpix*randnum[count])/xlen;
-		if (k>=ymax) k=ymax-1;
-		l=xmin+(int)(totpix*randnum[count])%xlen;
-		if (l>=xmax) l=xmax-1;
-		vecsort[count++]=output.varim[l+k*output.axes[0]];
-	      }
-
-	      if (flag_fast)
-                  nosource.image[loc] = quick_select(vecsort, count);
-	      else
-	      {
-		/* sort */
-		shell(count,vecsort-1);
-		/* odd or even number of pixels */
-		if (count%2) nosource.image[loc]=vecsort[count/2];
-		else nosource.image[loc]=0.5*(vecsort[count/2]+vecsort[count/2-1]);
-	      }
-	  }
-	}
+            if ((!output.mask[loc])||(output.mask[loc]==BADPIX_FIX)){
+	       /* extract median */
+	       count=0;
+               amp_check=column_in_section((loc%output.axes[0])+1,output.ampsecan);
+	       ylen=ymax-ymin;
+	       xlen=xmax-xmin;
+	       totpix=ylen*xlen;
+	       /* use all the pixels */
+	       if (ylen*xlen<MAXPIXELS){
+	         for (k=ymin;k<ymax;k++){
+                    for (l=xmin;l<xmax;l++){
+                       rpos=l+k*output.axes[0];
+                       if ((!output.mask[rpos])||(output.mask[rpos]==BADPIX_FIX)){
+                          ramp_check=column_in_section((rpos%output.axes[0])+1,output.ampsecan);
+                          if (ramp_check == amp_check){
+                             vecsort[count++]=output.varim[rpos];
+                          }
+                       }
+                    } 
+                  }
+	       }else{ /* randomly choose the pixels */
+                 maxcount=0;
+                 /* added sanity check to check that no more than the number of
+                    possible samples are tried */
+	         while ((count<MAXPIXELS)&&(maxcount < ncount)){
+                    rcount=rcount+19;
+                    maxcount++;
+                    if (rcount >= ncount){ rcount=rcount-ncount;}
+		    k=ymin+(int)(totpix*randnum[rcount])/xlen;
+	            if (k>=ymax) k=ymax-1;
+	            l=xmin+(int)(totpix*randnum[rcount])%xlen;
+	            if (l>=xmax) l=xmax-1;
+                    rpos=l+k*output.axes[0];
+                    if ((!output.mask[rpos])||(output.mask[rpos]==BADPIX_FIX)){
+                       ramp_check=column_in_section((rpos%output.axes[0])+1,output.ampsecan);
+                       if (ramp_check == amp_check){
+	    	          vecsort[count++]=output.varim[rpos];
+                       }
+                    }
+	         }
+               }
+               if (count > 1){
+                  if (flag_fast){
+                     nosource.image[loc] = quick_select(vecsort, count);
+	          }else{
+	             /* sort */
+                     shell(count,vecsort-1);
+	             /* odd or even number of pixels */
+	             if (count%2) nosource.image[loc]=vecsort[count/2];
+                     else nosource.image[loc]=0.5*(vecsort[count/2]+vecsort[count/2-1]);
+                   }
+	        }else{
+                   nosource.image[loc]=output.varim[loc];
+                }
+             }else{
+                nosource.image[loc]=output.varim[loc];
+             }
+          } /* xloop */
+        } /* yloop */
 	/* copy source removed image over */
 	/* take care only to replace non-zero weights */
 	if (output.variancetype==DES_VARIANCE || 
@@ -2046,13 +2082,13 @@ int ImCorrect(int argc,char *argv[])
 	    xlow=i-1;
 	    if (xlow < 0) xlow = 0;
 #define INTERP_WIDTH  2
-	    while (output.mask[xlow]>0 && xlow > 0) {
+	    while ((output.mask[xlow]>0)&&(output.mask[xlow]!=BADPIX_FIX)&&(xlow > 0)){
 	      if ((i - xlow) == INTERP_WIDTH+1) break; 
 	      xlow--;
 	    }
 	    xhi=i+1;
 	    if (xhi > output.npixels) xhi = output.npixels;
-	    while (output.mask[xhi]>0 && xhi < output.npixels){ 
+	    while ((output.mask[xhi]>0)&&(output.mask[xhi]!=BADPIX_FIX)&&(xhi < output.npixels)){ 
 	      if ((xhi -i) == INTERP_WIDTH+1) break; 
 	      xhi++;
 	    }
