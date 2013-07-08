@@ -858,7 +858,7 @@ int MakeBleedMask(const char *argv[])
   // -- edgebleed detection and processing
   //  Morph::ImageDataType hole_detection_level = 3.0;
   short BADPIX_HOLE = BADPIX_TRAIL;
-  int NPIX_EDGEBLEED = 5000;
+  int NPIX_EDGEBLEED = 1000;
   // --------------------------
 
   // define the levels at which the threshold the image
@@ -878,7 +878,7 @@ int MakeBleedMask(const char *argv[])
     Morph::BoxType box;
     std::sort(satblob.begin(),satblob.end());
     Morph::GetBlobBoundingBox(satblob,Nx,Ny,box);
-    if(box[2] <= 20 && box[3] >= (Ny - 20))
+    if(box[2] <= 20 || box[3] >= (Ny - 20))
       suspect_edge_bleed = true;
   }
   if(suspect_edge_bleed){
@@ -907,6 +907,8 @@ int MakeBleedMask(const char *argv[])
     // If so, it is a positive edgebleed detection;
     // If not, then warn about strange low section in image
     std::vector<Morph::BlobType>::iterator hbi   = hole_blobs.begin();
+    Morph::IndexType edgebleed_y_lower = 0;
+    Morph::IndexType edgebleed_y_upper = 0;
     while(hbi != hole_blobs.end()){
       int blobno = hbi - hole_blobs.begin() + 1;
       Morph::BlobType &blob = *hbi++;
@@ -950,7 +952,14 @@ int MakeBleedMask(const char *argv[])
       }
     }
     // ******** End Edge Bleed Detection ************
-
+    if(y10 < y00) 
+      y10 = y00;
+    else 
+      y00 = y10;
+    if(y01 > 0 && y01 < y11)
+      y11 = y01;
+    else if(y11 > 0 && y11 < y01)
+      y01 = y11;
   
     // If possible edge bleed is detected, then recalculate image statistics
     // with edge bleed masked out - and then make sure to use global
@@ -1398,7 +1407,7 @@ int MakeBleedMask(const char *argv[])
     //  adds the box to our list of blob boxes
     trail_boxes.push_back(box);
     // if the box comes near the edge, edgebleed is confirmed
-    if((box[2] <= npix_edge) && (box[3] >= (Ny - npix_edge-1))){
+    if((box[2] <= npix_edge)||(box[3] >= (Ny - npix_edge-1))){
       edge_bleed_detected = true;
       edge_bleed_blob_indices.push_back(blobno);
       if(box[0] < ampx)
@@ -1429,10 +1438,9 @@ int MakeBleedMask(const char *argv[])
   // in the output mask.
   if(edge_bleed_detected){
     Out.str("");
-    Out << "Warning: Edgebleed confirmed, masking out affected edge.";
-    LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
+    Out << "Warning: Edgebleed confirmed, masking out affected edge (";
+    std::vector<Morph::IndexType> box(4,0);
     if(bl_bleed){
-      std::vector<Morph::IndexType> box(4,0);
       box[0] = 0;
       box[1] = ampx-1;
       box[2] = 0;
@@ -1446,7 +1454,6 @@ int MakeBleedMask(const char *argv[])
       } 
     }
     if(tl_bleed){
-      std::vector<Morph::IndexType> box(4,0);
       box[0] = 0;
       box[1] = ampx-1;
       box[2] = y01;
@@ -1461,11 +1468,11 @@ int MakeBleedMask(const char *argv[])
       } 
     }
     if(br_bleed){
-      std::vector<Morph::IndexType> box(4,0);
       box[0] = ampx;
       box[1] = Nx-1;
       box[2] = 0;
       box[3] = y10;
+      
       //      edgebleed_boxes.push_back(box);
       for(Morph::IndexType by = box[2];by <= box[3];by++){
 	Morph::IndexType iminy = by*Nx;
@@ -1476,7 +1483,6 @@ int MakeBleedMask(const char *argv[])
       } 
     }
     if(tr_bleed){
-      std::vector<Morph::IndexType> box(4,0);
       box[0] = ampx;
       box[1] = Nx-1;
       box[2] = y11;
@@ -1489,6 +1495,9 @@ int MakeBleedMask(const char *argv[])
 	}
       } 
     }  
+    Out << box[0] << ":" << box[1] << "," << box[2] << ":" 
+	<< box[3] << ")";
+    LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
   }
   // profiler.FunctionExit("EdgeBleed");
   
