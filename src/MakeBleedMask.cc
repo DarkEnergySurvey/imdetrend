@@ -1787,7 +1787,7 @@ int MakeBleedMask(const char *argv[])
 	imjacobian[0] = FitsTools::GetHeaderValue<double>(Inimage.ImageHeader(),"CD1_1");
 	imjacobian[1] = FitsTools::GetHeaderValue<double>(Inimage.ImageHeader(),"CD1_2");
 	imjacobian[2] = FitsTools::GetHeaderValue<double>(Inimage.ImageHeader(),"CD2_1");
-	imjacobian[3] = FitsTools::GetHeaderValue<double>(Inimage.ImageHeader(),"CD3_1");
+	imjacobian[3] = FitsTools::GetHeaderValue<double>(Inimage.ImageHeader(),"CD2_2");
 	convert_to_arcsecs = std::sqrt(imjacobian[0]*imjacobian[0] + imjacobian[1]*imjacobian[1]);
 	convert_to_arcsecs += std::sqrt(imjacobian[2]*imjacobian[2] + imjacobian[3]*imjacobian[3]);
 	convert_to_arcsecs *= 1800.0;
