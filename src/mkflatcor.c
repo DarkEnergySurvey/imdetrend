@@ -229,6 +229,9 @@ int MakeFlatCorrection(int argc,char *argv[])
   int  ihdu,nhdunum;
   long found_ccdnum;
 
+  /* variables to keep track of min/max date from nite header */
+  char nite[80], mindate[80]="99999", maxdate[80]="0000", sawdate = 0;
+
   enum {OPT_AVERAGE=1,OPT_AVSIGCLIP,OPT_AVMINMAXCLIP,OPT_MEDIAN,OPT_SCALE,OPT_NOSCALE,
 	OPT_BIAS,OPT_LINEAR,OPT_BPM,OPT_PUPIL,OPT_FLATTYPE,OPT_VARIANCETYPE,OPT_IMAGE_COMPARE,
 	OPT_VERBOSE,OPT_HELP,OPT_VERSION};
@@ -606,6 +609,21 @@ int MakeFlatCorrection(int argc,char *argv[])
 	  reportevt(flag_verbose,STATUS,5,event);
 	  printerror(status);
 	}
+
+        /* collect min/max nite keys*/
+	if (fits_read_key_str(fptr,"NITE",nite,comment,&status) == KEY_NO_EXIST) {
+          sprintf(event, "NITE keywordk not found in %s, we may not get a complete {MAX,MIN}DATE range", imagename);
+	  reportevt(flag_verbose,STATUS,5,event);
+        } else {
+          sawdate = 1;
+          if (0 > strcmp(nite,mindate)) {
+             strncpy(mindate,nite,80);
+          }
+          if (0 < strcmp(nite,maxdate)) {
+             strncpy(maxdate,nite,80);
+          }
+        }
+
 	/* confirm OBSTYPE */
 	/* 	if (fits_read_key_str(fptr,"OBSTYPE",obstype,comment,&status)== */
 	/* 	    KEY_NO_EXIST) { */
@@ -1632,6 +1650,22 @@ int MakeFlatCorrection(int argc,char *argv[])
     sprintf(event,"Image writing failed: %s",output.name+1);
     reportevt(flag_verbose,STATUS,5,event);
     printerror(status);
+  }
+
+  /* output min/max nite date info */
+  if (sawdate) {
+    if (fits_write_key_str(output.fptr,"MINDATE",mindate,
+			   "Earliest NITE covered",&status)) {
+      sprintf(event,"Writing MINDATE=%s failed: %s",mindate,output.name+1);
+      reportevt(flag_verbose,STATUS,5,event);
+      printerror(status);  
+    }
+    if (fits_write_key_str(output.fptr,"MAXDATE",maxdate,
+			   "Latest NITE covered",&status)) {
+      sprintf(event,"Writing MAXDATE=%s failed: %s",mindate,output.name+1);
+      reportevt(flag_verbose,STATUS,5,event);
+      printerror(status);  
+    }
   }
 	  
   /* write basic information into the header */

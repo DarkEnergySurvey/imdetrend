@@ -159,6 +159,9 @@ MakeBiasCorrection(int argc,char *argv[])
   time_t	tm;
   desimage *data=NULL,template,datain,output;
   fitsfile *fptr=NULL;
+
+  /* variables to keep track of min/max date from nite header */
+  char nite[80], mindate[80]="99999", maxdate[80]="0000", sawdate = 0;
   
   enum {OPT_AVERAGE=1,OPT_AVSIGCLIP,OPT_MEDIAN,OPT_AVMINMAXCLIP,OPT_VARIANCETYPE,
 	OPT_IMAGE_COMPARE,OPT_VERBOSE,OPT_HELP,OPT_VERSION};
@@ -439,6 +442,21 @@ MakeBiasCorrection(int argc,char *argv[])
 	  reportevt(flag_verbose,STATUS,5,event);
 	  exit(0);
 	}
+
+                /* collect min/max nite keys*/
+        if (fits_read_key_str(fptr,"NITE",nite,comment,&status) == KEY_NO_EXIST){
+          sprintf(event, "NITE keywordk not found in %s, we may not get a complete {MAX,MIN}DATE range", imagename);
+          reportevt(flag_verbose,STATUS,5,event);
+        } else {
+          sawdate = 1;
+          if (0 > strcmp(nite,mindate)) {
+             strncpy(mindate,nite,80);
+          }
+          if (0 < strcmp(nite,maxdate)) {
+             strncpy(maxdate,nite,80);
+          }
+        }
+
 	if (fits_close_file(fptr,&status)) {
 	  sprintf(event,"Input image didn't close: %s",imagename);
 	  reportevt(flag_verbose,STATUS,5,event);
@@ -1133,6 +1151,24 @@ MakeBiasCorrection(int argc,char *argv[])
     reportevt(flag_verbose,STATUS,5,event);
     printerror(status);  
   }
+
+  
+  /* output min/max nite date info */
+  if (sawdate) {
+    if (fits_write_key_str(output.fptr,"MINDATE",mindate,
+			   "Earliest NITE covered",&status)) {
+      sprintf(event,"Writing MINDATE=%s failed: %s",mindate,output.name+1);
+      reportevt(flag_verbose,STATUS,5,event);
+      printerror(status);
+    }
+    if (fits_write_key_str(output.fptr,"MAXDATE",maxdate,
+			   "Latest NITE covered",&status)) {
+      sprintf(event,"Writing MAXDATE=%s failed: %s",mindate,output.name+1);
+      reportevt(flag_verbose,STATUS,5,event);
+      printerror(status);
+    }
+  }
+
 	
   /* Write processing history into the header */
   /* get system time */
