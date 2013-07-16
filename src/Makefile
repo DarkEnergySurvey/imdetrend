@@ -133,6 +133,14 @@ DMWCS := ${DMWCS_LIB}/libwcs.a
 INCLUDE :=    	$(CCFITS_INCLUDE) /usr/include/cfitsio $(FFTW_INCLUDE) $(PSFEX_INCLUDE) $(SWARP_INCLUDE) ${WCS_INCLUDE} ${DMWCS_INCLUDE} ${PLPLOT_INCLUDE} $(IMSUPPORT_INCLUDE) 
 LIBS = $(FITSIO_LIB):$(NRECIPES_LIB):$(FFTW_LIB):$(PSFEX_LIB):$(SWARP_LIB):${WCS_LIB}:${DMWCS_LIB}:${PLPLOT_LIB}
 
+# Path setup for eups 1.2.30 package.
+INCLUDE := $(CFITSIO_SHARED_DIR)/include $(CCFITS_DIR)/include $(CCFITS_DIR)/include/CCfits $(FFTW_DIR)/include $(IMSUPPORT_DIR)/include $(SWARP_DIR)/include
+LIBS = $(NRECIPES_DIR)/lib $(FFTW_DIR)/lib $(SWARP_DIR)/lib $(CFITSIO_SHARED_DIR)/lib
+TPIX_FITS := $(SWARP_DIR)/lib/fits/libfits.a
+FITSIO := -lcfitsio
+CCFITS := $(CCFITS_DIR)/lib/libCCfits.so
+WCS_C := $(SWARP_DIR)/lib/wcs/libwcs_c.a
+NR2 := $(NRECIPES_DIR)/lib/libpress2ndkr.a
 
 # END Temp addition
 
@@ -166,6 +174,8 @@ CFLAGS := 	-O3 -g -Wall -Wno-unused-variable #-ftree-vectorize -ffast-math -msse
 override CPPFLAGS += $(addprefix -I ,$(INCLUDE))
 override CFLAGS += $(addprefix -I ,$(INCLUDE))
 
+override CPPFLAGS += $(addprefix -L ,$(LIBS))
+override CFLAGS += $(addprefix -L ,$(LIBS))
 
 ################################################################################
 # Targets for all executables:
@@ -257,7 +267,7 @@ all: $(EXE)
 ../bin/mkbpm:  mkbpm.o ${LIBIMSUPPORT}  
 	$(CC) $(CFLAGS) -o $@ $^  $(NR2) $(FITSIO) -lm
 ../bin/mkbleedmask: MakeBleedMask.o BleedTrail.o ${LIBIMSUPPORT} fitswcs.o   
-	$(CPPC) -o $@ $^ -L$(DES_PREREQ)/lib $(WCS_C) $(TPIX_FITS) $(FITSIO) -lCCfits -lm
+	$(CPPC) $(CFLAGS) -o $@ $^ -L$(DES_PREREQ)/lib $(WCS_C) $(TPIX_FITS) $(FITSIO) $(CCFITS) -lm
 ../bin/mkmask: mkmask.o mkstarmask.o fitswcs.o ${LIBIMSUPPORT} 
 	$(CC) $(CFLAGS) -o $@ $^  $(NR2) $(WCS_C) $(TPIX_FITS) $(FITSIO) -lm
 ../bin/maskcosmics: maskcosmics.o mkstarmask.o fitswcs.o ${LIBIMSUPPORT} 

@@ -447,6 +447,7 @@ MakeBiasCorrection(int argc,char *argv[])
         if (fits_read_key_str(fptr,"NITE",nite,comment,&status) == KEY_NO_EXIST){
           sprintf(event, "NITE keywordk not found in %s, we may not get a complete {MAX,MIN}DATE range", imagename);
           reportevt(flag_verbose,STATUS,5,event);
+          status=0;
         } else {
           sawdate = 1;
           if (0 > strcmp(nite,mindate)) {
