@@ -842,11 +842,12 @@ int MakeBleedMask(const char *argv[])
   Morph::IndexType y10 = 0;
   Morph::IndexType y11 = Ny;
   Morph::IndexType ampx = Nx/2;
+  Morph::IndexType nrows_detection = 20;
 
   // Using arbitrary number (200) here to be the max size
   // of an edgebleed bounding box's extent in Y.  
-  Morph::IndexType ytop = Ny - npix_edge;
-  Morph::IndexType ybottom = npix_edge;
+  Morph::IndexType ytop = Ny - (npix_edge+nrows_detection);
+  Morph::IndexType ybottom = (npix_edge+nrows_detection);
   
   // For indicating whether edgebleed was 
   // actually detected on a given edge.
@@ -875,19 +876,26 @@ int MakeBleedMask(const char *argv[])
   SatBlobImage.resize(0);
   Morph::BlobsType::iterator satblobit = SatBlobs.begin();
   bool suspect_edge_bleed = false;
+  bool suspect_edge_bleed_bottom = false;
+  bool suspect_edge_bleed_top = false;
   while((satblobit != SatBlobs.end()) && !suspect_edge_bleed){
     Morph::BlobType &satblob(*satblobit++);
     Morph::BoxType box;
     std::sort(satblob.begin(),satblob.end());
     Morph::GetBlobBoundingBox(satblob,Nx,Ny,box);
-    if(box[2] <= 20 || box[3] >= (Ny - 20))
-      suspect_edge_bleed = true;
+    if(box[2] <= 20)
+      suspect_edge_bleed_bottom = true;
+    if(box[3] >= (Ny - 20))
+      suspect_edge_bleed_top = true;
   }
+  suspect_edge_bleed = (suspect_edge_bleed_bottom || suspect_edge_bleed_top); 
   if(suspect_edge_bleed){
     // Give a quick status message to indicate potential edgebleed.
     if(flag_verbose){
       Out.str("");
-      Out << "Checking for possible edgebleed.";
+      Out << "Checking for possible edgebleed on "
+	  << ((suspect_edge_bleed_bottom && suspect_edge_bleed_top) ? "both edges." : 
+	      (suspect_edge_bleed_bottom ? "bottom edge." : "top edge."));
       LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
     }
     // This sets BADPIX_LOW (in a temporary mask) for the low pixels
@@ -927,8 +935,8 @@ int MakeBleedMask(const char *argv[])
 	      y00 = box[3];
 	  } else if((box[3] >= ytop) && (box[2] > ybottom)){ // box collides with top image boundary (and not the bottom)
 	    tl_bleed = true;
-	    if(box[3] < y01)
-	      y01 = box[3];
+	    if(box[2] < y01)
+	      y01 = box[2];
 	  } else { // box didn't collide with the image boundary; or it collided with both (it's weird)
 	    Out.str("");
 	    Out << "Warning: Detected anomalous low section in image near ("
@@ -942,8 +950,8 @@ int MakeBleedMask(const char *argv[])
 	      y10 = box[3];
 	  } else if((box[3] >= ytop) && (box[2] > ybottom)){ // box collides with top image boundary
 	    tr_bleed = true;
-	    if(box[3] < y11)
-	      y11 = box[3];
+	    if(box[2] < y11)
+	      y11 = box[2];
 	  } else{ // box didn't collide with the image boundary; it's weird
 	    Out.str("");
 	    Out << "Warning: Detected anomalous low section in image near ("
