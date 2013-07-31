@@ -1426,15 +1426,16 @@ int MakeBleedMask(const char *argv[])
       edge_bleed_detected = true;
       edge_bleed_blob_indices.push_back(blobno);
       if(box[2] <= npix_edge){
-	if(box[0] < ampx)
+	if(box[0] < ampx){
 	  bl_bleed_trail = true;
-	if(box[1] >= ampx)
+	}
+	else if(box[0] >= ampx)
 	  br_bleed_trail = true;
       }
       if (box[3] >= (Ny - npix_edge - 1)){
 	if(box[0] < ampx)
 	  tl_bleed_trail = true;
-	if(box[1] >= ampx)
+	else if(box[0] >= ampx)
 	  tr_bleed_trail = true;	
       }
     }
@@ -1496,7 +1497,7 @@ int MakeBleedMask(const char *argv[])
 	}
       } 
     }
-    if(br_bleed){
+    if(br_bleed && br_bleed_trail){
       box[0] = ampx;
       box[1] = Nx-1;
       box[2] = 0;
@@ -1512,7 +1513,7 @@ int MakeBleedMask(const char *argv[])
 	}
       } 
     }
-    if(tr_bleed){
+    if(tr_bleed && tr_bleed_trail){
       box[0] = ampx;
       box[1] = Nx-1;
       box[2] = y11;
