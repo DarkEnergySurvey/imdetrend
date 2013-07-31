@@ -1172,15 +1172,15 @@ int MakeDarkCorrection(int argc,char *argv[])
 
   /* output min/max nite date info */
   if (sawdate) {
-    if (fits_write_key_str(output.fptr,"MINDATE",mindate,
+    if (fits_write_key_str(output.fptr,"MINNITE",mindate,
 			   "Earliest NITE covered",&status)) {
-      sprintf(event,"Writing MINDATE=%s failed: %s",mindate,output.name+1);
+      sprintf(event,"Writing MINNITE=%s failed: %s",mindate,output.name+1);
       reportevt(flag_verbose,STATUS,5,event);
       printerror(status);
     }
-    if (fits_write_key_str(output.fptr,"MAXDATE",maxdate,
+    if (fits_write_key_str(output.fptr,"MAXNITE",maxdate,
 			   "Latest NITE covered",&status)) {
-      sprintf(event,"Writing MAXDATE=%s failed: %s",mindate,output.name+1);
+      sprintf(event,"Writing MAXNITE=%s failed: %s",mindate,output.name+1);
       reportevt(flag_verbose,STATUS,5,event);
       printerror(status);
     }
