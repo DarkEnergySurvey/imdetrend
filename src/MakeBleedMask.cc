@@ -674,6 +674,11 @@ int MakeBleedMask(const char *argv[])
   }
 
   
+  int ccdnum = 0;
+  ccdnum = FitsTools::GetHeaderValue<int>(Inimage.ImageHeader(),"CCDNUM");
+  if(ccdnum < 0)
+    ccdnum = 0;
+  
   // Pixels with these bits set are ignored in bleedtrail detection
   short trail_rejection_mask  = BADPIX_CRAY | BADPIX_BPM;
   // Accept pixels with this bit set no matter what
@@ -860,8 +865,9 @@ int MakeBleedMask(const char *argv[])
   // -- edgebleed detection and processing
   //  Morph::ImageDataType hole_detection_level = 3.0;
   short BADPIX_HOLE = BADPIX_TRAIL;
-  int NPIX_EDGEBLEED = 1000;
-  int NPIXMAX_EDGEBLEED = 200000;
+  int NPIX_EDGEBLEED = 500; // how large should the "low" section be to get caught
+  int NPIXMAX_EDGEBLEED = 200000; // larger than this? probably not an edgebleed
+  int XSIZE_EDGEBLEED = 100; // must be extended at least this far in X to be caught
   // --------------------------
 
   // define the levels at which the threshold the image
@@ -878,14 +884,20 @@ int MakeBleedMask(const char *argv[])
   bool suspect_edge_bleed = false;
   bool suspect_edge_bleed_bottom = false;
   bool suspect_edge_bleed_top = false;
+  bool read_register_on_bottom = ((ccdnum > 31) || (ccdnum == 0));
+  bool read_register_on_top    = ((ccdnum < 32) || (ccdnum == 0));
+  Out << "Found read registers on " 
+      << (read_register_on_top ? (read_register_on_bottom ? 
+				  "top *and* bottom (i.e. ccdnum not resolved)." : "top.") : "bottom.");
+  LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
   while((satblobit != SatBlobs.end()) && !suspect_edge_bleed){
     Morph::BlobType &satblob(*satblobit++);
     Morph::BoxType box;
     std::sort(satblob.begin(),satblob.end());
     Morph::GetBlobBoundingBox(satblob,Nx,Ny,box);
-    if(box[2] <= 20)
+    if((box[2] <= 20) && read_register_on_bottom)
       suspect_edge_bleed_bottom = true;
-    if(box[3] >= (Ny - 20))
+    if((box[3] >= (Ny - 20)) && read_register_on_top)
       suspect_edge_bleed_top = true;
   }
   suspect_edge_bleed = (suspect_edge_bleed_bottom || suspect_edge_bleed_top); 
@@ -894,8 +906,9 @@ int MakeBleedMask(const char *argv[])
     if(flag_verbose){
       Out.str("");
       Out << "Checking for possible edgebleed on "
-	  << ((suspect_edge_bleed_bottom && suspect_edge_bleed_top) ? "both edges." : 
-	      (suspect_edge_bleed_bottom ? "bottom edge." : "top edge."));
+	  << ((suspect_edge_bleed_bottom && suspect_edge_bleed_top) ? "both edges " : 
+	      (suspect_edge_bleed_bottom ? "bottom edge " : "top edge "))
+	  << "because saturated blob(s) collide(s) with read registers.";
       LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
     }
     // This sets BADPIX_LOW (in a temporary mask) for the low pixels
@@ -923,17 +936,19 @@ int MakeBleedMask(const char *argv[])
       int blobno = hbi - hole_blobs.begin() + 1;
       Morph::BlobType &blob = *hbi++;
       int nblobpix = blob.size();
-      if((nblobpix > NPIX_EDGEBLEED) && (nblobpix < NPIXMAX_EDGEBLEED)){ // blob is of proper size
-	std::vector<Morph::IndexType> box;
-	// Sort the blob before bounding box determination
-	std::sort(blob.begin(),blob.end());
-	Morph::GetBlobBoundingBox(blob,Nx,Ny,box);
+      std::vector<Morph::IndexType> box;
+      // Sort the blob before bounding box determination
+      std::sort(blob.begin(),blob.end());
+      Morph::GetBlobBoundingBox(blob,Nx,Ny,box);
+      int xsize = box[1] - box[0];
+      if((nblobpix > NPIX_EDGEBLEED) && (nblobpix < NPIXMAX_EDGEBLEED) && 
+	 (xsize > XSIZE_EDGEBLEED)){ // blob is of proper size
 	if(box[0] < ampx){ // "left" side of chip
-	  if((box[2] <= ybottom) && (box[3] < ytop)){ // box collides with bottom image boundary (and not the top)
+	  if((box[2] <= ybottom) && (box[3] < ytop) && read_register_on_bottom){ // box collides with bottom image boundary (and not the top)
 	    bl_bleed = true;
 	    if(box[3] > y00)
 	      y00 = box[3];
-	  } else if((box[3] >= ytop) && (box[2] > ybottom)){ // box collides with top image boundary (and not the bottom)
+	  } else if((box[3] >= ytop) && (box[2] > ybottom) && read_register_on_top){ // box collides with top image boundary (and not the bottom)
 	    tl_bleed = true;
 	    if(box[2] < y01)
 	      y01 = box[2];
@@ -944,11 +959,11 @@ int MakeBleedMask(const char *argv[])
 	    LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
 	  }
 	} else { // "right" side of chip
-	  if((box[2]  <= ybottom) && (box[3] < ytop)){ // box collides with bottom image boundary (and not the top)
+	  if((box[2]  <= ybottom) && (box[3] < ytop) && read_register_on_bottom){ // box collides with bottom image boundary (and not the top)
 	    br_bleed = true;
 	    if(box[3] > y10)
 	      y10 = box[3];
-	  } else if((box[3] >= ytop) && (box[2] > ybottom)){ // box collides with top image boundary
+	  } else if((box[3] >= ytop) && (box[2] > ybottom) && read_register_on_top){ // box collides with top image boundary
 	    tr_bleed = true;
 	    if(box[2] < y11)
 	      y11 = box[2];
@@ -962,14 +977,6 @@ int MakeBleedMask(const char *argv[])
       }
     }
     // ******** End Edge Bleed Detection ************
-//     if(y10 < y00) 
-//       y10 = y00;
-//     else 
-//       y00 = y10;
-//     if(y01 > 0 && y01 < y11)
-//       y11 = y01;
-//     else if(y11 > 0 && y11 < y01)
-//       y01 = y11;
   
     // If possible edge bleed is detected, then recalculate image statistics
     // with edge bleed masked out - and then make sure to use global
@@ -983,7 +990,8 @@ int MakeBleedMask(const char *argv[])
       std::vector<Morph::MaskDataType> temp_mask2(temp_mask.begin(),temp_mask.end());
       if(bl_bleed){
 	Out.str("");
-	Out << "Warning: Detected possible edgebleed at (0:" << ampx-1 << ",0:" << y00 << ").";
+	Out << "Warning: Detected possible edgebleed with low blobs near read registers at (0:" 
+	    << ampx-1 << ",0:" << y00 << ")";
 	LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
 	std::vector<Morph::IndexType> box(4,0);
 	box[0] = 0;
@@ -1001,7 +1009,7 @@ int MakeBleedMask(const char *argv[])
       }
       if(tl_bleed){
 	Out.str("");
-	Out << "Warning: Detected possible edgebleed at (0:" << ampx-1 
+	Out << "Warning: Detected possible edgebleed with low blobs near read registers at (0:" << ampx-1 
 	    << "," << y01 << ":" << Ny-1 << ").";
 	LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
 	std::vector<Morph::IndexType> box(4,0);
@@ -1020,7 +1028,7 @@ int MakeBleedMask(const char *argv[])
       }
       if(br_bleed){
 	Out.str("");
-	Out << "Warning: Detected possible edgebleed at (" << ampx << ":" 
+	Out << "Warning: Detected possible edgebleed with low blobs near read registers at (" << ampx << ":" 
 	    << Nx-1 << ",0:" << y10 << ").";
 	LX::ReportMessage(flag_verbose,STATUS,3,Out.str());    
 	std::vector<Morph::IndexType> box(4,0);
@@ -1039,7 +1047,7 @@ int MakeBleedMask(const char *argv[])
       }
       if(tr_bleed){
 	Out.str("");
-	Out << "Warning: Detected possible edgebleed at (" << ampx << ":" 
+	Out << "Warning: Detected possible edgebleed with low blobs near read registers at (" << ampx << ":" 
 	    << Nx-1 << "," << y11 << ":" << Ny - 1 << ")."; 
 	LX::ReportMessage(flag_verbose,STATUS,3,Out.str());    
 	std::vector<Morph::IndexType> box(4,0);
@@ -1070,7 +1078,7 @@ int MakeBleedMask(const char *argv[])
 			  do_starmask,bleedmask_status);
 	return(WriteOutputImage(Inimage,ofilename,flag_verbose));
       } else if(flag_verbose){
-	Out << "Global image statistics converged (again) after NITER=" << niter 
+	Out << "Global image statistics (recalculated due to strongly suspected edgebleed) converged (again) after NITER=" << niter 
 	    << (niter==1 ? " iteration." : " iterations.") << std::endl; 
 	LX::ReportMessage(flag_verbose,QA,1,Out.str());
 	Out.str("");
@@ -1422,21 +1430,32 @@ int MakeBleedMask(const char *argv[])
     //  adds the box to our list of blob boxes
     trail_boxes.push_back(box);
     // if the box comes near the edge, edgebleed is confirmed
-    if((box[2] <= npix_edge)||(box[3] >= (Ny - npix_edge-1))){
+    if(((box[2] <= npix_edge) && read_register_on_bottom) ||
+       ((box[3] >= (Ny - npix_edge-1)) && read_register_on_top)){
       edge_bleed_detected = true;
-      edge_bleed_blob_indices.push_back(blobno);
-      if(box[2] <= npix_edge){
+      if((box[2] <= npix_edge)){
 	if(box[0] < ampx){
 	  bl_bleed_trail = true;
+	  if(bl_bleed)
+	    edge_bleed_blob_indices.push_back(blobno);
 	}
-	else if(box[0] >= ampx)
+	else if(box[0] >= ampx){
 	  br_bleed_trail = true;
+	  if(br_bleed)
+	    edge_bleed_blob_indices.push_back(blobno);
+	}
       }
       if (box[3] >= (Ny - npix_edge - 1)){
-	if(box[0] < ampx)
+	if(box[0] < ampx){
 	  tl_bleed_trail = true;
-	else if(box[0] >= ampx)
-	  tr_bleed_trail = true;	
+	  if(tl_bleed)
+	    edge_bleed_blob_indices.push_back(blobno);
+	}	    
+	else if(box[0] >= ampx){
+	  tr_bleed_trail = true;
+	  if(tr_bleed)
+	    edge_bleed_blob_indices.push_back(blobno);
+	}
       }
     }
   }
@@ -1528,7 +1547,7 @@ int MakeBleedMask(const char *argv[])
 	}
       } 
     }  
-    LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
+    LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
   }
   // profiler.FunctionExit("EdgeBleed");
   
