@@ -387,8 +387,8 @@ int MakeDarkCorrection(int argc,char *argv[])
 
         /* collect min/max nite keys*/
         if (fits_read_key_str(fptr,"NITE",nite,comment,&status) == KEY_NO_EXIST) {
-          sprintf(event, "NITE keywordk not found in %s, we may not get a complete {MAX,MIN}DATE range", imagename);
-          reportevt(flag_verbose,STATUS,5,event);
+          sprintf(event, "NITE keyword not found in %s, we may not get a complete {MAX,MIN}DATE range", imagename);
+          reportevt(flag_verbose,STATUS,3,event);
           status=0;
         } else {
           sawdate = 1;
