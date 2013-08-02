@@ -14,8 +14,8 @@
 #  A future simplification would be to group list of main targets with the same
 #  command and the same dependencies--reducing the number of explicit target definitions.
 #
+#  RAG added a line so that a new commit could supercede an erroneous checkin
 ################################################################################
-
 
 ################################################################################
 # Install and include locations.
@@ -27,7 +27,6 @@
 #        n.b IMSUPPORT_DIR can be set with a setup -r .  from imsuport/trunk (or similar)
 #
 #
-
 
 # $(info Using ${INCLUDE_FILE})
 # $(warning DES_HOME is $(DES_HOME) AND ${DES_HOME})
