@@ -423,12 +423,10 @@ int main(int argc,char *argv[])
     #If seeing >= 4.0 pix crfract = 0.2, crsig2 = 2
   */
 
-  if (!flag_crfract){
+  if (!flag_crfract && flag_nofwhm){
     crfract=0.1;
-    if (flag_nofwhm){
-        sprintf(event,"No FWHM measurement present. Defaulting to CRFRACT=%.2f\n",crfract);
-        reportevt(flag_verbose,STATUS,4,event);
-    }
+    sprintf(event,"No FWHM measurement present. Defaulting to CRFRACT=%.2f\n",crfract);
+    reportevt(flag_verbose,STATUS,4,event);
   }else{
     if (fwhm > 3.3 && fwhm < 4.0) {
       crfract = 0.15;
@@ -444,12 +442,10 @@ int main(int argc,char *argv[])
   reportevt(flag_verbose,STATUS,1,event);
   
 
-  if (!flag_crsig2){
+  if (!flag_crsig2 && flag_nofwhm){
     crsig2=1.0;
-    if (flag_nofwhm){
-      sprintf(event,"No FWHM measurement present.  Defaulting to CRSIG2=%.2f\n",crsig2);
-      reportevt(flag_verbose,STATUS,3,event);
-    }
+    sprintf(event,"No FWHM measurement present.  Defaulting to CRSIG2=%.2f\n",crsig2);
+    reportevt(flag_verbose,STATUS,3,event);
   }else{
     if (fwhm > 3.3 && fwhm < 4.0){
       crsig2 = 1.5;
