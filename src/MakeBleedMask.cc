@@ -872,9 +872,8 @@ int MakeBleedMask(const char *argv[])
 
   // define the levels at which the threshold the image
   // for detecting low pixels
-  double hole_level = image_stats[Image::IMMEAN] - hole_detection_level*image_stats[Image::IMSIGMA];
+  double hole_level = image_stats[Image::IMMEAN] - 5.0*image_stats[Image::IMSIGMA];
   double high_level = std::numeric_limits<Morph::ImageDataType>::max();
-
 
   Morph::BlobsType SatBlobs;
   std::vector<Morph::IndexType> SatBlobImage(npix,0);
@@ -889,7 +888,8 @@ int MakeBleedMask(const char *argv[])
   Out << "Found read registers on " 
       << (read_register_on_top ? (read_register_on_bottom ? 
 				  "top *and* bottom (i.e. ccdnum not resolved)." : "top.") : "bottom.");
-  LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
+  LX::ReportMessage(flag_verbose,STATUS,1,Out.str());  
+
   while((satblobit != SatBlobs.end()) && !suspect_edge_bleed){
     Morph::BlobType &satblob(*satblobit++);
     Morph::BoxType box;
@@ -911,18 +911,61 @@ int MakeBleedMask(const char *argv[])
 	  << "because saturated blob(s) collide(s) with read registers.";
       LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
     }
+    // Look through the rows by the read registers and find out
+    // if there are some rows with large numbers of negative pixels.
+    std::vector<Morph::IndexType> ndip(2,0);
+    Morph::IndexType bottom_y = npix_edge;
+    Morph::IndexType top_y = Ny - npix_edge - 1;
+    Morph::IndexType bottom_row = (read_register_on_bottom ? 
+				   (read_register_on_top ? top_y : bottom_y) : (top_y-14));
+    Morph::IndexType top_row    = (read_register_on_top ? 
+				   (read_register_on_bottom ? bottom_y : top_y) : (bottom_y+14));
+    for(Morph::IndexType rowin = bottom_row;rowin <= top_row;rowin++){
+      Morph::IndexType index_base = rowin*Nx;
+      for(Morph::IndexType pixin = 0;pixin < ampx;pixin++){
+	if(Inimage.DES()->image[index_base+pixin] < hole_level) ndip[0]++;
+	if(Inimage.DES()->image[index_base+ampx+pixin] < hole_level) ndip[1]++;
+	index_base++;
+      }
+    }
+    bool detected_dip_left  = (ndip[0] > 500);
+    bool detected_dip_right = (ndip[1] > 500);
+    bool strong_dip_left    = (ndip[0] > 1000);
+    bool strong_dip_right   = (ndip[1] > 1000);
+    if(detected_dip_left || detected_dip_right){
+      Out.str("");
+      Out << "Number of Low Pixels near read registers: (" << ndip[0] << "," 
+	  << ndip[1] << ")";
+      LX::ReportMessage(flag_verbose,STATUS,1,Out.str());  
+    } 
+    if(!(strong_dip_left || strong_dip_right)){
+      hole_detection_level *= 5.0;
+      Out.str("");
+      Out << "No edgebleed dips detected near read registers, resetting hole detection level to "
+	  << hole_detection_level << ".";
+      LX::ReportMessage(flag_verbose,STATUS,1,Out.str());  
+    }
+    hole_level = image_stats[Image::IMMEAN] - hole_detection_level*image_stats[Image::IMSIGMA];
     // This sets BADPIX_LOW (in a temporary mask) for the low pixels
     std::vector<Morph::MaskDataType> hole_mask(npix,0);
     std::vector<Morph::IndexType> hole_image(npix,0);
     std::vector<std::vector<Morph::IndexType> > hole_blobs;
     Morph::ThresholdImage(Inimage.DES()->image,&hole_mask[0],Nx,Ny,
 			  hole_level,high_level,BADPIX_LOW,BADPIX_SATURATE);  
+
+    // Erosion followed by Dilation will removed straggly connections 
+    // but preserve the effective extent of the bounding box for the large
+    // part of the "blob" - hopefully help to clean up these vastly overflagged
+    // edgebleeds.
+    Morph::ErodeMask(&hole_mask[0],Nx,Ny,structuring_element,BADPIX_LOW);
+    Morph::DilateMask(&hole_mask[0],Nx,Ny,structuring_element,BADPIX_LOW);
+
     // Update the temporary mask so that it knows about the image's BPM
     for(int jj = 0;jj < npix;jj++)
       if(Inimage.DES()->mask[jj] & BADPIX_BPM)
 	hole_mask[jj] |= BADPIX_BPM;
     // Get the blobs of BADPIX_LOW while respecing the BPM
-    Morph::GetBlobsWithRejection(&hole_mask[0],Nx,Ny,BADPIX_LOW,BADPIX_BPM,
+    Morph::GetBlobsWithRejection(&hole_mask[0],Nx,Ny,BADPIX_LOW,BADPIX_BPM|BADPIX_SATURATE,
 				 0,hole_image,hole_blobs);
   
     // Loop through the blobs and if a large (i.e. larger than NPIX_EDGEBLEED)
@@ -941,8 +984,8 @@ int MakeBleedMask(const char *argv[])
       std::sort(blob.begin(),blob.end());
       Morph::GetBlobBoundingBox(blob,Nx,Ny,box);
       int xsize = box[1] - box[0];
-      if((nblobpix > NPIX_EDGEBLEED) && (nblobpix < NPIXMAX_EDGEBLEED) && 
-	 (xsize > XSIZE_EDGEBLEED)){ // blob is of proper size
+      if((((nblobpix > NPIX_EDGEBLEED) && (xsize > XSIZE_EDGEBLEED)) || (detected_dip_left || detected_dip_right))
+	 && (nblobpix < NPIXMAX_EDGEBLEED)){ // blob is of proper size
 	if(box[0] < ampx){ // "left" side of chip
 	  if((box[2] <= ybottom) && (box[3] < ytop) && read_register_on_bottom){ // box collides with bottom image boundary (and not the top)
 	    bl_bleed = true;
@@ -953,12 +996,13 @@ int MakeBleedMask(const char *argv[])
 	    if(box[2] < y01)
 	      y01 = box[2];
 	  } else { // box didn't collide with the image boundary; or it collided with both (it's weird)
-	    Out.str("");
-	    Out << "Warning: Detected anomalous low section in image near ("
-		<< (box[0]+box[1])/2.0 << "," << (box[3]+box[2])/2.0 << ")";
-	    LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
+	    // 	    Out.str("");
+	    // 	    Out << "Warning: Detected anomalous low section in image near ("
+	    // 		<< (box[0]+box[1])/2.0 << "," << (box[3]+box[2])/2.0 << ")";
+	    //	    LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
 	  }
-	} else { // "right" side of chip
+	} 
+	if(box[1] >= ampx) { // "right" side of chip
 	  if((box[2]  <= ybottom) && (box[3] < ytop) && read_register_on_bottom){ // box collides with bottom image boundary (and not the top)
 	    br_bleed = true;
 	    if(box[3] > y10)
@@ -968,10 +1012,10 @@ int MakeBleedMask(const char *argv[])
 	    if(box[2] < y11)
 	      y11 = box[2];
 	  } else{ // box didn't collide with the image boundary; it's weird
-	    Out.str("");
-	    Out << "Warning: Detected anomalous low section in image near ("
-		<< (box[0]+box[1])/2.0 << "," << (box[3]+box[2])/2.0 << ")";
-	    LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
+	    // 	    Out.str("");
+	    // 	    Out << "Warning: Detected anomalous low section in image near ("
+	    // 		<< (box[0]+box[1])/2.0 << "," << (box[3]+box[2])/2.0 << ")";
+	    // 	    LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
 	  }
 	}
       }
@@ -1429,32 +1473,37 @@ int MakeBleedMask(const char *argv[])
     Morph::GetBlobBoundingBox(blob,Nx,Ny,box);
     //  adds the box to our list of blob boxes
     trail_boxes.push_back(box);
-    // if the box comes near the edge, edgebleed is confirmed
-    if(((box[2] <= npix_edge) && read_register_on_bottom) ||
-       ((box[3] >= (Ny - npix_edge-1)) && read_register_on_top)){
-      edge_bleed_detected = true;
-      if((box[2] <= npix_edge)){
-	if(box[0] < ampx){
-	  bl_bleed_trail = true;
-	  if(bl_bleed)
-	    edge_bleed_blob_indices.push_back(blobno);
+    // if the box is large enough and comes near the edge, edgebleed is possible
+    Morph::IndexType yside = box[3] - box[2];
+    double xpos = (box[1] + box[0])/2.0;
+    bool by_side = ((xpos < (10+npix_edge)) || (std::abs(xpos-ampx) < 10) || ((Nx-xpos) < (10+npix_edge)));
+    if(yside > 2000 || by_side){
+      if(((box[2] <= npix_edge) && read_register_on_bottom) ||
+	 ((box[3] >= (Ny - npix_edge-1)) && read_register_on_top)){
+	edge_bleed_detected = true;
+	if((box[2] <= npix_edge)){
+	  if(box[0] < ampx){
+	    bl_bleed_trail = true;
+	    if(bl_bleed) // both possible and detected earlier
+	      edge_bleed_blob_indices.push_back(blobno);
+	  }
+	  else if(box[0] >= ampx){
+	    br_bleed_trail = true;
+	    if(br_bleed) // both possible and detected earlier
+	      edge_bleed_blob_indices.push_back(blobno);
+	  }
 	}
-	else if(box[0] >= ampx){
-	  br_bleed_trail = true;
-	  if(br_bleed)
-	    edge_bleed_blob_indices.push_back(blobno);
-	}
-      }
-      if (box[3] >= (Ny - npix_edge - 1)){
-	if(box[0] < ampx){
-	  tl_bleed_trail = true;
-	  if(tl_bleed)
-	    edge_bleed_blob_indices.push_back(blobno);
-	}	    
-	else if(box[0] >= ampx){
-	  tr_bleed_trail = true;
-	  if(tr_bleed)
-	    edge_bleed_blob_indices.push_back(blobno);
+	if (box[3] >= (Ny - npix_edge - 1)){
+	  if(box[0] < ampx){
+	    tl_bleed_trail = true;
+	    if(tl_bleed) // both possible and detected earlier
+	      edge_bleed_blob_indices.push_back(blobno);
+	  }	    
+	  else if(box[0] >= ampx){
+	    tr_bleed_trail = true;
+	    if(tr_bleed) // both possible and detected earlier
+	      edge_bleed_blob_indices.push_back(blobno);
+	  }
 	}
       }
     }
