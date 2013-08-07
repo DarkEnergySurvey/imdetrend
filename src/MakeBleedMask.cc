@@ -2500,7 +2500,7 @@ void ModifyStarR(Morph::MaskDataType *mask,Morph::ImageDataType *image,
 		 double star_scalefactor,Morph::StatType &stats)
 {
   double starval = stats[Image::IMMEAN] + star_scalefactor*stats[Image::IMSIGMA];
-  double temp_r = 10.0*std::sqrt(star_r);
+  double temp_r = 20.0*std::sqrt(star_r);
   Morph::IndexType nbins = static_cast<Morph::IndexType>(temp_r + 1);  
   double binsize = temp_r/static_cast<double>(nbins);
   std::vector<std::vector<double> > starbins(nbins+1);
@@ -2545,6 +2545,8 @@ void ModifyStarR(Morph::MaskDataType *mask,Morph::ImageDataType *image,
   }
   if(done)
     star_r *= star_r;
+  else
+    star_r *= 400;
 }
 
 
