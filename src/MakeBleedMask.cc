@@ -1855,6 +1855,7 @@ int MakeBleedMask(const char *argv[])
   blob_image.resize(npix,0);
   saturated_blobs.resize(0);
   // This call populates the above two data structures
+  Morph::ErodeMask(Inimage.DES()->mask,Nx,Ny,structuring_element,BADPIX_STAR);
   Morph::GetBlobs(Inimage.DES()->mask,Nx,Ny,BADPIX_STAR,blob_image,saturated_blobs);
 
   if(flag_verbose){
@@ -2367,8 +2368,6 @@ int MakeBleedMask(const char *argv[])
     cy += (box[2]);
     cx -= .5;
     cy -= .5;
-    star_centers_x.push_back(cx);
-    star_centers_y.push_back(cy);
     
     // **** NOTE: This parameter controls the star radius detection.  It
     // is the number of sigma above which star levels are detected.
@@ -2390,6 +2389,8 @@ int MakeBleedMask(const char *argv[])
       std::cout << "Modified Stellar Radius(" << blobno << "): " << srstarr << std::endl;
 
     star_radii.push_back(srstarr);
+    star_centers_x.push_back(cx);
+    star_centers_y.push_back(cy);
 
     if(do_star_interp){
       // profiler.FunctionEntry("StarInterp");
