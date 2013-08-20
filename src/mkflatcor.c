@@ -1023,9 +1023,10 @@ int MakeFlatCorrection(int argc,char *argv[])
 
       /* BPM mask to supplement (logically or) existing mask) */
         if (bpm.mask[i]){
-          data.mask[i]|=BADPIX_BPM;
+          data[im].mask[i]|=BADPIX_BPM;
         }
       }
+      reportevt(flag_verbose,STATUS,1,"Set badpixel mask bit to BADPIX_BPM where bpm != 0");
     }
 
     /* ****************************************************************** */
