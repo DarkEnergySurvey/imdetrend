@@ -16,8 +16,9 @@ Basic Syntax: imcorrect <input image or list> <options>
     -fringe <image>
   Other input options:
     -scaleregion <Xmin:Xmax,Ymin,Ymax>
-    -overscantype <0-4 default=0>
-    -nooverscan
+    -maskweightzero [int/mask,def=913]
+    -maskdownweight [int/mask,def=2] 
+    -weightfactor [real,def=0.0]
   Output Options
     -output <image or file list>
     -MEF (single file output)
@@ -71,6 +72,13 @@ BPM (-bpm <image> or -obpm <image> ):
   is discarded and replaced by the values present in the BPM image.
   Pixels flagged in the BPM are not considered when calculating scale 
   factors.  This mask is later propagated into the output image.
+
+  A rich BPM format (one where the BPM may have values describing why a pixel
+  is flagged).  Currenty these values are not propagated into the output mask
+  with the exception that BPMDEF_EDGE currently propagates to BADPIX_EDGE.
+  Additionally pixels flagged with BPMDEF_CORR (correctable) are attempted
+  to be fixed when the -fixcol option is chosen.  When successful the BADPIX_BPM
+  flag is replaced with BADPIX_CORR (to indicate a revision to the data was made).
 
 Linerity Correction (-linear <lut>):
   This options causes a lookup table (lut) to be read which describes a
@@ -132,6 +140,48 @@ Scaling (-scaleregion)
   this argument.  Currently the same scale region is used throughout the
   code.
 
+Mask and Weight Interaction Options:
+  In previous versions interactions between masks and weights were hardcoded. 
+  With the introduction of a rich BPM format.  The capability to provide a 
+  wider range of behavior have become desirable.  The following options 
+  control that behavior.
+
+  -fixcol 
+
+  Allows optional code to attempt to "fix" pixels where the BPM has been set to
+  BPMDEF_CORR.  When successful the output mask inherits BADPIX_CORR otherwise
+  BADPIX_BPM will be propagated.
+
+  -interpolate_col <variance scaling>
+
+  When this option is chosen, an interpolation of pixels flagged as saturated
+  or bad (in the mask image) occurs for features (<2 columns wide).
+  The argument provides a downweight factor (i.e. the output weights which 
+  are scaled by the factor provided).  This value is currently restricted to 
+  be between 1. and 10.
+
+  -maskweightzero [int/mask,def=913]
+
+  In some cases it is desirable that pixels inherit a weight of 0.0 (to reflect 
+  that they should not be used for object detection or ignored with COADDing images.)
+  This options decides which mask bits will be set to have a weight of zero.  The
+  default value is 913 (the integer equivalenf of the logical OR betwee BADPIX_BPM,
+  BADPIX_CRAY, BADPIX_EDGEBLEED, BADPIX_SSXTALK, and BADPIX_EDGE)
+
+  -maskdownweight [int/mask,def=2], -weightfactor [real, def=0.0]
+
+  In other cases rather than inheriting a weight of zero it may be desirable to
+  downweight a pixel (thus, if a better value is available for COADD it would 
+  be used).  Similar to -maskweightzero the value for this mask causes this to
+  occur.  In order to prevent subsequent calls of imcorrect from repeatedly 
+  downweighting a pixel, this operation occurs within the initial detrending
+  loop (so is only active if one or more of the following detrending directives
+  are used: -bias, -dark, -linear, -flat, -bpm, -obpm, or -pupil).
+
+  The second option -weightfactor controls the amount of downweighting.  For
+  -variancetype WEIGHT the value is multiplied, for -variancetype SIGMA the 
+  value is divided.  The special case -weightfactor 0.0 causes weights to be
+  set to zero (for WEIGHT) and to 1e+10 (roughly INFINITE, for SIGMA).
 
 Output Options:
 
@@ -188,14 +238,11 @@ Weight/Uncertainty Images (-variancetype and -noisemodel):
   pattern within a box around each pixel with minumum dimension (-minsize) 
   near the image edges and with maximum dimension set by (-maxsize).
 
+  Currently pixels with mask values that correspond to -maskweightzero or
+  -maskdownweight are not included in this calculation.  Moreover, pixels that
+  have these mask values are not replaced with a smoothed value.
+
 Other Output Options:
-
-  -interpolate_col <variance scaling>
-
-  When this option is chosen, an interpolation of pixels flagged as saturated
-  or bad (in the mask image) occurs for features (2 columns wide or smaller).
-  The argument controls the output weights which are scaled by the factor
-  provided.  This value is currently restricted to be between 1. and 10.
 
   -updatesky
 
@@ -282,6 +329,9 @@ void print_usage(char *program_name)
       printf("    -fringe <image>\n");
       printf("  Other Input Options: \n");
       printf("    -scaleregion <Xmin:Xmax,Ymin,Ymax>\n");
+      printf("    -maskweightzero [int/mask,def=913]\n");
+      printf("    -maskdownweight [int/mask,def=2]\n");
+      printf("    -weightfactor [real,def=0.0]\n");
       printf("  Output Options:\n");
       printf("    -output <image or file list>\n");
       printf("    -MEF (single file output)\n");
@@ -298,12 +348,10 @@ void print_usage(char *program_name)
       printf("    -fast\n");
 }
 
-
-
 int ImCorrect(int argc,char *argv[])
 {
   
-  int	hdunum,x,y,nfound,imtype,c,
+  int	badpix_wgt0,badpix_downwgt,hdunum,x,y,nfound,imtype,c,
     xmin,xmax,anynull,maskedpixels,interppixels,
     saturatepixels,mkpath(),i,keysexist,j,n,nkeys,
     scaleregionn[4]={500,1500,1500,2500},
@@ -329,13 +377,13 @@ int ImCorrect(int argc,char *argv[])
     char	comment[1000],longcomment[10000],filter[100]="",imagename[1000],
       firstimage[1000],retry_firstimage[1000],
       bpmname[1000],rootname[1000],varimname[1000],outputlist[1000],input_list_name[1000],
-      linear_tab[1000],*striparchiveroot(),event[10000],command_line[1000],
+      linear_tab[1000],*striparchiveroot(),event[10000],command_line[5000],
       keycard[100],keyname[10],scaleregion[100],
       imtypename[6][10]={"","IMAGE","VARIANCE","MASK","SIGMA","WEIGHT"};
-    float	scale,offset,gasdev(),scale_interpolate,maxsaturate,imval,
+    float scale,offset,gasdev(),scale_interpolate,maxsaturate,imval,
       overscanA=0.0,overscanB=0.0,scalefactor,mode,ran1(),
       *randnum=NULL,*vecsort,*scalesort,skybrite,skybrite_fr,skybrite_kv,skybrite_pf,
-      skysigma,skysigma_fr,skysigma_kv,skysigma_pf,thresholdval;
+      skysigma,skysigma_fr,skysigma_kv,skysigma_pf,thresholdval,downweight_factor;
     desimage bias,photflat,flat,darkimage,data,output,bpm,illumination,
       fringe,pupil,nosource;
     float *lutx;
@@ -359,15 +407,36 @@ int ImCorrect(int argc,char *argv[])
     /* list of keywords to be removed from the header after imcorrect */
     char	delkeys[100][10]={"CCDSUM","TRIMSEC","BIASSECA","BIASSECB",""};
 
-    enum {OPT_BPM=1,OPT_OBPM,OPT_FIXCOL,OPT_BIAS,OPT_LINEAR,OPT_PUPIL,OPT_FLATTEN,OPT_DARKCOR,
-          OPT_PHOTFLATTEN,OPT_ILLUMINATION,OPT_FRINGE, OPT_SCALEREGION,OPT_OUTPUT,OPT_MEF,
-          OPT_VARIANCETYPE,OPT_NOISEMODEL,OPT_INTERPOLATE_COL,OPT_MINSIZE,OPT_MAXSIZE,
-          OPT_UPDATESKY,OPT_VERBOSE,OPT_VERSION,OPT_HELP,OPT_RANSEED};
-    
+    enum {OPT_BPM=1,OPT_OBPM,OPT_FIXCOL,OPT_BIAS,OPT_LINEAR,OPT_PUPIL,OPT_FLATTEN,
+          OPT_DARKCOR,OPT_PHOTFLATTEN,OPT_ILLUMINATION,OPT_FRINGE,
+          OPT_MASKWEIGHTZERO,OPT_MASKWEIGHTFACTOR,OPT_WEIGHTFACTOR,
+          OPT_SCALEREGION,OPT_OUTPUT,OPT_MEF,OPT_VARIANCETYPE,OPT_NOISEMODEL,
+          OPT_INTERPOLATE_COL,OPT_MINSIZE,OPT_MAXSIZE,OPT_UPDATESKY,
+          OPT_VERBOSE,OPT_VERSION,OPT_HELP,OPT_RANSEED};
+
     nosource.image = NULL;
     imoutnum = 0;
 
-    if(build_command_line(argc,argv,command_line,1000) <= 0){
+    /* DEFAULT definition of variables (type int) that incorporates        */
+    /* all bits which are to carry a weight of 0.0 in subsequent processing */
+    /* Once this is better understood perhaps it should become a definition */
+    /* or even command line parameters */
+
+    badpix_wgt0=0;
+    badpix_wgt0|=BADPIX_BPM;
+    badpix_wgt0|=BADPIX_CRAY;
+    badpix_wgt0|=BADPIX_EDGEBLEED;
+    badpix_wgt0|=BADPIX_SSXTALK;
+    badpix_wgt0|=BADPIX_EDGE;
+
+    badpix_downwgt=0;
+    badpix_downwgt|=BADPIX_SATURATE;
+   
+    downweight_factor=0.0;
+
+    /* Prepare for parsing the command line */
+
+    if(build_command_line(argc,argv,command_line,5000) <= 0){
       reportevt(2,STATUS,1,"Failed to record full command line.");
     }
 
@@ -379,7 +448,6 @@ int ImCorrect(int argc,char *argv[])
       print_usage(argv[0]);
       exit(1);
     }
-
 
     // ** PROCESS COMMAND LINE **
 
@@ -420,6 +488,9 @@ int ImCorrect(int argc,char *argv[])
 	  {"fringe",          required_argument, 0,OPT_FRINGE},
 	  {"scaleregion",     required_argument, 0,OPT_SCALEREGION},
 	  {"illumination",    required_argument, 0,OPT_ILLUMINATION},
+          {"maskweightzero",  required_argument, 0,OPT_MASKWEIGHTZERO},
+          {"maskdownweight",  required_argument, 0,OPT_MASKWEIGHTFACTOR},
+          {"weightfactor",    required_argument, 0,OPT_WEIGHTFACTOR},
 	  {"output",          required_argument, 0,OPT_OUTPUT},
 	  {"variancetype",    required_argument, 0,OPT_VARIANCETYPE},
 	  {"noisemodel",      required_argument, 0,OPT_NOISEMODEL},
@@ -624,6 +695,51 @@ int ImCorrect(int argc,char *argv[])
 	  command_line_errors++;
 	  exit(1);
 	}
+	break;
+      case OPT_MASKWEIGHTZERO: // -maskweightzero
+        cloperr = 0;
+	if(optarg){
+	  sscanf(optarg,"%d",&badpix_wgt0);
+	}
+	else cloperr = 1;
+	if(cloperr){
+	  reportevt(flag_verbose,STATUS,5,
+		    "Mask/Integer specification must follow -maskweightzero");
+	  command_line_errors++;
+	  exit(1);	 	  	  
+	}
+	break;
+      case OPT_MASKWEIGHTFACTOR: // -maskweightfactor
+        cloperr = 0;
+	if(optarg){
+	  sscanf(optarg,"%d",&badpix_downwgt);
+	}
+        else cloperr = 1;
+        if (cloperr){
+	  reportevt(flag_verbose,STATUS,5,
+		    "Mask/Integer specification must follow -maskweightfactor");
+	  command_line_errors++;
+	  exit(1);	 	  	  
+        }
+	break;
+      case OPT_WEIGHTFACTOR: // -weightfactor
+        cloperr = 0;
+	if(optarg){
+	  sscanf(optarg,"%f",&downweight_factor);
+	  if (downweight_factor<0.0){
+	    sprintf(event,"Weightfactor must be greater than or equal to zero (found %f)", downweight_factor);
+	    reportevt(flag_verbose,STATUS,5,event);
+	    command_line_errors++;
+	    exit(1);
+	  }
+	}
+        else cloperr = 1;
+        if (cloperr){
+	  reportevt(flag_verbose,STATUS,5,
+		    "Weightfactor specification must follow -weightfactor");
+	  command_line_errors++;
+	  exit(1);	 	  	  
+        }
 	break;
       case OPT_SCALEREGION: // -scaleregion
 	cloperr = 0;
@@ -909,7 +1025,6 @@ int ImCorrect(int argc,char *argv[])
       command_line_errors++;
       exit(1);
     }
-    
    
     // Finally, go ahead and fail if any command line errors were encountered - currently
     // this will only cause an exit if unrecognized/unknown options were passed to the
@@ -919,6 +1034,13 @@ int ImCorrect(int argc,char *argv[])
       reportevt(flag_verbose,STATUS,5,event);
       exit(1);
     }
+
+    /* Output information to log about the MASKs used to alter weights along with the factor that is applied */
+
+    sprintf(event," MASKWEIGHTZERO set to %d ",badpix_wgt0);
+    reportevt(flag_verbose,STATUS,1,event);
+    sprintf(event," MASKDOWNWEIGHT set to %d with weight factor or %8.2e ",badpix_downwgt,downweight_factor);
+    reportevt(flag_verbose,STATUS,1,event);
 
 
     vecsort=NULL;
@@ -1404,9 +1526,11 @@ int ImCorrect(int argc,char *argv[])
       if(flag_bpm){
          if(flag_bpm_override){
             /* case where BPM mask is supposed to override the existing mask -obpm */
+            /* added propagation of BPM=BPMDEF_EDGE into mask|=BADPIX_EDGE */
 	    for (i=0;i<output.npixels;i++){
                if (bpm.mask[i]){
                   output.mask[i] = BADPIX_BPM;
+                  if (bpm.mask[i]&BPMDEF_EDGE){output.mask[i]|=BADPIX_EDGE;}
                }else{
                   output.mask[i]=0;
                }
@@ -1414,9 +1538,11 @@ int ImCorrect(int argc,char *argv[])
             reportevt(flag_verbose,STATUS,1," BPM override chosen.  Reinitialized mask to match BPM ");
 	 }else{
             /* case where BPM mask is supposed to supplement (logically or) existing mask) -bpm */
+            /* added propagation of BPM=BPMDEF_EDGE into mask|=BADPIX_EDGE */
             for (i=0;i<output.npixels;i++){
                if (bpm.mask[i]){
                   output.mask[i]|=BADPIX_BPM;
+                  if (bpm.mask[i]&BPMDEF_EDGE){output.mask[i]|=BADPIX_EDGE;}
                }
             }
             reportevt(flag_verbose,STATUS,1," BPM merge chosen.  Merged BPM with initial mask ");
@@ -1453,23 +1579,6 @@ int ImCorrect(int argc,char *argv[])
          /* still the possibility that no variance calculation is requested? */
       }
 
-//      /* prepare space for the bad pixel mask and initialize */
-//      if (data.mask==NULL) {
-//	reportevt(flag_verbose,STATUS,1,"Creating new output mask.");
-//	/* prepare image for mask == assumes mask is not yet present*/
-//	output.mask=(short *)calloc(output.npixels,sizeof(short));
-//	if (output.mask==NULL) {
-//	  reportevt(flag_verbose,STATUS,5,"Calloc of output.mask failed");
-//	  exit(0);
-//	}
-//	if (flag_bpm){ /* copy mask over */
-//	  reportevt(flag_verbose,STATUS,1,"Coping BPM into output mask.");
-//	  for (i=0;i<output.npixels;i++) output.mask[i]=bpm.mask[i];
-//	}
-//	else{  /* start with clean slate */
-//	}
-//      }
-      
       /* *************************************************/
       /* ******** Confirm Correction Image Sizes  ********/
       /* *************************************************/	  
@@ -1481,49 +1590,49 @@ int ImCorrect(int argc,char *argv[])
 		  bpm.name,bpm.axes[0],bpm.axes[1],
 		  output.name,output.axes[0],output.axes[1]);
 	  reportevt(flag_verbose,STATUS,5,event);
-	  exit(0);
+	  exit(1);
 	}
 	if (output.axes[i]!=bias.axes[i] && flag_bias) {
 	  sprintf(event,"BIAS image %s (%ldX%ld) different size than science image %s       (%ldX%ld)",
 		  bias.name,bias.axes[0],bias.axes[1],
 		  output.name,output.axes[0],output.axes[1]);
 	  reportevt(flag_verbose,STATUS,5,event);
-	  exit(0);
+	  exit(1);
 	}
 	if (output.axes[i]!=flat.axes[i] && flag_flatten) {
 	  sprintf(event,"FLAT image %s (%ldX%ld) different size than science image %s       (%ldX%ld)",
 		  flat.name,flat.axes[0],flat.axes[1],
 		  output.name,output.axes[0],output.axes[1]);
 	  reportevt(flag_verbose,STATUS,5,event);
-	  exit(0);
+	  exit(1);
 	}
 	if (output.axes[i]!=fringe.axes[i] && flag_fringe) {
 	  sprintf(event,"FRINGE image %s (%ldX%ld) different size than science image %s       (%ldX%ld)",
 		  fringe.name,fringe.axes[0],fringe.axes[1],
 		  output.name,output.axes[0],output.axes[1]);
 	  reportevt(flag_verbose,STATUS,5,event);
-	  exit(0);
+	  exit(1);
 	}
 	if (output.axes[i]!=pupil.axes[i] && flag_pupil) {
 	  sprintf(event,"PUPIL GHOST image %s (%ldX%ld) different size than science image %s       (%ldX%ld)",
 		  pupil.name,pupil.axes[0],pupil.axes[1],
 		  output.name,output.axes[0],output.axes[1]);
 	  reportevt(flag_verbose,STATUS,5,event);
-	  exit(0);
+	  exit(1);
 	}
 	if (output.axes[i]!=photflat.axes[i] && flag_photflatten) {
 	  sprintf(event,"PHOTFLAT image %s (%ldX%ld) different size than science image %s       (%ldX%ld)",
 		  photflat.name,photflat.axes[0],photflat.axes[1],
 		  output.name,output.axes[0], output.axes[1]);
 	  reportevt(flag_verbose,STATUS,5,event);
-	  exit(0);
+	  exit(1);
 	}
 	if (output.axes[i]!=illumination.axes[i] && flag_illumination) {
 	  sprintf(event,"ILLUM image %s (%ldX%ld) different size than science image %s       (%ldX%ld)",
 		  illumination.name,illumination.axes[0],illumination.axes[1],
 		  output.name,output.axes[0], output.axes[1]);
 	  reportevt(flag_verbose,STATUS,5,event);
-	  exit(0);
+	  exit(1);
 	}
       }
 
@@ -1684,7 +1793,11 @@ int ImCorrect(int argc,char *argv[])
             if (flag_newvarim){
                /* Obtain initial uncertainty estimate */
 /*               printf("Obtaining initial uncertainty estimate\n"); */
-               if ((!output.mask[i])||(output.mask[i]==BADPIX_FIX)){
+/*               if ((!output.mask[i])||(output.mask[i]==BADPIX_FIX)){    */
+               if (output.mask[i]&badpix_wgt0){
+//                  printf("RAG mask=%d wgt set to 0.0 \n",output.mask[i]);
+                  uncval=0.0;
+               }else{
                   if(column_in_section((i%output.axes[0])+1,output.ampsecan)){
                      /* in AMP A section */	      
 	             uncval=Squ((double)output.rdnoiseA/(double)output.gainA);
@@ -1698,8 +1811,6 @@ int ImCorrect(int argc,char *argv[])
                         uncval+=((double)image_val/(double)output.gainB); 
                      }
                   }
-               }else{
-                  uncval=0.0;
                }
             }else{
                /* If an old value was supposed to exist then get that value and
@@ -1721,9 +1832,13 @@ int ImCorrect(int argc,char *argv[])
             }
             /* Add in uncertainty from bias subtraction if applicable */
 
-	    if (flag_bias && (bias.varim[i]>0.0) && 
-                ((!output.mask[i])||(output.mask[i]==BADPIX_FIX))){
+//	    if (flag_bias && (bias.varim[i]>0.0) &&                  
+//                ((!output.mask[i])||(output.mask[i]==BADPIX_FIX))){  
+	    if (flag_bias && (bias.varim[i]>0.0) &&                  
+                (!(output.mask[i]&badpix_wgt0))){  
                uncval+=1.0/(double)bias.varim[i];
+//            }else{
+//		printf("RAG BIAS variance addition skipped mask=%d \n",output.mask[i]);
             }
 
             /* Linearity Correction */
@@ -1741,7 +1856,6 @@ int ImCorrect(int argc,char *argv[])
             if (flag_dark && flag_imdark){ 
 	       image_val-=output.exptime*darkimage.image[i];
             }
-
 
             /* Pupil Correction */
 
@@ -1773,12 +1887,29 @@ int ImCorrect(int argc,char *argv[])
             if (flag_variance==DES_VARIANCE || flag_variance==DES_WEIGHT) {
                if (uncval>0.0){
                   output.varim[i]=1.0/uncval;
+                  if (output.mask[i]&badpix_downwgt){
+                     output.varim[i]*=downweight_factor;
+                  }
+                  if (output.mask[i]&badpix_wgt0){
+                     output.varim[i]=0.0;
+                  }
                }else{
                   output.varim[i]=0.0;
                }
             }else if (flag_variance==DES_SIGMA) {
                if (uncval>1.0e-10){
                   output.varim[i]=sqrt(uncval);
+                  if (output.mask[i]&badpix_downwgt){
+                     if (downweight_factor > 0.0){
+                        output.varim[i]/=sqrt(downweight_factor);
+                        if (output.varim[i]>1.0e+10){output.varim[i]=1.0e+10;}
+                     }else{
+                        output.varim[i]=1.0e+10;
+                     }
+                  }
+                  if (output.mask[i]&badpix_wgt0){
+                     output.varim[i]=1.0e+10;
+                  }
 	       }else{
                   output.varim[i]=1.0e+10;
                }
@@ -1993,7 +2124,13 @@ int ImCorrect(int argc,char *argv[])
 	    xmin=x-dx;if (xmin<0) xmin=0;
 	    xmax=x+dx;if (xmax>output.axes[0]) xmax=output.axes[0];
 	    loc=x+y*output.axes[0];
-            if ((!output.mask[loc])||(output.mask[loc]==BADPIX_FIX)){
+//            if ((!output.mask[loc])||(output.mask[loc]==BADPIX_FIX)){
+            if ((output.mask[loc]&badpix_wgt0)||(output.mask[loc]&badpix_downwgt)){
+               /* Above are cases where the smoothing should not be applied */             
+               /* So propagate the existing weights */
+               nosource.image[loc]=output.varim[loc];
+            }else{
+               /* Now cases where smoothing should be attempted */
 	       /* extract median */
 	       count=0;
                amp_check=column_in_section((loc%output.axes[0])+1,output.ampsecan);
@@ -2005,6 +2142,8 @@ int ImCorrect(int argc,char *argv[])
 	         for (k=ymin;k<ymax;k++){
                     for (l=xmin;l<xmax;l++){
                        rpos=l+k*output.axes[0];
+                       /* Check and make sure that the pixel is not flagged (unless fixed) */
+                       /* Then check that the pixel is not on the opposite amplifier */
                        if ((!output.mask[rpos])||(output.mask[rpos]==BADPIX_FIX)){
                           ramp_check=column_in_section((rpos%output.axes[0])+1,output.ampsecan);
                           if (ramp_check == amp_check){
@@ -2034,6 +2173,7 @@ int ImCorrect(int argc,char *argv[])
                     }
 	         }
                }
+               /* If samples are present, use them to determine a median wgt */
                if (count > 1){
                   if (flag_fast){
                      nosource.image[loc] = quick_select(vecsort, count);
@@ -2045,10 +2185,9 @@ int ImCorrect(int argc,char *argv[])
                      else nosource.image[loc]=0.5*(vecsort[count/2]+vecsort[count/2-1]);
                    }
 	        }else{
+                   /* If samples are NOT present then preserve the old value */
                    nosource.image[loc]=output.varim[loc];
                 }
-             }else{
-                nosource.image[loc]=output.varim[loc];
              }
           } /* xloop */
         } /* yloop */
@@ -2186,21 +2325,21 @@ int ImCorrect(int argc,char *argv[])
 
 //       RAG: believes below is a fix for FIXME FIXME above ...
 
-//         printf(" RAG FLAG_VARIANCE (@illumcor) %d\n",flag_variance);
+/*         printf(" RAG FLAG_VARIANCE (@illumcor) %d\n",flag_variance); */
          for (i=0;i<output.npixels;i++){
             if (illumination.image[i]>0.){
                output.image[i]/=illumination.image[i];
-//               if (flag_variance==DES_VARIANCE || flag_variance==DES_WEIGHT) {//
+/*               if (flag_variance==DES_VARIANCE || flag_variance==DES_WEIGHT) {// */
                if (flag_variance==DES_VARIANCE || flag_variance==DES_WEIGHT || output.variancetype==DES_VARIANCE || output.variancetype==DES_WEIGHT) {
-//                  if (i%1000000 == 0){printf(" RAG illumcor DES_WEIGHT %d\n",i);}
+/*                 if (i%1000000 == 0){printf(" RAG illumcor DES_WEIGHT %d\n",i);} */
                   if (output.varim[i]>0.){
                      output.varim[i]*=Squ(illumination.image[i]);
                   }else{
                      output.varim[i]=0.0;
                   }
-//               }else if (flag_variance==DES_SIGMA ){
+/*               }else if (flag_variance==DES_SIGMA ){ */
                }else if (flag_variance==DES_SIGMA || output.variancetype==DES_SIGMA){
-//                  if (i%1000000 == 0){printf(" RAG illumcor DES_SIGMA %d\n",i);}
+/*                  if (i%1000000 == 0){printf(" RAG illumcor DES_SIGMA %d\n",i);} */
                   if (output.varim[i]<1.0e+10){
                      output.varim[i]=sqrt(Squ(output.varim[i])/Squ(illumination.image[i]));
                   }else{
@@ -2209,10 +2348,10 @@ int ImCorrect(int argc,char *argv[])
                }
             }else{
                output.image[i]=0.0;
-//               if (flag_variance==DES_SIGMA ){
+/*               if (flag_variance==DES_SIGMA ){ */
                if (flag_variance==DES_SIGMA || output.variancetype==DES_SIGMA){
                   output.varim[i]=1.0e+10;
-//               }else if (flag_variance==DES_VARIANCE || flag_variance==DES_WEIGHT){
+/*               }else if (flag_variance==DES_VARIANCE || flag_variance==DES_WEIGHT){ */
                }else if (flag_variance==DES_VARIANCE || flag_variance==DES_WEIGHT || output.variancetype==DES_VARIANCE || output.variancetype==DES_WEIGHT) {
                   output.varim[i]=0.0;
                }
