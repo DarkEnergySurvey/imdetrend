@@ -1019,7 +1019,7 @@ int MakeFlatCorrection(int argc,char *argv[])
         exit(0);
       }
       for (i=0;i<data[im].npixels;i++) {
-        data[im].mask[i]=bpm.mask[i];
+      /*  data[im].mask[i]=bpm.mask[i]; */
 
       /* BPM mask to supplement (logically or) existing mask) */
         if (bpm.mask[i]){
