@@ -1709,6 +1709,12 @@ int ImCorrect(int argc,char *argv[])
       else
         retrievescale(&output,scaleregionn,scalesort,flag_verbose,
 		    &scalefactor,&mode,&skysigma);
+
+      if (flag_pupil && flag_impupil){
+         sprintf(event," Scale factor used for pupil correction is: %.3f ",scalefactor);
+	 reportevt(flag_verbose,QA,1,event);
+      }
+
       /* cycle through image masking all pixels below threshold */
 //      thresholdval=scalefactor*BADPIX_THRESHOLD;
 //      maskedpixels=0;
@@ -2296,6 +2302,10 @@ int ImCorrect(int argc,char *argv[])
             retrievescale(&output,scaleregionn,scalesort,flag_verbose,
                           &scalefactor,&mode,&skysigma_fr);
          }
+
+         sprintf(event," Scale factor used for fringe correction is: %.3f ",scalefactor);
+	 reportevt(flag_verbose,QA,1,event);
+
          for (i=0;i<output.npixels;i++){
             output.image[i]-=scalefactor*fringe.image[i];
          }
