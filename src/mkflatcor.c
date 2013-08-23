@@ -1010,15 +1010,23 @@ int MakeFlatCorrection(int argc,char *argv[])
     data[im].mask=(short *)calloc(data[im].npixels,sizeof(short));
     if (flag_bpm) { /* copy the bpm into the image mask array */
       if (flag_verbose) {
-	sprintf(event,"Copying input bpm from: %s",bpm.name);
-	reportevt(flag_verbose,STATUS,1,event);
+        sprintf(event,"Copying input bpm from: %s",bpm.name);
+        reportevt(flag_verbose,STATUS,1,event);
       }
       if (data[im].mask==NULL) {
-	sprintf(event,"Calloc of data[im].mask failed");
-	reportevt(flag_verbose,STATUS,5,event);
-	exit(0);
+        sprintf(event,"Calloc of data[im].mask failed");
+        reportevt(flag_verbose,STATUS,5,event);
+        exit(0);
       }
-      for (i=0;i<data[im].npixels;i++) data[im].mask[i]=bpm.mask[i];
+      for (i=0;i<data[im].npixels;i++) {
+      /*  data[im].mask[i]=bpm.mask[i]; */
+
+      /* BPM mask to supplement (logically or) existing mask) */
+        if (bpm.mask[i]){
+          data[im].mask[i]|=BADPIX_BPM;
+        }
+      }
+      reportevt(flag_verbose,STATUS,1,"Set badpixel mask bit to BADPIX_BPM where bpm != 0");
     }
 
     /* ****************************************************************** */
@@ -1076,21 +1084,26 @@ int MakeFlatCorrection(int argc,char *argv[])
       /* check to see if DESBIAS keyword is set */
       if (fits_read_keyword(datain.fptr,"DESBIAS",comment,comment,
 			    &status)==KEY_NO_EXIST) {
-	status=0;
-	if (flag_verbose>=3) {
-	  sprintf(event,"Bias subtracting");
-	  reportevt(flag_verbose,STATUS,1,event);
-	}
-	/* only bias subtract the non-flagged pixels if using bpm */
-	if ( flag_bpm) {
-	  for (i=0;i<data[im].npixels;i++)
-	    if (!bpm.mask[i]) data[im].image[i]-=bias.image[i];
-	  /* otherwise bias subtract all pixels */
-	} else for (i=0;i<data[im].npixels;i++)
-	  data[im].image[i]-=bias.image[i];
+        status=0;
+        if (flag_verbose>=3) {
+          sprintf(event,"Bias subtracting");
+          reportevt(flag_verbose,STATUS,1,event);
+        }
+
+        /* subtract all pixels, even those flags on tje bpm */
+        /* if ( flag_bpm) {
+          for (i=0;i<data[im].npixels;i++)
+            if (!bpm.mask[i]) data[im].image[i]-=bias.image[i]; 
+            } else */
+
+          /* subtract all pixels */
+
+          for (i=0;i<data[im].npixels;i++)
+            data[im].image[i]-=bias.image[i];
       }
-      else if (flag_verbose>=3)
-	reportevt(flag_verbose,STATUS,1,"Already bias subtracted");
+      /*else */
+      if (flag_verbose>=3)
+        reportevt(flag_verbose,STATUS,1,"Already bias subtracted");
     } /* end if flag_bias */
 
     /* ************************************* */
@@ -1243,39 +1256,39 @@ int MakeFlatCorrection(int argc,char *argv[])
     for (i=0;i<output.npixels;i++) {
       output.image[i]=0;
       /* */
-      if (!flag_bpm || !bpm.mask[i] ) {
-	for (im=0;im<imnum;im++){
-	  output.image[i]+=data[im].image[i]/scaleval[im];
-	}
-	output.image[i]/=(float)imnum;
+      /* Change R. Covarrubias: Don't use bpm when combining images. Using the bpm will zero the pixels where a bad pixels exists */
+      /* if (!flag_bpm || !bpm.mask[i] ) { */
+      for (im=0;im<imnum;im++)
+        output.image[i]+=data[im].image[i]/scaleval[im];
+      /* } */
+      output.image[i]/=(float)imnum;
 
 
-	/* CALCULATE VARIANCE  */
-	if (flag_variance) {
-	  sel_pix = 0;
-	  sigmapv = 0.0;
-	  tempimage[i] = 0.0;
+      /* CALCULATE VARIANCE  */
+      if (flag_variance) {
+        sel_pix = 0;
+        sigmapv = 0.0;
+        tempimage[i] = 0.0;
 
-	  for (im=0;im<imnum;im++){
+        for (im=0;im<imnum;im++){
 
-	    val = data[im].image[i]/scaleval[im]-output.image[i];
-	    if (fabs(val)<sigmalim ) {
+          val = data[im].image[i]/scaleval[im]-output.image[i];
+          if (fabs(val)<sigmalim ) {
 
-	      sigmapv += Squ(val);
-	      sel_pix++;
-	    }
-	  }
-	  if (sel_pix >= 2) {
-	    sigmapv = sigmapv/((float)sel_pix-1.)/((float)sel_pix);  /* variance */
-	  }
-	  tempimage[i]=sigmapv;
-	  if(sel_pix == 0) tempimage[i]= Squ(sigmalim);
-
-	}    /* end if variance  */
-      } else {
-	output.image[i] = 0.0;
-	if (flag_variance) tempimage[i]= Squ(sigmalim);
-      }
+            sigmapv += Squ(val);
+            sel_pix++;
+          }
+        }
+        if (sel_pix >= 2) {
+          sigmapv = sigmapv/((float)sel_pix-1.)/((float)sel_pix);  /* variance */
+        }
+        tempimage[i]=sigmapv;
+        if(sel_pix == 0) tempimage[i]= Squ(sigmalim);
+      }    /* end if variance  */
+      /*} else {
+        output.image[i] = 0.0;
+        if (flag_variance) tempimage[i]= Squ(sigmalim);
+        } */
     } /* end loop on pixels */
 
   } /* end if average */
@@ -1283,45 +1296,52 @@ int MakeFlatCorrection(int argc,char *argv[])
   if (flag_combine==MEDIAN) {
     for (i=0;i<output.npixels;i++) { /* for each pixel */
       output.image[i]=0.0f;
-      if (!flag_bpm || !bpm.mask[i] ) {
+
+      /* */
+      /* Change R. Covarrubias: Don't use bpm when combining images. Using the bpm will zero the pixels where a bad pixels exists */      
+      /*if (!flag_bpm || !bpm.mask[i] ) { */
 	/* copy values into sorting vector */
-	for (im=0;im<imnum;im++) vecsort[im]=data[im].image[i]/scaleval[im];
+        for (im=0;im<imnum;im++) vecsort[im]=data[im].image[i]/scaleval[im];
 
         if (flag_fast)
-           output.image[i] = quick_select(vecsort, imnum);
+          output.image[i] = quick_select(vecsort, imnum);
         else
-        {
-	  shell(imnum,vecsort-1);
-	  /* odd number of images */
-	  if (imnum%2) output.image[i]=vecsort[imnum/2]; 
-	  /* record the median value */  
-	  else output.image[i]=0.5*(vecsort[imnum/2]+vecsort[imnum/2-1]);
-	}
+          {
+            shell(imnum,vecsort-1);
+            /* odd number of images */
+            if (imnum%2) output.image[i]=vecsort[imnum/2]; 
+            /* record the median value */  
+            else output.image[i]=0.5*(vecsort[imnum/2]+vecsort[imnum/2-1]);
+          }
 
-	/* CALCULATE VARIANCE  */
-	if (flag_variance) {
-	  sel_pix = 0;
-	  sigmapv = 0.0;
-	  tempimage[i] = 0.0;
+        /* CALCULATE VARIANCE  */
+        if (flag_variance) {
+          sel_pix = 0;
+          sigmapv = 0.0;
+          tempimage[i] = 0.0;
 
-	  for (im=0;im<imnum;im++){
+          for (im=0;im<imnum;im++){
 
-	    val = vecsort[im]-output.image[i];
-	    if (fabs(val)<sigmalim ) {
+            val = vecsort[im]-output.image[i];
+            if (fabs(val)<sigmalim ) {
 
-	      sigmapv += Squ(val);
-	      sel_pix++;
-	    }
-	  }
-	  if (sel_pix >= 2) {
-	    sigmapv = sigmapv/((float)sel_pix-1.)/((float)sel_pix);  /* variance */
-	  }
-	  tempimage[i]=sigmapv;
-	  if(sel_pix == 0) tempimage[i]= Squ(sigmalim);
-	} /* end if variance */
-      } else { output.image[i] = 0.0f;
-	if (flag_variance) tempimage[i] = Squ(sigmalim);
-      }
+              sigmapv += Squ(val);
+              sel_pix++;
+            }
+          }
+          if (sel_pix >= 2) {
+            sigmapv = sigmapv/((float)sel_pix-1.)/((float)sel_pix);  /* variance */
+          }
+          tempimage[i]=sigmapv;
+          if(sel_pix == 0) tempimage[i]= Squ(sigmalim);
+        } /* end if variance */
+
+        /* } End of if (!flag_bpm || !bpm.mask[i] */ 
+      /* This else is used when the bpm is taken into account */
+      /* else { */ 
+        /* output.image[i] = 0.0f; */
+        /* if (flag_variance) tempimage[i] = Squ(sigmalim);*/
+        /* } */
     }
   }
   /* **************************************************** */
@@ -1336,43 +1356,45 @@ int MakeFlatCorrection(int argc,char *argv[])
   if (flag_combine==CLIPPEDAVERAGE) {
     for (i=0;i<output.npixels;i++) {
       output.image[i]=0;
-      if (!flag_bpm || !bpm.mask[i] ) {
-	for (im=0;im<imnum;im++) vecsort[im]=data[im].image[i]/scaleval[im];
+      /*if (!flag_bpm || !bpm.mask[i] ) { */
+        for (im=0;im<imnum;im++) vecsort[im]=data[im].image[i]/scaleval[im];
         if (flag_fast)
           float_qsort(vecsort, imnum);
         else
-	  shell(imnum,vecsort-1);            /* sort the vector */
-	if (2*minmaxclip_npix >=imnum - 1) {
-	  sprintf(event,"CLIPPEDAVERAGE minmaxclip_npix can not be more than imnum/2 Reset to 1");
-	  minmaxclip_npix = 1;
-	  reportevt(flag_verbose,STATUS,1,event);
-	}
-	for (im=minmaxclip_npix ;im<imnum-minmaxclip_npix; im++) output.image[i]+=vecsort[im];
-	output.image[i]/=(float)(imnum - 2*minmaxclip_npix );
-	/* CALCULATE VARIANCE  */
-	if (flag_variance) {
-	  sel_pix = 0;
-	  sigmapv = 0.0;
-	  tempimage[i] = 0.0;
-	  for (im=minmaxclip_npix;im<imnum-minmaxclip_npix;im++){
-	    val = vecsort[im]-output.image[i];
-	    if (fabs(val)<sigmalim ) {
-	      sigmapv += Squ(val);
-	      sel_pix++;
-	    }
-	  }
-	  if (sel_pix >= 2) {
-	    sigmapv = sigmapv/((float)sel_pix-1.)/((float)sel_pix);  /* variance */
-	  }
-	  tempimage[i]=sigmapv;
-	  if(sel_pix == 0) tempimage[i]= Squ(sigmalim);
-	}
-      } else {   /* if masked bit let set it to 0 */
-	output.image[i] = 0;
-	if (flag_variance) tempimage[i]= Squ(sigmalim);
-      }
-    }
-  }
+          shell(imnum,vecsort-1);            /* sort the vector */
+        if (2*minmaxclip_npix >=imnum - 1) {
+          sprintf(event,"CLIPPEDAVERAGE minmaxclip_npix can not be more than imnum/2 Reset to 1");
+          minmaxclip_npix = 1;
+          reportevt(flag_verbose,STATUS,1,event);
+        }
+        for (im=minmaxclip_npix ;im<imnum-minmaxclip_npix; im++) output.image[i]+=vecsort[im];
+        output.image[i]/=(float)(imnum - 2*minmaxclip_npix );
+        /* CALCULATE VARIANCE  */
+        if (flag_variance) {
+          sel_pix = 0;
+          sigmapv = 0.0;
+          tempimage[i] = 0.0;
+          for (im=minmaxclip_npix;im<imnum-minmaxclip_npix;im++){
+            val = vecsort[im]-output.image[i];
+            if (fabs(val)<sigmalim ) {
+              sigmapv += Squ(val);
+              sel_pix++;
+            }
+          }
+          if (sel_pix >= 2) {
+            sigmapv = sigmapv/((float)sel_pix-1.)/((float)sel_pix);  /* variance */
+          }
+          tempimage[i]=sigmapv;
+          if(sel_pix == 0) tempimage[i]= Squ(sigmalim);
+        }
+        /* } end of if (!flag_bpm || !bpm.mask[i] ) { */ 
+      /* Changing this such that masked bit are not set to zero */
+      /* else { */  /* if masked bit let set it to 0 */
+      /*output.image[i] = 0; */
+      /* if (flag_variance) tempimage[i]= Squ(sigmalim);*/
+        /*}*/
+    } /* end of for loop */
+  } /* end of clipped average */
 
   /* ********************************************* */
   /* ****** Implementing sigma clipped average *** */
@@ -1390,58 +1412,59 @@ int MakeFlatCorrection(int argc,char *argv[])
       sigmapv = 0.0;
       meanpv = 0.0;
       tempimage[i] = 0.;
-      if (!flag_bpm || !bpm.mask[i] ) {
-	/* first cut tails of the distribution to estimate sigma */
-	tailcut = (int) (0.15*imnum);  /* cut tails 30% to estimate sigma */
-	if (tailcut < 1) tailcut = 1;  /* this requires at list 4 images to combine */
-	for (im=0;im<imnum;im++)vecsort[im]=data[im].image[i]/scaleval[im];
+      /*if (!flag_bpm || !bpm.mask[i] ) { */ 
+      /* first cut tails of the distribution to estimate sigma */
+        tailcut = (int) (0.15*imnum);  /* cut tails 30% to estimate sigma */
+        if (tailcut < 1) tailcut = 1;  /* this requires at list 4 images to combine */
+        for (im=0;im<imnum;im++)vecsort[im]=data[im].image[i]/scaleval[im];
         if (flag_fast)
           float_qsort(vecsort, imnum);
         else
-	  shell(imnum,vecsort-1);
-	sigmapv = 0.5*(vecsort[imnum -1 -tailcut] - vecsort[tailcut]);
-	if (imnum%2) meanpv=vecsort[imnum/2]; /* record the median value */
-	else meanpv=0.5*(vecsort[imnum/2]+vecsort[imnum/2-1]);
-	/* now calculate average within selected sigma cut */
-	minpv = meanpv - avsigclip_sigma*sigmapv;
-	maxpv = meanpv + avsigclip_sigma*sigmapv;
-	if (minpv < vecsort[0]) minpv = vecsort[0];
-	if (maxpv > vecsort[imnum-1]) maxpv = vecsort[imnum - 1];
-	sel_pix = 0;
-	for (im=0;im<imnum;im++){
-	  if(vecsort[im] >= minpv && vecsort[im] <= maxpv) {
-	    output.image[i] += vecsort[im];
-	    sel_pix++;
-	  }
-	}
-	output.image[i] /= (float)sel_pix;
-	/* CALCULATE VARIANCE  */
-	if (flag_variance) {
-	  sel_pix = 0;
-	  sigmapv = 0.0;
-	  tempimage[i] = 0.0;
-	  for (im=0;im<imnum;im++){
-	    if((vecsort[im] >= minpv) && (vecsort[im] <= maxpv)) {
-	      val = vecsort[im]-output.image[i];
-	      if (fabs(val)<sigmalim ) {
-		sigmapv += Squ(val);
-		sel_pix++;
-	      }
-	    }
-	  }
-	  if (sel_pix >= 2) {
-	    sigmapv = sigmapv/((float)sel_pix-1.)/((float)sel_pix);  /* variance */
-	  }
-	  tempimage[i]=sigmapv;
-	  if(sel_pix == 0) tempimage[i]= Squ(sigmalim);
-	}
-      } else {
-	output.image[i] = 0;
-	if (flag_variance) tempimage[i]=  Squ(sigmalim);
-      }
-    }
-  }
-
+          shell(imnum,vecsort-1);
+        sigmapv = 0.5*(vecsort[imnum -1 -tailcut] - vecsort[tailcut]);
+        if (imnum%2) meanpv=vecsort[imnum/2]; /* record the median value */
+        else meanpv=0.5*(vecsort[imnum/2]+vecsort[imnum/2-1]);
+        /* now calculate average within selected sigma cut */
+        minpv = meanpv - avsigclip_sigma*sigmapv;
+        maxpv = meanpv + avsigclip_sigma*sigmapv;
+        if (minpv < vecsort[0]) minpv = vecsort[0];
+        if (maxpv > vecsort[imnum-1]) maxpv = vecsort[imnum - 1];
+        sel_pix = 0;
+        for (im=0;im<imnum;im++){
+          if(vecsort[im] >= minpv && vecsort[im] <= maxpv) {
+            output.image[i] += vecsort[im];
+            sel_pix++;
+          }
+        }
+        output.image[i] /= (float)sel_pix;
+      /* CALCULATE VARIANCE  */
+        if (flag_variance) {
+          sel_pix = 0;
+          sigmapv = 0.0;
+          tempimage[i] = 0.0;
+          for (im=0;im<imnum;im++){
+            if((vecsort[im] >= minpv) && (vecsort[im] <= maxpv)) {
+              val = vecsort[im]-output.image[i];
+              if (fabs(val)<sigmalim ) {
+                sigmapv += Squ(val);
+                sel_pix++;
+              }
+            }
+          }
+          if (sel_pix >= 2) {
+            sigmapv = sigmapv/((float)sel_pix-1.)/((float)sel_pix);  /* variance */
+          }
+          tempimage[i]=sigmapv;
+          if(sel_pix == 0) tempimage[i]= Squ(sigmalim);
+        }
+        /*}  else {end of if (!flag_bpm || !bpm.mask[i] ) { */
+        /* Changing this such that masked bit are not set to zero */
+        /* output.image[i] = 0; */
+        /*if (flag_variance) tempimage[i]=  Squ(sigmalim); */
+        /* } */
+    } /*end of for loop */
+  } /* end of avsigclip */
+    
 
   /* now let's confirm the final scaling */
   if (flag_scale) {
@@ -1490,51 +1513,51 @@ int MakeFlatCorrection(int argc,char *argv[])
 	  
     if (flag_verbose) {
       sprintf(event,"Extracting variance using %dX%d square centered on each pixel",
-	      2*delta+1,2*delta+1);
+              2*delta+1,2*delta+1);
       reportevt(flag_verbose,STATUS,1,event);
     }
     for (i=0;i<output.npixels;i++) {
       if ( !flag_bpm || !bpm.mask[i] ) {
-	x=i%output.axes[0];y=i/output.axes[0];
-	/* define a small square centered on this pixel */
+        x=i%output.axes[0];y=i/output.axes[0];
+        /* define a small square centered on this pixel */
 	    
-	xmin=x-delta;xmax=x+delta;
-	if (xmin<0) {xmax+=abs(xmin);xmin=0;} /* hanging off bottom edge? */
-	if (xmax>=output.axes[0]) /* hanging off top edge? */
-	  {xmin-=(xmax-output.axes[0]+1);xmax=output.axes[0]-1;}    
+        xmin=x-delta;xmax=x+delta;
+        if (xmin<0) {xmax+=abs(xmin);xmin=0;} /* hanging off bottom edge? */
+        if (xmax>=output.axes[0]) /* hanging off top edge? */
+          {xmin-=(xmax-output.axes[0]+1);xmax=output.axes[0]-1;}    
 	    
-	ymin=y-delta;ymax=y+delta;
-	if (ymin<0) {ymax+=abs(ymin);ymin=0;} /* hanging off bottom edge? */
-	if (ymax>=output.axes[1])  /* hanging off top edge? */
-	  {ymin-=(ymax-output.axes[1]+1);ymax=output.axes[1]-1;}
+        ymin=y-delta;ymax=y+delta;
+        if (ymin<0) {ymax+=abs(ymin);ymin=0;} /* hanging off bottom edge? */
+        if (ymax>=output.axes[1])  /* hanging off top edge? */
+          {ymin-=(ymax-output.axes[1]+1);ymax=output.axes[1]-1;}
 
-	sum2a=sum1=0.0;num=0;
-	for (x=xmin;x<=xmax;x++) for (y=ymin;y<=ymax;y++) {
-	  loc=x+y*output.axes[0];  
-	  for (im=0;im<imnum;im++) {
-	    val=tempimage[loc];  /* variance */
-	    sum1+=val;
-	    num++;
+        sum2a=sum1=0.0;num=0;
+        for (x=xmin;x<=xmax;x++) for (y=ymin;y<=ymax;y++) {
+          loc=x+y*output.axes[0];  
+          for (im=0;im<imnum;im++) {
+            val=tempimage[loc];  /* variance */
+            sum1+=val;
+            num++;
 
-	  }
-	}
-	if (num>1) {
-	  val=sum1/(float)num;
-	}
-	else {
-	  sprintf(event,"No pixels meet criterion for inclusion");
-	  reportevt(flag_verbose,STATUS,3,event);
-	  val=Squ(sigmalim/3.5/(float)imnum);
-	}
-	if (flag_variance==DES_VARIANCE || flag_variance==DES_WEIGHT) {
-	  /* introduce lower limit THRESHOLD on VARIANCE */
-	  if (val>1.0e-6) output.varim[i]=1.0/val;
-	  else output.varim[i]=1.0e+6;
-	}
-	else if (flag_variance==DES_SIGMA) {
-	  if (val>1.0e-10) val=sqrt(val);
-	  output.varim[i]=val;
-	}
+          }
+        }
+        if (num>1) {
+          val=sum1/(float)num;
+        }
+        else {
+          sprintf(event,"No pixels meet criterion for inclusion");
+          reportevt(flag_verbose,STATUS,3,event);
+          val=Squ(sigmalim/3.5/(float)imnum);
+        }
+        if (flag_variance==DES_VARIANCE || flag_variance==DES_WEIGHT) {
+          /* introduce lower limit THRESHOLD on VARIANCE */
+          if (val>1.0e-6) output.varim[i]=1.0/val;
+          else output.varim[i]=1.0e+6;
+        }
+        else if (flag_variance==DES_SIGMA) {
+          if (val>1.0e-10) val=sqrt(val);
+          output.varim[i]=val;
+        }
       }
       else output.varim[i]=0.0;
     }

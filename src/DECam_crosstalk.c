@@ -330,9 +330,9 @@ int DECamXTalk(int argc,char *argv[])
     "ZPCOUNT","ZGCOUNT","DCREATED","TTYPE1",
     "ZHECKSUM"},
     *nthheader;
-    int	numzerokeys,nexc=37,numnthkeys,numwrittenkeys=0,
+    int numzerokeys,nexc=37,numnthkeys,numwrittenkeys=0,
       keyflag,keynum,totkeynum;
-        int     writeCounter, writeImageFailed, retryDelay, nRetry;
+    int writeCounter, writeImageFailed, retryDelay, nRetry;
 	
     /*  ******************************************************** */
     /*  ******** array for storing crosstalk coefficients ****** */
@@ -358,7 +358,7 @@ int DECamXTalk(int argc,char *argv[])
       maxhdunum=HDUNUM, nhdus, needpath=1,
       mkpath(),getheader_flt(),getheader_str();
     static int status=0;
-    float	value,uncertainty,significance,nullval,*outdata=NULL,*outdata2=NULL,**indata;
+    float	value,uncertainty,significance,nullval,*outdata=NULL,**indata;
     float   nonlinon, poly1, poly2, poly3;
     float       crossatthresh;
     float       tmp_satAval,tmp_satBval;
@@ -366,18 +366,17 @@ int DECamXTalk(int argc,char *argv[])
     float       ampAmin = 1e+30,ampAmax = 0,satval;
     float       ampBmin = 1e+30,ampBmax = 0;
     float       new_ltv1,new_ltv2,old_ltv1,old_ltv2;
-    double      new_crpix1,new_crpix2,old_crpix1,old_crpix2;
+    double      new_crpix1,new_crpix2,old_crpix1=0,old_crpix2=0;
     long	axes[2],naxes[2],taxes[2],pixels,npixels,fpixel,oldpixel=0;
     double	xtalkcorrection=0.0;
     void	printerror(),reportevt(),init_desimage(),decodesection();
     fitsfile *fptr,*nfptr;
-    desimage des_image;
     FILE	*inp;
     time_t	tm;
-    desimage input_image;
-    desimage output_image;
+    desimage input_image[CCDNUM2];
+    desimage tmp_image;
     overscan_config osconfig;
-    short *maskdata = NULL, *maskdata2 = NULL;
+    short *maskdata = NULL;
     int myl;
     rlist *rl = NULL;  // linked list of header replacment values 
     char	delkeys[100][10]={"PRESECA","PRESECB","POSTSECA",
@@ -387,7 +386,8 @@ int DECamXTalk(int argc,char *argv[])
     enum {OPT_CROSSTALK=1,OPT_PHOTFLAG,OPT_SATMASK,OPT_OVERSCAN,OPT_OVERSCANSAMPLE,OPT_OVERSCANFUNCTION,
 	  OPT_OVERSCANORDER,OPT_OVERSCANTRIM,OPT_MAXHDUNUM,OPT_CCDLIST,OPT_HDULIST,OPT_CROSSATTHRESH,
           OPT_FOCUSCHIPSOUT,OPT_REPLACE,OPT_VERBOSE,OPT_HELP,OPT_VERSION};
-    
+
+    command_line[0] = '\0';
     if(build_command_line(argc,argv,command_line,1000) <= 0){
       reportevt(2,STATUS,1,"Failed to record full command line.");
     }
@@ -423,22 +423,22 @@ int DECamXTalk(int argc,char *argv[])
 
     // Still need to scan command line for verbosity so we can 
     // properly print status messages during command line parse.
-    for (i=1;i<argc;i++) 
-      {
-	if (!strcmp(argv[i],"-verbose") || !strcmp(argv[i],"-v")) {
-	  sscanf(argv[++i],"%d",&flag_verbose);
-	  if (flag_verbose<0 || flag_verbose>6){
-            if (flag_verbose < 0){
-  	      sprintf(event,"Verbose level (%d) out of range (0 <= verbose <= 6). Reset to 0.",flag_verbose);
-              flag_verbose=0;
-            }else{
-  	      sprintf(event,"Verbose level (%d) out of range (0 <= verbose <= 6). Reset to 6.",flag_verbose);
-              flag_verbose=6;
+    for (i=1;i<argc;i++)
+    {
+        if (!strcmp(argv[i],"-verbose") || !strcmp(argv[i],"-v")) {
+            sscanf(argv[++i],"%d",&flag_verbose);
+            if (flag_verbose<0 || flag_verbose>6){
+                if (flag_verbose < 0){
+                    sprintf(event,"Verbose level (%d) out of range (0 <= verbose <= 6). Reset to 0.",flag_verbose);
+                    flag_verbose=0;
+                } else {
+                    sprintf(event,"Verbose level (%d) out of range (0 <= verbose <= 6). Reset to 6.",flag_verbose);
+                    flag_verbose=6;
+                }
+                reportevt(2,STATUS,3,event);
             }
-            reportevt(2,STATUS,3,event);
-	  }
-	}
-      }
+        }
+    }
 
 
     int clop;
@@ -1006,7 +1006,7 @@ int DECamXTalk(int argc,char *argv[])
     nhdus = 0;  /* nhdus should always be <= maxhdunum */
     if (flag_verbose) printf("  Reading image data from %s\n", filename);
 
-    for (i=2;i<=hdunum;i++) 
+    for (i=2;i<=hdunum;i++)
     {
         /* Move to the correct HDU */
         if (fits_movabs_hdu(fptr,i,&hdutype,&status)) {
@@ -1035,22 +1035,111 @@ int DECamXTalk(int argc,char *argv[])
             sscanf(trash, "%d", &ccdnum);
         }
 
-        /* figure out AmpOrder (AmpAB or AmpBA) */
-        if(getheader_str(nthheader,"DATASECA",&input_image.dataseca,flag_verbose)){
+        init_desimage(&tmp_image);
+
+        /**********************************************************/
+        /*************  Read Header from Nth Extension ************/
+        /**********************************************************/
+
+        // Get a bunch of useful information from the header
+        if(getheader_flt(nthheader,"SATURATA",&tmp_image.saturateA,flag_verbose)){
+            sprintf(event,"SATURATA not found in header.");
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
+        }
+        if(getheader_flt(nthheader,"SATURATB",&tmp_image.saturateB,flag_verbose)){
+            sprintf(event,"SATURATB not found in header.");
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
+        }
+        if(getheader_flt(nthheader,"GAINA",&tmp_image.gainA,flag_verbose)){
+            sprintf(event,"GAINA not found in header.");
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
+        }
+        if(getheader_flt(nthheader,"GAINB",&tmp_image.gainB,flag_verbose)){
+            sprintf(event,"GAINB not found in header.");
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);   
+        }
+        if(getheader_flt(nthheader,"RDNOISEA",&tmp_image.rdnoiseA,flag_verbose)){
+            sprintf(event,"RDNOISEA not found in header.");
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);   
+        }
+        if(getheader_flt(nthheader,"RDNOISEB",&tmp_image.rdnoiseB,flag_verbose)){
+            sprintf(event,"RDNOISEB not found in header.");
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);   
+        }
+        if(getheader_str(nthheader,"BIASSECA",&tmp_image.biasseca,flag_verbose)){
+            sprintf(event,"BIASSECA not found in header.");
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);   
+        }
+        if(getheader_str(nthheader,"BIASSECB",&tmp_image.biassecb,flag_verbose)){
+            sprintf(event,"BIASSECB not found in header.");
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);   
+        }
+        if(getheader_str(nthheader,"DATASECA",&tmp_image.dataseca,flag_verbose)){
             sprintf(event,"DATASECA not found in header.");
             reportevt(flag_verbose,STATUS,5,event);
-            printerror(status);
+            printerror(status);   
         }
-        decodesection(input_image.dataseca, input_image.datasecan, flag_verbose);
-
-        if(getheader_str(nthheader,"DATASECB",&input_image.datasecb,flag_verbose)){
+        if(getheader_str(nthheader,"DATASECB",&tmp_image.datasecb,flag_verbose)){
             sprintf(event,"DATASECB not found in header.");
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);   
+        }
+        if(getheader_str(nthheader,"AMPSECA",&tmp_image.ampseca,flag_verbose)){
+            sprintf(event,"AMPSECA not found in header.");
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);   
+        }
+        if(getheader_str(nthheader,"AMPSECB",&tmp_image.ampsecb,flag_verbose)){
+            sprintf(event,"AMPSECB not found in header.");
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);   
+        }
+        if(getheader_str(nthheader,"TRIMSEC",&tmp_image.trimsec,flag_verbose)){
+            sprintf(event,"TRIMSEC not found in header.");
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);   
+        }
+        if(getheader_str(nthheader,"DATASEC",&tmp_image.datasec,flag_verbose)){
+            sprintf(event,"DATASEC not found in header.");
             reportevt(flag_verbose,STATUS,5,event);
             printerror(status);
         }
 
-        decodesection(input_image.datasecb, input_image.datasecbn, flag_verbose);
-        AmpOrder[ccdnum] = (input_image.datasecan[0] < input_image.datasecbn[0]) ? AmpAB : AmpBA;
+        decodesection(tmp_image.biasseca,tmp_image.biassecan,flag_verbose);
+        decodesection(tmp_image.biassecb,tmp_image.biassecbn,flag_verbose);
+        decodesection(tmp_image.ampseca, tmp_image.ampsecan, flag_verbose);
+        decodesection(tmp_image.ampsecb, tmp_image.ampsecbn, flag_verbose);
+        decodesection(tmp_image.dataseca, tmp_image.datasecan, flag_verbose);
+        decodesection(tmp_image.datasecb, tmp_image.datasecbn, flag_verbose);
+        decodesection(tmp_image.trimsec, tmp_image.trimsecn, flag_verbose);
+        decodesection(tmp_image.datasec, tmp_image.datasecn, flag_verbose);
+
+        if (flag_verbose>=3) {
+            sprintf(event,"BIASSECA=%s",tmp_image.biasseca);
+            reportevt(flag_verbose,STATUS,1,event);
+            sprintf(event,"DATASECA=%s",tmp_image.dataseca);
+            reportevt(flag_verbose,STATUS,1,event);
+            sprintf(event,"AMPSECA=%s",tmp_image.ampseca);
+            reportevt(flag_verbose,STATUS,1,event);
+            sprintf(event,"BIASSECB=%s",tmp_image.biassecb);
+            reportevt(flag_verbose,STATUS,1,event);
+            sprintf(event,"DATASECB=%s",tmp_image.datasecb);
+            reportevt(flag_verbose,STATUS,1,event);
+            sprintf(event,"AMPSECB=%s",tmp_image.ampsecb);
+            reportevt(flag_verbose,STATUS,1,event);
+            sprintf(event,"TRIMSEC=%s",tmp_image.trimsec);
+            reportevt(flag_verbose,STATUS,1,event);
+            sprintf(event,"DATASEC=%s",tmp_image.datasec);
+            reportevt(flag_verbose,STATUS,1,event);
+        }
 
         /* RAG added read to get SATURATA and SATURATB keywords for use when implementing -crossatthresh option */
         /* wait to populate these values until after the ccdnum check has passed */
@@ -1058,12 +1147,12 @@ int DECamXTalk(int argc,char *argv[])
         if(getheader_flt(nthheader,"SATURATA",&tmp_satAval,flag_verbose)){
             sprintf(event,"SATURATA not found in header.");
             reportevt(flag_verbose,STATUS,5,event);
-            printerror(status);	  
+            printerror(status);
         }
         if(getheader_flt(nthheader,"SATURATB",&tmp_satBval,flag_verbose)){
             sprintf(event,"SATURATB not found in header.");
             reportevt(flag_verbose,STATUS,5,event);
-            printerror(status);	  
+            printerror(status);
         }
 
         free(nthheader); nthheader = NULL;
@@ -1114,21 +1203,127 @@ int DECamXTalk(int argc,char *argv[])
             exit(0);
         }
 
+        if (outdata == NULL)
+        {
+            outdata = (float *)calloc(pixels,sizeof(float));
+            if (outdata == NULL) {
+                sprintf(event,"Error: Could not calloc outdata %ld",pixels);
+                reportevt(flag_verbose,STATUS,5,event);
+                exit(0);
+            }
+        }
+
         sprintf(event,"HDU=%i, CCDNUM=%i", i, ccdnum);
         reportevt(flag_verbose,STATUS,1,event);
 
         /* read the CHDU image  */
-        if (fits_read_img(fptr,TFLOAT,fpixel,pixels,&nullval,indata[ccdnum],&anynull,&status)) {
+        if (fits_read_img(fptr,TFLOAT,fpixel,pixels,&nullval,outdata,&anynull,&status)) {
             sprintf(event,"Reading image extension %d failed: %s",i-1,filename);
             reportevt(flag_verbose,STATUS,5,event);
             printerror(status);
         }
 
+        /* figure out AmpOrder (AmpAB or AmpBA) */
+        AmpOrder[ccdnum] = (tmp_image.datasecan[0] < tmp_image.datasecbn[0]) ? AmpAB : AmpBA;
         satA[ccdnum]=tmp_satAval;
         satB[ccdnum]=tmp_satBval;
         printf(" CCDNUM=%2d: SATURATA=%f SATURATB=%f \n",ccdnum,satA[ccdnum],satB[ccdnum]);
 
         /*if (flag_verbose) {printf(".");fflush(stdout);}*/
+
+        tmp_image.image   = outdata;
+        tmp_image.mask    = NULL;
+        tmp_image.npixels = pixels;
+        tmp_image.axes[0] = axes[0];
+        tmp_image.axes[1] = axes[1];
+
+        init_desimage(&input_image[ccdnum]);
+        input_image[ccdnum].image  = indata[ccdnum];
+        input_image[ccdnum].mask   = NULL;
+
+        for (j = 0; j < 4; j++) {
+            input_image[ccdnum].biassecan[j]=tmp_image.biassecan[j];
+            input_image[ccdnum].biassecbn[j]=tmp_image.biassecbn[j];
+            input_image[ccdnum].ampsecan[j]=tmp_image.ampsecan[j];
+            input_image[ccdnum].ampsecbn[j]=tmp_image.ampsecbn[j];
+            input_image[ccdnum].datasecan[j]=tmp_image.datasecan[j];
+            input_image[ccdnum].datasecbn[j]=tmp_image.datasecbn[j];
+            input_image[ccdnum].trimsecn[j]=tmp_image.trimsecn[j];
+            input_image[ccdnum].datasecn[j]=tmp_image.datasecn[j];
+        }
+
+
+        /* PERFORM OVERSCAN if not disabled */
+        if(flag_overscan)
+        {
+            if(flag_verbose){
+                sprintf(event,"OVERSCAN: (samp,func,ord,trim) = (%d,%d,%d,%d)",
+                        osconfig.sample,osconfig.function,osconfig.order,osconfig.trim);
+                reportevt(flag_verbose,STATUS,1,event);
+            }
+
+            // The "input" image to OverScan is the image just loaded from disk
+            // Upon output, input_image[ccdnum], is set up with the overscanned version
+            // of the input_image.
+            OverScan(&tmp_image, &input_image[ccdnum], osconfig, flag_verbose);
+
+            input_image[ccdnum].datasecan[0] = (tmp_image.ampsecan[0] < tmp_image.ampsecan[1] ?
+                                            tmp_image.ampsecan[0] : tmp_image.ampsecan[1]);
+            input_image[ccdnum].datasecan[1] = (tmp_image.ampsecan[0] < tmp_image.ampsecan[1] ?
+                                            tmp_image.ampsecan[1] : tmp_image.ampsecan[0]);
+            input_image[ccdnum].datasecan[2] = (tmp_image.ampsecan[2] < tmp_image.ampsecan[3] ?
+                                            tmp_image.ampsecan[2] : tmp_image.ampsecan[3]);
+            input_image[ccdnum].datasecan[3] = (tmp_image.ampsecan[2] < tmp_image.ampsecan[3] ?
+                                            tmp_image.ampsecan[3] : tmp_image.ampsecan[2]);
+            input_image[ccdnum].datasecbn[0] = (tmp_image.ampsecbn[0] < tmp_image.ampsecbn[1] ?
+                                            tmp_image.ampsecbn[0] : tmp_image.ampsecbn[1]);
+            input_image[ccdnum].datasecbn[1] = (tmp_image.ampsecbn[0] < tmp_image.ampsecbn[1] ?
+                                            tmp_image.ampsecbn[1] : tmp_image.ampsecbn[0]);
+            input_image[ccdnum].datasecbn[2] = (tmp_image.ampsecbn[2] < tmp_image.ampsecbn[3] ?
+                                            tmp_image.ampsecbn[2] : tmp_image.ampsecbn[3]);
+            input_image[ccdnum].datasecbn[3] = (tmp_image.ampsecbn[2] < tmp_image.ampsecbn[3] ?
+                                            tmp_image.ampsecbn[3] : tmp_image.ampsecbn[2]);
+
+            /* update datasec within the output image */
+            sprintf(input_image[ccdnum].datasec,"[%d:%d,%d:%d]",1,input_image[ccdnum].axes[0], 1,input_image[ccdnum].axes[1]);
+            sprintf(input_image[ccdnum].dataseca,"[%d:%d,%d:%d]",input_image[ccdnum].datasecan[0],
+                    input_image[ccdnum].datasecan[1],input_image[ccdnum].datasecan[2],input_image[ccdnum].datasecan[3]);
+            sprintf(input_image[ccdnum].datasecb,"[%d:%d,%d:%d]",input_image[ccdnum].datasecbn[0],
+                    input_image[ccdnum].datasecbn[1],input_image[ccdnum].datasecbn[2],input_image[ccdnum].datasecbn[3]);
+
+            if(flag_verbose){
+                sprintf(event,"OVERSCAN: New DATASEC = %s",input_image[ccdnum].datasec);
+                reportevt(flag_verbose,STATUS,1,event);
+            }
+        } else {
+            // If overscan was not used, then just straight copy the input image
+            // and everythign we learned about it so far, needed or not
+
+            for(j = 0; j < pixels; j++) input_image[ccdnum].image[j] = outdata[j]; //indata[ccdnum][j] = outdata[j];
+            //input_image[ccdnum].mask       = NULL;
+            input_image[ccdnum].axes[0]    = tmp_image.axes[0];
+            input_image[ccdnum].axes[1]    = tmp_image.axes[1];
+            input_image[ccdnum].npixels    = tmp_image.npixels;
+            input_image[ccdnum].gainA      = tmp_image.gainA;
+            input_image[ccdnum].gainB      = tmp_image.gainB;
+            input_image[ccdnum].rdnoiseA   = tmp_image.rdnoiseA;
+            input_image[ccdnum].rdnoiseB   = tmp_image.rdnoiseB;
+            input_image[ccdnum].saturateA  = tmp_image.saturateA;
+            input_image[ccdnum].saturateB  = tmp_image.saturateB;
+            //strncpy(input_image[ccdnum].datasec,tmp_image.datasec,100);
+/*
+            for (j = 0; j < 4; j++) {
+                input_image[ccdnum].biassecan[j]=tmp_image.biassecan[j];
+                input_image[ccdnum].biassecbn[j]=tmp_image.biassecbn[j];
+                input_image[ccdnum].ampsecan[j]=tmp_image.ampsecan[j];
+                input_image[ccdnum].ampsecbn[j]=tmp_image.ampsecbn[j];
+                input_image[ccdnum].datasecan[j]=tmp_image.datasecan[j];
+                input_image[ccdnum].datasecbn[j]=tmp_image.datasecbn[j];
+                input_image[ccdnum].trimsecn[j]=tmp_image.trimsecn[j];
+                input_image[ccdnum].datasecn[j]=tmp_image.datasecn[j];
+            }
+*/
+        }
     }
 
     if (flag_verbose) { printf("\n"); fflush(stdout); }
@@ -1149,44 +1344,17 @@ int DECamXTalk(int argc,char *argv[])
             reportevt(flag_verbose,STATUS,5,event);
             exit(0);
         }
-
-        if (flag_overscan) {
-            maskdata2 = (short *)calloc(npixels,sizeof(short));
-            if (maskdata2 == NULL) {
-                sprintf(event,"Could not allocate maskdata(out)");
-                reportevt(flag_verbose,STATUS,5,event);
-                exit(0);
-            }
-        }
-    }
-
-    /* now cycle through the HDU's parsing properly and writing */
-    /* useful FITS file */
-    outdata = (float *)calloc(npixels,sizeof(float));
-    if (outdata == NULL) {
-        sprintf(event,"Error: Could not calloc outdata %ld",npixels);
-        reportevt(flag_verbose,STATUS,5,event);
-        exit(0);
-    }
-
-    if (flag_overscan) {
-        outdata2 = (float *)calloc(npixels,sizeof(float));
-        if (outdata2 == NULL) {
-            sprintf(event,"Error: Could not calloc outdata %ld",npixels);
-            reportevt(flag_verbose,STATUS,5,event);
-            exit(0);
-        }
     }
 
     nhdus = 0;  /* nhdus should always be <= maxhdunum */
 
-    for (i=2;i<=hdunum;i++) 
+    for (i=2;i<=hdunum;i++)
     {
         /* Move to the correct HDU */
         if (fits_movabs_hdu(fptr,i,&hdutype,&status)) {
             sprintf(event,"Move to HDU=%d failed: %s",i,filename);
             reportevt(flag_verbose,STATUS,5,event);
-            printerror(status);	
+            printerror(status);
         }
 
         fits_get_hdu_num(fptr,&chdu);
@@ -1258,424 +1426,215 @@ int DECamXTalk(int argc,char *argv[])
             printerror(status);
         }
 
-        npixels  = naxes[0] * naxes[1];
-        for(j = 0; j < npixels; j++)
-            outdata[j] = indata[ccdnum][j];
-
-        /* 
-        Use DESIMAGE data structure to store information about
-        the input image.  This sets input_image image buffers
-        for all of the processing done in this utility. 
-        */
-        init_desimage(&input_image);
-        input_image.image   = outdata;
-        input_image.mask    = maskdata;
-        input_image.npixels = npixels;
-        input_image.axes[0] = naxes[0];
-        input_image.axes[1] = naxes[1];
-
-        init_desimage(&output_image);
-        output_image.image  = outdata2;
-        output_image.mask   = maskdata2;
-
         ampAmin = 1e+30;
         ampAmax = 0;
         ampBmin = 1e+30;
         ampBmax = 0;
 
-        /**********************************************************/
-        /*************  Read Header from Nth Extension ************/
-        /**********************************************************/
+        /****************************************************************** */
+        /* ************** apply the crosstalk correction ****************** */
+        /* ************** and flag any saturated pixels   ****************** */
+        /* **************************************************************** */
 
-        // Get a bunch of useful information from the header
-        if(getheader_flt(nthheader,"SATURATA",&input_image.saturateA,flag_verbose)){
-            sprintf(event,"SATURATA not found in header.");
-            reportevt(flag_verbose,STATUS,5,event);
-            printerror(status);
-        }
-        if(getheader_flt(nthheader,"SATURATB",&input_image.saturateB,flag_verbose)){
-            sprintf(event,"SATURATB not found in header.");
-            reportevt(flag_verbose,STATUS,5,event);
-            printerror(status);	  
-        }
-        if(getheader_flt(nthheader,"GAINA",&input_image.gainA,flag_verbose)){
-            sprintf(event,"GAINA not found in header.");
-            reportevt(flag_verbose,STATUS,5,event);
-            printerror(status);	  
-        }
-        if(getheader_flt(nthheader,"GAINB",&input_image.gainB,flag_verbose)){
-            sprintf(event,"GAINB not found in header.");
-            reportevt(flag_verbose,STATUS,5,event);
-            printerror(status);	  
-        }
-        if(getheader_flt(nthheader,"RDNOISEA",&input_image.rdnoiseA,flag_verbose)){
-            sprintf(event,"RDNOISEA not found in header.");
-            reportevt(flag_verbose,STATUS,5,event);
-            printerror(status);	  
-        }      
-        if(getheader_flt(nthheader,"RDNOISEB",&input_image.rdnoiseB,flag_verbose)){
-            sprintf(event,"RDNOISEB not found in header.");
-            reportevt(flag_verbose,STATUS,5,event);
-            printerror(status);	  
-        }      
-        if(getheader_str(nthheader,"BIASSECA",&input_image.biasseca,flag_verbose)){
-            sprintf(event,"BIASSECA not found in header.");
-            reportevt(flag_verbose,STATUS,5,event);
-            printerror(status);	  
-        }
-        if(getheader_str(nthheader,"BIASSECB",&input_image.biassecb,flag_verbose)){
-            sprintf(event,"BIASSECB not found in header.");
-            reportevt(flag_verbose,STATUS,5,event);
-            printerror(status);	  
-        }
-        if(getheader_str(nthheader,"DATASECA",&input_image.dataseca,flag_verbose)){
-            sprintf(event,"DATASECA not found in header.");
-            reportevt(flag_verbose,STATUS,5,event);
-            printerror(status);	  
-        }
-        if(getheader_str(nthheader,"DATASECB",&input_image.datasecb,flag_verbose)){
-            sprintf(event,"DATASECB not found in header.");
-            reportevt(flag_verbose,STATUS,5,event);
-            printerror(status);	  
-        }
-        if(getheader_str(nthheader,"AMPSECA",&input_image.ampseca,flag_verbose)){
-            sprintf(event,"AMPSECA not found in header.");
-            reportevt(flag_verbose,STATUS,5,event);
-            printerror(status);	  
-        }
-        if(getheader_str(nthheader,"AMPSECB",&input_image.ampsecb,flag_verbose)){
-            sprintf(event,"AMPSECB not found in header.");
-            reportevt(flag_verbose,STATUS,5,event);
-            printerror(status);	  
-        }
-        if(getheader_str(nthheader,"TRIMSEC",&input_image.trimsec,flag_verbose)){
-            sprintf(event,"TRIMSEC not found in header.");
-            reportevt(flag_verbose,STATUS,5,event);
-            printerror(status);	  
-        }
-        if(getheader_str(nthheader,"DATASEC",&input_image.datasec,flag_verbose)){
-            sprintf(event,"DATASEC not found in header.");
-            reportevt(flag_verbose,STATUS,5,event);
-            printerror(status);	  
-        }
+        if (ccdnum < 63)
+        {
+            for(j = 0; j < input_image[ccdnum].npixels; j++) outdata[j] = indata[ccdnum][j];
 
-        decodesection(input_image.biasseca,input_image.biassecan,flag_verbose);
-        decodesection(input_image.biassecb,input_image.biassecbn,flag_verbose);
-        decodesection(input_image.ampseca, input_image.ampsecan, flag_verbose);
-        decodesection(input_image.ampsecb, input_image.ampsecbn, flag_verbose);
-        decodesection(input_image.dataseca, input_image.datasecan, flag_verbose);
-        decodesection(input_image.datasecb, input_image.datasecbn, flag_verbose);
-        decodesection(input_image.trimsec, input_image.trimsecn, flag_verbose);
-        decodesection(input_image.datasec, input_image.datasecn, flag_verbose);
+            if (flag_sat_beforextalk || flag_sat_afterxtalk) {
+                nsata = nsatb = 0;
+                /* Reset the mask */
+                for(j = 0; j < input_image[ccdnum].npixels; j++)
+                    maskdata[locout] = 0;
 
-        if (flag_verbose>=3) {
-            sprintf(event,"BIASSECA=%s",input_image.biasseca);
-            reportevt(flag_verbose,STATUS,1,event);
-            sprintf(event,"DATASECA=%s",input_image.dataseca);
-            reportevt(flag_verbose,STATUS,1,event);
-            sprintf(event,"AMPSECA=%s",input_image.ampseca);
-            reportevt(flag_verbose,STATUS,1,event);
-            sprintf(event,"BIASSECB=%s",input_image.biassecb);
-            reportevt(flag_verbose,STATUS,1,event);
-            sprintf(event,"DATASECB=%s",input_image.datasecb);
-            reportevt(flag_verbose,STATUS,1,event);
-            sprintf(event,"AMPSECB=%s",input_image.ampsecb);
-            reportevt(flag_verbose,STATUS,1,event);
-            sprintf(event,"TRIMSEC=%s",input_image.trimsec);
-            reportevt(flag_verbose,STATUS,1,event);
-            sprintf(event,"DATASEC=%s",input_image.datasec);
-            reportevt(flag_verbose,STATUS,1,event);
-        }
+                //input_image[ccdnum].mask = maskdata;
+            }
 
-      /****************************************************************** */
-      /* ************** apply the crosstalk correction ****************** */
-      /* ************** and flag any saturated pixels   ****************** */
-      /* **************************************************************** */
-
-      if (ccdnum < 63) {
-
-        if (flag_sat_beforextalk || flag_sat_afterxtalk) {
-            nsata = nsatb = 0;
-            /* Reset the mask */
-            for(j = 0; j < npixels; j++)
-                maskdata[locout] = 0;
-        }
-
-        if (flag_sat_beforextalk) {
-            // Loop through *entire* input array.  This includes overscanned regions and 
-            // any additional padding. 
-            for (y=0;y<input_image.axes[1];y++) 
-            for (x=0;x<input_image.axes[0];x++) {
-                locout=y*input_image.axes[0]+x;
-                // Determine whether the current position (wrt input array) is
-                // within the Amp-specific data region by checking DATASEC[A,B]
-                if(column_in_section(x+1,input_image.datasecan)){
-                    satval = input_image.saturateA;
-                    if(input_image.image[locout] > satval){
-                        if(input_image.image[locout] > ampAmax) ampAmax = input_image.image[locout];
-                        if(input_image.image[locout] < ampAmin) ampAmin = input_image.image[locout];
-                        input_image.mask[locout] = BADPIX_SATURATE;
-                        nsata++;
+            if (flag_sat_beforextalk)
+            {
+                // Loop through output array.
+                for (y=0;y<input_image[ccdnum].axes[1];y++)
+                for (x=0;x<input_image[ccdnum].axes[0];x++) {
+                    locout=y*input_image[ccdnum].axes[0]+x;
+                    // Determine whether the current position (wrt input array) is
+                    // within the Amp(input_image.amp-specific data region by checking DATASEC[A,B]
+                    if(column_in_section(x+1,input_image[ccdnum].datasecan)){
+                        satval = input_image[ccdnum].saturateA;
+                        if(outdata[locout] > satval){
+                            if(outdata[locout] > ampAmax) ampAmax = outdata[locout];
+                            if(outdata[locout] < ampAmin) ampAmin = outdata[locout];
+                            maskdata[locout] = BADPIX_SATURATE;
+                            nsata++;
+                        }
+                    }
+                    else if(column_in_section(x+1,input_image[ccdnum].datasecbn)){
+                        satval = input_image[ccdnum].saturateB;
+                        if(outdata[locout] > satval){
+                            if(outdata[locout] > ampBmax) ampBmax = outdata[locout];
+                            if(outdata[locout] < ampBmin) ampBmin = outdata[locout];
+                            maskdata[locout] = BADPIX_SATURATE;
+                            nsatb++;
+                        }
                     }
                 }
-                else if(column_in_section(x+1,input_image.datasecbn)){
-                    satval = input_image.saturateB;
-                    if(input_image.image[locout] > satval){
-                        if(input_image.image[locout] > ampBmax) ampBmax = input_image.image[locout];
-                        if(input_image.image[locout] < ampBmin) ampBmin = input_image.image[locout];
-                        input_image.mask[locout] = BADPIX_SATURATE;
-                        nsatb++;
+
+                if (flag_verbose) {
+                    sprintf(event,"image=%s,CCD[%d] NSATPIX=%d (NSATA,NSATB)=(%d,%d)",
+                            filename,ccdnum,nsata+nsatb,nsata,nsatb);
+                    reportevt(flag_verbose,STATUS,1,event);
+                    sprintf(event,"image=%s,CCD[%d] (SATLEVA,SATLEVB)=(%f,%f)",
+                            filename,ccdnum,input_image[ccdnum].saturateA,input_image[ccdnum].saturateB);
+                    reportevt(flag_verbose,STATUS,1,event);
+                    // Write out min and max of saturated pixels - trying to ferret out 
+                    // possible remaining A/B mixup.
+                    sprintf(event,"image=%s,CCD[%d] (SATAMIN,SATAMAX)=(%f,%f)",filename,ccdnum,ampAmin,ampAmax);
+                    reportevt(flag_verbose,STATUS,1,event);
+                    sprintf(event,"image=%s,CCD[%d] (SATBMIN,SATBMAX)=(%f,%f)",filename,ccdnum,ampBmin,ampBmax);
+                    reportevt(flag_verbose,STATUS,1,event);
+                }
+            }
+
+            if (flag_crosstalk)
+            {
+                char thisAmpOrder = (input_image[ccdnum].datasecan[0] < input_image[ccdnum].datasecbn[0]) ? AmpAB : AmpBA;
+                // Loop through *entire* input array.  This includes overscanned regions and 
+                // any additional padding.
+                for (y=0;y<input_image[ccdnum].axes[1];y++)
+                for (x=0;x<input_image[ccdnum].axes[0];x++) {
+                    locout=y*input_image[ccdnum].axes[0]+x;
+                    xtalkcorrection=0.0;
+                    if (column_in_section(x+1,input_image[ccdnum].datasecan)) { /* in amp A */
+                        ampextension=(ccdnum-1)*2;
+                        for (j=1;j<63;j++) {
+                            ampA=(j-1)*2;
+                            ampB=ampA+1; /* Amp B flipped because readout on far side */
+                            if (thisAmpOrder == AmpOrder[j]) {
+                                locA=locout;
+                                locB=y*input_image[ccdnum].axes[0]+(input_image[ccdnum].axes[0]-x-1);
+                            } else {
+                                locB=locout;
+                                locA=y*input_image[ccdnum].axes[0]+(input_image[ccdnum].axes[0]-x-1);
+                            }
+                            if (fabsf(xtalk[ampextension][ampA])>1.0e-6f){
+                                if ((x_nl[ampextension][ampA] > 0.0f)&&(indata[j][locA] > x_nl[ampextension][ampA])){
+                                    xprime = indata[j][locA] - x_nl[ampextension][ampA];
+                                    xprime_pow = 1.0;
+                                    for (myl=0;myl<DEGPOLY;myl++) {
+                                        xprime_pow *= xprime;
+                                        xtalkcorrection += c_poly[ampextension][ampA][myl]*xprime_pow;
+                                    }
+                                    xtalkcorrection += y_nl[ampextension][ampA];
+                                } else {
+                                    xtalkcorrection+=xtalk[ampextension][ampA]*indata[j][locA];
+                                }
+                            }
+                            if (fabsf(xtalk[ampextension][ampB])>1.0e-6f){
+                                if ((x_nl[ampextension][ampB] > 0.0f)&&(indata[j][locB] > x_nl[ampextension][ampB])){
+                                    xprime = indata[j][locB] - x_nl[ampextension][ampB];
+                                    xprime_pow = 1.0;
+                                    for (myl=0;myl<DEGPOLY;myl++) {
+                                        xprime_pow *= xprime;
+                                        xtalkcorrection += c_poly[ampextension][ampB][myl]*xprime_pow;
+                                    }
+                                    xtalkcorrection += y_nl[ampextension][ampB];
+                                }else{
+                                    xtalkcorrection+=xtalk[ampextension][ampB]*indata[j][locB];
+                                }
+                            }
+                        }
+                        outdata[locout]-=xtalkcorrection;
+                    }
+                    else if (column_in_section(x+1,input_image[ccdnum].datasecbn)) { /* in amp B */
+                        ampextension=(ccdnum-1)*2+1; 
+                        for (j=1;j<63;j++) {
+                            ampA=(j-1)*2;
+                            ampB=ampA+1; /* Amp B flipped because readout on far side */
+                            if (thisAmpOrder == AmpOrder[j]) {
+                                locB=locout;
+                                locA=y*input_image[ccdnum].axes[0]+(input_image[ccdnum].axes[0]-x-1);
+                            } else {
+                                locA=locout;
+                                locB=y*input_image[ccdnum].axes[0]+(input_image[ccdnum].axes[0]-x-1);
+                            }
+                            if (fabsf(xtalk[ampextension][ampA])>1.0e-6f){
+                                if ((x_nl[ampextension][ampA] > 0.0f)&&(indata[j][locA] > x_nl[ampextension][ampA])){
+                                    xprime = indata[j][locA] - x_nl[ampextension][ampA];
+                                    xprime_pow = 1.0f;
+                                    for (myl=0;myl<DEGPOLY;myl++) {
+                                        xprime_pow *= xprime;
+                                        xtalkcorrection += c_poly[ampextension][ampA][myl]*xprime_pow;
+                                    }
+                                    xtalkcorrection += y_nl[ampextension][ampA];
+                                }else{
+                                    xtalkcorrection+=xtalk[ampextension][ampA]*indata[j][locA];
+                                }
+                            }
+                            if (fabsf(xtalk[ampextension][ampB])>1.0e-6f){
+                                if ((x_nl[ampextension][ampB] > 0.0f)&&(indata[j][locB] > x_nl[ampextension][ampB])){
+                                    xprime = indata[j][locB] - x_nl[ampextension][ampB];
+                                    xprime_pow = 1.0f;
+                                    for (myl=0;myl<DEGPOLY;myl++) {
+                                        xprime_pow *= xprime;
+                                        xtalkcorrection += c_poly[ampextension][ampB][myl]*xprime_pow;
+                                    }
+                                    xtalkcorrection += y_nl[ampextension][ampB];
+                                }else{
+                                    xtalkcorrection+=xtalk[ampextension][ampB]*indata[j][locB];
+                                }
+                            }
+                        }
+                        outdata[locout]-=xtalkcorrection;
                     }
                 }
             }
 
-            if (flag_verbose) {
-                sprintf(event,"image=%s,CCD[%d] NSATPIX=%d (NSATA,NSATB)=(%d,%d)",
-                        filename,ccdnum,nsata+nsatb,nsata,nsatb);
-                reportevt(flag_verbose,STATUS,1,event);
-                sprintf(event,"image=%s,CCD[%d] (SATLEVA,SATLEVB)=(%f,%f)",
-                        filename,ccdnum,input_image.saturateA,input_image.saturateB);
-                reportevt(flag_verbose,STATUS,1,event);
-                // Write out min and max of saturated pixels - trying to ferret out 
-                // possible remaining A/B mixup.
-                sprintf(event,"image=%s,CCD[%d] (SATAMIN,SATAMAX)=(%f,%f)",filename,ccdnum,ampAmin,ampAmax);
-                reportevt(flag_verbose,STATUS,1,event);
-                sprintf(event,"image=%s,CCD[%d] (SATBMIN,SATBMAX)=(%f,%f)",filename,ccdnum,ampBmin,ampBmax);
-                reportevt(flag_verbose,STATUS,1,event);
-            }
-      }
+            if (flag_sat_afterxtalk) {
+                // Loop through output array.
+                for (y=0;y<input_image[ccdnum].axes[1];y++)
+                for (x=0;x<input_image[ccdnum].axes[0];x++) {
+                    locout=y*input_image[ccdnum].axes[0]+x;
+                    // Determine whether the current position (wrt input array) is
+                    // within the Amp(input_image.amp-specific data region by checking DATASEC[A,B]
+                    if(column_in_section(x+1,input_image[ccdnum].datasecan)){
+                        satval = input_image[ccdnum].saturateA;
+                        if(outdata[locout] > satval){
+                            if(outdata[locout] > ampAmax) ampAmax = outdata[locout];
+                            if(outdata[locout] < ampAmin) ampAmin = outdata[locout];
+                            maskdata[locout] = BADPIX_SATURATE;
+                            nsata++;
+                        }
+                    }
+                    else if(column_in_section(x+1,input_image[ccdnum].datasecbn)){
+                        satval = input_image[ccdnum].saturateB;
+                        if(outdata[locout] > satval){
+                            if(outdata[locout] > ampBmax) ampBmax = outdata[locout];
+                            if(outdata[locout] < ampBmin) ampBmin = outdata[locout];
+                            maskdata[locout] = BADPIX_SATURATE;
+                            nsatb++;
+                        }
+                    }
+                }
 
-      if (flag_crosstalk) {
-        char thisAmpOrder = (input_image.datasecan[0] < input_image.datasecbn[0]) ? AmpAB : AmpBA;
-	// Loop through *entire* input array.  This includes overscanned regions and 
-	// any additional padding. 
-	for (y=0;y<naxes[1];y++) 
-	for (x=0;x<naxes[0];x++) {
-	    locout=y*naxes[0]+x;
-	    xtalkcorrection=0.0;
-/* this is now out of _if (flag_crosstalk)_
-	    if(flag_sat){
-	      // Determine whether the current position (wrt input array) is
-	      // within the Amp-specific data region by checking DATASEC[A,B]
-	      if(column_in_section(x+1,input_image.datasecan)){
-		satval = input_image.saturateA;
-		if(outdata[locout] > satval){
-		  if(outdata[locout] > ampAmax) ampAmax = outdata[locout];
-		  if(outdata[locout] < ampAmin) ampAmin = outdata[locout];
-		  maskdata[locout] = BADPIX_SATURATE;
-		  nsata++;
-		}
-	      }
-	      else if(column_in_section(x+1,input_image.datasecbn)){
-		satval = input_image.saturateB;
-		if(outdata[locout] > satval){
-		  if(outdata[locout] > ampBmax) ampBmax = outdata[locout];
-		  if(outdata[locout] < ampBmin) ampBmin = outdata[locout];
-		  maskdata[locout] = BADPIX_SATURATE;
-		  nsatb++;
-		}
-	      }
-	    }
-*/
-            if (column_in_section(x+1,input_image.datasecan)) { /* in amp A */
-              ampextension=(ccdnum-1)*2; 
-              for (j=1;j<63;j++) {
-                ampA=(j-1)*2;
-                ampB=ampA+1; /* Amp B flipped because readout on far side */
-                if (thisAmpOrder == AmpOrder[j]) {
-                    locA=locout;
-                    locB=y*naxes[0]+(naxes[0]-x-1);
-                } else {
-                    locB=locout;
-                    locA=y*naxes[0]+(naxes[0]-x-1);
-                }
-                if (fabsf(xtalk[ampextension][ampA])>1.0e-6f){
-                  if ((x_nl[ampextension][ampA] > 0.0f)&&(indata[j][locA] > x_nl[ampextension][ampA])){
-                    xprime = indata[j][locA] - x_nl[ampextension][ampA];
-                    xprime_pow = 1.0;
-                    for (myl=0;myl<DEGPOLY;myl++) {
-                        xprime_pow *= xprime;
-                        xtalkcorrection += c_poly[ampextension][ampA][myl]*xprime_pow;
-                    }
-                    xtalkcorrection += y_nl[ampextension][ampA];
-                  }else{
-                    xtalkcorrection+=xtalk[ampextension][ampA]*indata[j][locA];
-                  }
-                }
-                if (fabsf(xtalk[ampextension][ampB])>1.0e-6f){
-                    if ((x_nl[ampextension][ampB] > 0.0f)&&(indata[j][locB] > x_nl[ampextension][ampB])){
-                      xprime = indata[j][locB] - x_nl[ampextension][ampB];
-                      xprime_pow = 1.0;
-                      for (myl=0;myl<DEGPOLY;myl++) {
-                          xprime_pow *= xprime;
-                          xtalkcorrection += c_poly[ampextension][ampB][myl]*xprime_pow;
-                      }
-                      xtalkcorrection += y_nl[ampextension][ampB];
-                    }else{
-                      xtalkcorrection+=xtalk[ampextension][ampB]*indata[j][locB];
-                    }
-                }
-              }
-              outdata[locout]-=xtalkcorrection;
-            }
-            else if (column_in_section(x+1,input_image.datasecbn)) { /* in amp B */
-              ampextension=(ccdnum-1)*2+1; 
-              for (j=1;j<63;j++) {
-                ampA=(j-1)*2;
-                ampB=ampA+1; /* Amp B flipped because readout on far side */
-                if (thisAmpOrder == AmpOrder[j]) {
-                    locB=locout;
-                    locA=y*naxes[0]+(naxes[0]-x-1);
-                } else {
-                    locA=locout;
-                    locB=y*naxes[0]+(naxes[0]-x-1);
-                }
-                if (fabsf(xtalk[ampextension][ampA])>1.0e-6f){
-                    if ((x_nl[ampextension][ampA] > 0.0f)&&(indata[j][locA] > x_nl[ampextension][ampA])){
-                      xprime = indata[j][locA] - x_nl[ampextension][ampA];
-                      xprime_pow = 1.0f;
-                      for (myl=0;myl<DEGPOLY;myl++) {
-                          xprime_pow *= xprime;
-                          xtalkcorrection += c_poly[ampextension][ampA][myl]*xprime_pow;
-                      }
-                      xtalkcorrection += y_nl[ampextension][ampA];
-                    }else{
-                      xtalkcorrection+=xtalk[ampextension][ampA]*indata[j][locA];
-                    }
-                }
-                if (fabsf(xtalk[ampextension][ampB])>1.0e-6f){
-                    if ((x_nl[ampextension][ampB] > 0.0f)&&(indata[j][locB] > x_nl[ampextension][ampB])){
-                      xprime = indata[j][locB] - x_nl[ampextension][ampB];
-                      xprime_pow = 1.0f;
-                      for (myl=0;myl<DEGPOLY;myl++) {
-                          xprime_pow *= xprime;
-                          xtalkcorrection += c_poly[ampextension][ampB][myl]*xprime_pow;
-                      }
-                      xtalkcorrection += y_nl[ampextension][ampB];
-                    }else{
-                      xtalkcorrection+=xtalk[ampextension][ampB]*indata[j][locB];
-                    }
-                }
-              }
-              outdata[locout]-=xtalkcorrection;
-            }
-	  }
-      }
-
-      } /* if (ccdnum < 63) */
-
-       /* PERFORM OVERSCAN if not disabled */
-       if(flag_overscan && ccdnum < 63) {
- 	if(flag_verbose){
- 	  sprintf(event,"OVERSCAN: (samp,func,ord,trim) = (%d,%d,%d,%d)",
- 		  osconfig.sample,osconfig.function,
- 		  osconfig.order,osconfig.trim);
- 	  reportevt(flag_verbose,STATUS,1,event);
- 	}
- 	//  The "input" image to OverScan is the output image from the xtalk 
- 	// Upon output, output_image is set up with the overscanned version
- 	// of the input_image. 
- 	OverScan(&input_image, &output_image, osconfig, flag_verbose);
- 	
-	output_image.datasecan[0] = (input_image.ampsecan[0] < input_image.ampsecan[1] ?
-				    input_image.ampsecan[0] : input_image.ampsecan[1]);
-	output_image.datasecan[1] = (input_image.ampsecan[0] < input_image.ampsecan[1] ?
-				    input_image.ampsecan[1] : input_image.ampsecan[0]);
-	output_image.datasecan[2] = (input_image.ampsecan[2] < input_image.ampsecan[3] ?
-				    input_image.ampsecan[2] : input_image.ampsecan[3]);
-	output_image.datasecan[3] = (input_image.ampsecan[2] < input_image.ampsecan[3] ?
-				    input_image.ampsecan[3] : input_image.ampsecan[2]);
-	output_image.datasecbn[0] = (input_image.ampsecbn[0] < input_image.ampsecbn[1] ?
-				    input_image.ampsecbn[0] : input_image.ampsecbn[1]);
-	output_image.datasecbn[1] = (input_image.ampsecbn[0] < input_image.ampsecbn[1] ?
-				    input_image.ampsecbn[1] : input_image.ampsecbn[0]);
-	output_image.datasecbn[2] = (input_image.ampsecbn[2] < input_image.ampsecbn[3] ?
-				    input_image.ampsecbn[2] : input_image.ampsecbn[3]);
-	output_image.datasecbn[3] = (input_image.ampsecbn[2] < input_image.ampsecbn[3] ?
-				    input_image.ampsecbn[3] : input_image.ampsecbn[2]);
- 	/* update datasec within the output image */
- 	sprintf(output_image.datasec,"[%d:%ld,%d:%ld]",1,output_image.axes[0],
- 		1,output_image.axes[1]);
- 	sprintf(output_image.dataseca,"[%d:%d,%d:%d]",output_image.datasecan[0],
-		output_image.datasecan[1],output_image.datasecan[2],
-		output_image.datasecan[3]);
- 	sprintf(output_image.datasecb,"[%d:%d,%d:%d]",output_image.datasecbn[0],
-		output_image.datasecbn[1],output_image.datasecbn[2],
-		output_image.datasecbn[3]);
- 	if(flag_verbose){
- 	  sprintf(event,"OVERSCAN: New DATASEC = %s",output_image.datasec);
- 	  reportevt(flag_verbose,STATUS,1,event);	  
- 	}
-       }
-       else { 
- 	// If overscan was not used, then just straight copy the input image
- 	output_image.image      = input_image.image;
- 	output_image.mask       = input_image.mask;
- 	output_image.axes[0]    = input_image.axes[0];
- 	output_image.axes[1]    = input_image.axes[1];
-	output_image.npixels    = input_image.npixels;  
- 	strncpy(output_image.datasec,input_image.datasec,100);
-	output_image.gainA      = input_image.gainA;
-	output_image.gainB      = input_image.gainB;
-	output_image.rdnoiseA   = input_image.rdnoiseA;
-	output_image.rdnoiseB   = input_image.rdnoiseB;
-	output_image.saturateA  = input_image.saturateA;
-	output_image.saturateB  = input_image.saturateB;
-       }
-       //       strncpy(output_image.trimsec,input_image.trimsec,100);
-       //       strncpy(output_image.biasseca,input_image.biasseca,100);
-       //       strncpy(output_image.biassecb,input_image.biassecb,100);
-       //       strncpy(output_image.ampseca,input_image.ampseca,100);
-       //       strncpy(output_image.ampsecb,input_image.ampsecb,100);
-
-      /* **************************************************************** */
-      /* **************** Write New Single CCD Image ******************** */
-      /* ************ Store Processing History in Header **************** */
-      /* **************************************************************** */
-
-        if (flag_sat_afterxtalk && ccdnum < 63) {
-            // Loop through output array. This DOES NOT include overscanned regions and 
-            // any additional padding. 
-            for (y=0;y<output_image.axes[1];y++)
-            for (x=0;x<output_image.axes[0];x++) {
-                locout=y*output_image.axes[0]+x;
-                // Determine whether the current position (wrt input array) is
-                // within the Amp-specific data region by checking DATASEC[A,B]
-                if(column_in_section(x+1,output_image.datasecan)){
-                    satval = output_image.saturateA;
-                    if(output_image.image[locout] > satval){
-                        if(output_image.image[locout] > ampAmax) ampAmax = output_image.image[locout];
-                        if(output_image.image[locout] < ampAmin) ampAmin = output_image.image[locout];
-                        output_image.mask[locout] = BADPIX_SATURATE;
-                        nsata++;
-                    }
-                }
-                else if(column_in_section(x+1,output_image.datasecbn)){
-                    satval = output_image.saturateB;
-                    if(output_image.image[locout] > satval){
-                        if(output_image.image[locout] > ampBmax) ampBmax = output_image.image[locout];
-                        if(output_image.image[locout] < ampBmin) ampBmin = output_image.image[locout];
-                        output_image.mask[locout] = BADPIX_SATURATE;
-                        nsatb++;
-                    }
+                if (flag_verbose) {
+                    sprintf(event,"image=%s,CCD[%d] NSATPIX=%d (NSATA,NSATB)=(%d,%d)",
+                            filename,ccdnum,nsata+nsatb,nsata,nsatb);
+                    reportevt(flag_verbose,STATUS,1,event);
+                    sprintf(event,"image=%s,CCD[%d] (SATLEVA,SATLEVB)=(%f,%f)",
+                            filename,ccdnum,input_image[ccdnum].saturateA,input_image[ccdnum].saturateB);
+                    reportevt(flag_verbose,STATUS,1,event);
+                    // Write out min and max of saturated pixels - trying to ferret out 
+                    // possible remaining A/B mixup.
+                    sprintf(event,"image=%s,CCD[%d] (SATAMIN,SATAMAX)=(%f,%f)",filename,ccdnum,ampAmin,ampAmax);
+                    reportevt(flag_verbose,STATUS,1,event);
+                    sprintf(event,"image=%s,CCD[%d] (SATBMIN,SATBMAX)=(%f,%f)",filename,ccdnum,ampBmin,ampBmax);
+                    reportevt(flag_verbose,STATUS,1,event);
                 }
             }
+        } /* if (ccdnum < 63) */
 
-            if (flag_verbose) {
-                sprintf(event,"image=%s,CCD[%d] NSATPIX=%d (NSATA,NSATB)=(%d,%d)",
-                        filename,ccdnum,nsata+nsatb,nsata,nsatb);
-                reportevt(flag_verbose,STATUS,1,event);
-                sprintf(event,"image=%s,CCD[%d] (SATLEVA,SATLEVB)=(%f,%f)",
-                        filename,ccdnum,output_image.saturateA,output_image.saturateB);
-                reportevt(flag_verbose,STATUS,1,event);
-                // Write out min and max of saturated pixels - trying to ferret out 
-                // possible remaining A/B mixup.
-                sprintf(event,"image=%s,CCD[%d] (SATAMIN,SATAMAX)=(%f,%f)",filename,ccdnum,ampAmin,ampAmax);
-                reportevt(flag_verbose,STATUS,1,event);
-                sprintf(event,"image=%s,CCD[%d] (SATBMIN,SATBMAX)=(%f,%f)",filename,ccdnum,ampBmin,ampBmax);
-                reportevt(flag_verbose,STATUS,1,event);
-            }
-        }
+        /* **************************************************************** */
+        /* **************** Write New Single CCD Image ******************** */
+        /* ************ Store Processing History in Header **************** */
+        /* **************************************************************** */
 
         /* generate output filename */
         if (strstr(outname_temp, "%02d") != NULL)
@@ -1719,7 +1678,7 @@ int DECamXTalk(int argc,char *argv[])
         }
 
       /*sprintf(nfilename,"!%s_%02d.fits",argv[2],ccdnum);*/
-      if (fits_create_file(&output_image.fptr,nfilename,&status)) {
+      if (fits_create_file(&nfptr,nfilename,&status)) {
 	sprintf(event,"File creation of %s failed",nfilename);
 	reportevt(flag_verbose,STATUS,5,event);
 	printerror(status);
@@ -1730,7 +1689,7 @@ int DECamXTalk(int argc,char *argv[])
       }
 	  
       /* create image extension  */
-      if (fits_create_img(output_image.fptr,FLOAT_IMG,2,output_image.axes,&status)) {
+      if (fits_create_img(nfptr,FLOAT_IMG,2,input_image[ccdnum].axes,&status)) {
 	sprintf(event,"Creating image failed: %s",nfilename);
 	reportevt(flag_verbose,STATUS,5,event);
 	printerror(status);
@@ -1742,7 +1701,7 @@ int DECamXTalk(int argc,char *argv[])
       //      /* following approach causes problems with RICE tile compression*/
       //      /* copy the header from the CHDU in the input image */
       //      /*
-      //	if (fits_copy_header(fptr,output_image.fptr,&status)) {
+      //	if (fits_copy_header(fptr,input_image[ccdnum].fptr,&status)) {
       //	sprintf(event,"Header copy into %s failed",nfilename);
       //	reportevt(flag_verbose,STATUS,5,event);
       //	printerror(status);
@@ -1751,7 +1710,7 @@ int DECamXTalk(int argc,char *argv[])
       //	printf("  Copied header from %s[%i]\n",filename,i);
       //	/* resize the image */
       //      /*
-      //	if (fits_resize_img(output_image.fptr,FLOAT_IMG,2,naxes,&status)) {
+      //	if (fits_resize_img(input_image[ccdnum].fptr,FLOAT_IMG,2,naxes,&status)) {
       //	sprintf(event,"Resizing image %s failed",nfilename);
       //	reportevt(flag_verbose,STATUS,5,event);
       //	printerror(status);             
@@ -1762,7 +1721,7 @@ int DECamXTalk(int argc,char *argv[])
       //      /* ************************************************************* */
 
       /* first reserve room within the header for the known # of keywords */
-      if (fits_set_hdrsize(output_image.fptr,numzerokeys+numnthkeys+15,&status)) {
+      if (fits_set_hdrsize(nfptr,numzerokeys+numnthkeys+15,&status)) {
 	sprintf(event,"Reserving header space for %d keywords failed in %s",numzerokeys+numnthkeys+10,nfilename);
 	reportevt(flag_verbose,STATUS,5,event);
 	printerror(status);
@@ -1772,7 +1731,7 @@ int DECamXTalk(int argc,char *argv[])
       /* copy zero header information into the new header */
       /* note that last keyword is null keyword and truncates the header! */
       /* only copy the header params that live within zerokeyword */
-      if (fits_get_hdrpos(output_image.fptr,&totkeynum,&keynum,&status)) {
+      if (fits_get_hdrpos(nfptr,&totkeynum,&keynum,&status)) {
 	sprintf(event,"Reading header position in %s failed",nfilename);
 	reportevt(flag_verbose,STATUS,5,event);
 	printerror(status);
@@ -1789,7 +1748,7 @@ int DECamXTalk(int argc,char *argv[])
 	}
 	/* copy the record into the header */
 	if (!keyflag) {
-	  if (fits_insert_record(output_image.fptr,totkeynum+numwrittenkeys,
+	  if (fits_insert_record(nfptr,totkeynum+numwrittenkeys,
 				 zeroheader+j*80,&status)) {
 	    sprintf(event,"Zero Header insert in %s failed",nfilename);
 	    reportevt(flag_verbose,STATUS,5,event);
@@ -1802,7 +1761,7 @@ int DECamXTalk(int argc,char *argv[])
 			       numwrittenkeys-3);
 
       /* copy the header information from the current HDU of MEF */
-      if (fits_get_hdrpos(output_image.fptr,&totkeynum,&keynum,&status)) {
+      if (fits_get_hdrpos(nfptr,&totkeynum,&keynum,&status)) {
 	sprintf(event,"Reading header position in %s failed",nfilename);
 	reportevt(flag_verbose,STATUS,5,event);
 	printerror(status);
@@ -1815,7 +1774,7 @@ int DECamXTalk(int argc,char *argv[])
       numwrittenkeys=0;
       for (j=0;j<numnthkeys-1;j++) {
 	/* copy the record into the header */
-	if (fits_insert_record(output_image.fptr,totkeynum+numwrittenkeys,
+	if (fits_insert_record(nfptr,totkeynum+numwrittenkeys,
 			       nthheader+j*80,&status)) {
 	  sprintf(event,"Insert of %dth header keyword in %s failed:\n%s",
 	          numwrittenkeys,nfilename,nthheader+j*80);
@@ -1833,13 +1792,13 @@ int DECamXTalk(int argc,char *argv[])
       if (flag_overscan && ccdnum < 63) {
 	nkeys=0;
 	while (strlen(delkeys[nkeys])) {
-	  if (fits_read_keyword(output_image.fptr,delkeys[nkeys],
+	  if (fits_read_keyword(nfptr,delkeys[nkeys],
 				comment,comment,&status)==KEY_NO_EXIST) status=0;
 	  else {
-	    if (fits_delete_key(output_image.fptr,delkeys[nkeys],&status)) {
+	    if (fits_delete_key(nfptr,delkeys[nkeys],&status)) {
 	      if (flag_verbose) {
 		sprintf(event,"Keyword %s not deleted from image %s",
-			delkeys[nkeys],output_image.name+1);
+			delkeys[nkeys],input_image[ccdnum].name+1);
 		reportevt(flag_verbose,STATUS,3,event);
 	      }
 	      status=0;
@@ -1853,8 +1812,7 @@ int DECamXTalk(int argc,char *argv[])
       writeCounter = 0;
       while (1) {
 	
-	writeImageFailed = fits_write_img(output_image.fptr,TFLOAT,1,output_image.npixels,output_image.image,&status);
-	
+	writeImageFailed = fits_write_img(nfptr,TFLOAT,1,input_image[ccdnum].npixels,outdata,&status);
 	if(writeImageFailed) {
 	  
 	  writeCounter++;
@@ -1889,14 +1847,14 @@ int DECamXTalk(int argc,char *argv[])
       newimagename[j]=0;
       if (!strncmp(newimagename,"!",1)) 
 	sprintf(newimagename,"%s",newimagename+1);
-      if (fits_modify_key_str(output_image.fptr,"FILENAME",newimagename,"",&status)) {
+      if (fits_modify_key_str(nfptr,"FILENAME",newimagename,"",&status)) {
 	sprintf(event,"Keyword FILENAME modify in %s failed",nfilename);
 	reportevt(flag_verbose,STATUS,5,event);
 	printerror(status);
       }
       if (flag_verbose) printf("FILENAME = %s, ",nfilename+1);
 
-      if (fits_insert_record(output_image.fptr,totkeynum+(++numwrittenkeys),
+      if (fits_insert_record(nfptr,totkeynum+(++numwrittenkeys),
 			     "COMMENT ------------------------",
 			     &status)) {
 	sprintf(event,"Comment insert in %s failed",nfilename);
@@ -1905,7 +1863,7 @@ int DECamXTalk(int argc,char *argv[])
       }
 
       /* add photflag */
-      if (fits_update_key_lng(output_image.fptr,"PHOTFLAG",flag_phot,
+      if (fits_update_key_lng(nfptr,"PHOTFLAG",flag_phot,
 			      "Night Photometric (1) or not (0)",&status)) {
 	sprintf(event,"Keyword PHOTFLAG insert in %s failed",nfilename);
 	reportevt(flag_verbose,STATUS,5,event);
@@ -1914,7 +1872,7 @@ int DECamXTalk(int argc,char *argv[])
       if (flag_verbose) printf("PHOTFLAG = %d\n",flag_phot);
 
       /* update OBSTYPE keyword */
-      if (fits_update_key_str(output_image.fptr,"OBSTYPE",filetype,
+      if (fits_update_key_str(nfptr,"OBSTYPE",filetype,
 			      "Type of observation",&status)) {
 	sprintf(event,"Keyword OBSTYPE update in %s failed",nfilename);
 	reportevt(flag_verbose,STATUS,5,event);
@@ -1926,7 +1884,7 @@ int DECamXTalk(int argc,char *argv[])
       tm=time(NULL);
       sprintf(comment,"%s",asctime(localtime(&tm)));
       comment[strlen(comment)-1]=0;
-      if (fits_write_key_str(output_image.fptr,"DESDCXTK",comment,
+      if (fits_write_key_str(nfptr,"DESDCXTK",comment,
 			     "DECam image conversion and crosstalk correction",
 			     &status)) {
 	sprintf(event,"Keyword DESDCXTK insert in %s failed",nfilename);
@@ -1935,7 +1893,7 @@ int DECamXTalk(int argc,char *argv[])
       }
       if (ccdnum < 63) {
       if (flag_crosstalk) {
-      if (fits_write_key_str(output_image.fptr,"XTALKFIL",xtalk_filename,
+      if (fits_write_key_str(nfptr,"XTALKFIL",xtalk_filename,
 			     "Crosstalk file",
 			     &status)) {
 	sprintf(event,"Keyword XTALKFIL insert in %s failed",nfilename);
@@ -1944,26 +1902,26 @@ int DECamXTalk(int argc,char *argv[])
       }
       }
       if(flag_overscan) {
-	if (fits_write_key_str(output_image.fptr,"DESOSCN",comment,
+	if (fits_write_key_str(nfptr,"DESOSCN",comment,
 			       "overscan corrected",&status)) {
 	  sprintf(event,"Writing DESOSCN failed: %s",nfilename);
 	  reportevt(flag_verbose,STATUS,5,event);
 	  printerror(status);
 	}	
 	/* update the DATASEC keyword if overscan corrected */
-	if (fits_update_key_str(output_image.fptr,"DATASEC",output_image.datasec,
+	if (fits_update_key_str(nfptr,"DATASEC",input_image[ccdnum].datasec,
 				"Data section within image",&status)) {
 	  sprintf(event,"Updating DATASEC failed: %s",nfilename);
 	  reportevt(flag_verbose,STATUS,5,event);
 	  printerror(status);
 	}
-	if (fits_update_key_str(output_image.fptr,"DATASECA",output_image.dataseca,
+	if (fits_update_key_str(nfptr,"DATASECA",input_image[ccdnum].dataseca,
 				NULL,&status)) {
 	  sprintf(event,"Updating DATASECA failed: %s",nfilename);
 	  reportevt(flag_verbose,STATUS,5,event);
 	  printerror(status);
 	}
-	if (fits_update_key_str(output_image.fptr,"DATASECB",output_image.datasecb,
+	if (fits_update_key_str(nfptr,"DATASECB",input_image[ccdnum].datasecb,
 				NULL,&status)) {
 	  sprintf(event,"Updating DATASECB failed: %s",nfilename);
 	  reportevt(flag_verbose,STATUS,5,event);
@@ -1977,12 +1935,12 @@ int DECamXTalk(int argc,char *argv[])
            but require that LTV1 and LTV2 are populated correctly and that correctly would be to have positive 
            offsets which is still under contention  */
 
-	if (fits_update_key_flt(output_image.fptr,"LTV1",0.0,2,NULL,&status)) {
+	if (fits_update_key_flt(nfptr,"LTV1",0.0,2,NULL,&status)) {
 	  sprintf(event,"Update LTV1 failed: %s",nfilename);
 	  reportevt(flag_verbose,STATUS,5,event);
 	  printerror(status);
 	}
-	if (fits_update_key_flt(output_image.fptr,"LTV2",0.0,2,NULL,&status)) {
+	if (fits_update_key_flt(nfptr,"LTV2",0.0,2,NULL,&status)) {
 	  sprintf(event,"Update LTV2 failed: %s",nfilename);
 	  reportevt(flag_verbose,STATUS,5,event);
 	  printerror(status);
@@ -1992,36 +1950,36 @@ int DECamXTalk(int argc,char *argv[])
         on how to properly set the LTV keywords in the raw image headers */
 
 #if 0
-        if (fits_read_key_flt(output_image.fptr,"LTV1",&old_ltv1,oldcomment,&status)==KEY_NO_EXIST){
+        if (fits_read_key_flt(input_image[ccdnum].fptr,"LTV1",&old_ltv1,oldcomment,&status)==KEY_NO_EXIST){
           status=0;
           new_ltv1=0.0;
-          if (fits_write_key(output_image.fptr,TFLOAT,"LTV1",&new_ltv1,NULL,&status)){
-            sprintf(event,"Adding LTV1 failed: %s",output_image.name+1);
+          if (fits_write_key(input_image[ccdnum].fptr,TFLOAT,"LTV1",&new_ltv1,NULL,&status)){
+            sprintf(event,"Adding LTV1 failed: %s",input_image[ccdnum].name+1);
             reportevt(flag_verbose,STATUS,5,event);
             printerror(status);
           } 
         }else{
           new_ltv1=old_ltv1-(input_image.trimsecn[0]-1.0);
-          if (fits_update_key(output_image.fptr,TFLOAT,"LTV1",&new_ltv1,NULL,&status)){
-            sprintf(event,"Update LTV1 failed: %s",output_image.name+1);
+          if (fits_update_key(input_image[ccdnum].fptr,TFLOAT,"LTV1",&new_ltv1,NULL,&status)){
+            sprintf(event,"Update LTV1 failed: %s",input_image[ccdnum].name+1);
             reportevt(flag_verbose,STATUS,5,event);
             printerror(status);
           }
 /*          printf(" RAG new LTV1: %f --> %f \n",old_ltv1,new_ltv1);  */
         }  
 
-        if (fits_read_key_flt(output_image.fptr,"LTV2",&old_ltv2,oldcomment,&status)==KEY_NO_EXIST){
+        if (fits_read_key_flt(input_image[ccdnum].fptr,"LTV2",&old_ltv2,oldcomment,&status)==KEY_NO_EXIST){
           status=0;
           new_ltv2=0.0;
-          if (fits_write_key(output_image.fptr,TFLOAT,"LTV2",&new_ltv2,NULL,&status)){
-            sprintf(event,"Adding LTV2 failed: %s",output_image.name+1);
+          if (fits_write_key(input_image[ccdnum].fptr,TFLOAT,"LTV2",&new_ltv2,NULL,&status)){
+            sprintf(event,"Adding LTV2 failed: %s",input_image[ccdnum].name+1);
             reportevt(flag_verbose,STATUS,5,event);
             printerror(status);
           } 
         }else{
           new_ltv2=old_ltv2-(input_image.trimsecn[2]-1.0);
-          if (fits_update_key(output_image.fptr,TFLOAT,"LTV2",&new_ltv2,NULL,&status)){
-            sprintf(event,"Update LTV2 failed: %s",output_image.name+1);
+          if (fits_update_key(input_image[ccdnum].fptr,TFLOAT,"LTV2",&new_ltv2,NULL,&status)){
+            sprintf(event,"Update LTV2 failed: %s",input_image[ccdnum].name+1);
             reportevt(flag_verbose,STATUS,5,event);
             printerror(status);
           }
@@ -2033,14 +1991,14 @@ int DECamXTalk(int argc,char *argv[])
         sections then the follow code will be needed to update CRPIX1 and CRPIX2 */
 
 
-        if (fits_read_key_dbl(output_image.fptr,"CRPIX1",&old_crpix1,oldcomment,&status)==KEY_NO_EXIST){
+        if (fits_read_key_dbl(nfptr,"CRPIX1",&old_crpix1,oldcomment,&status)==KEY_NO_EXIST){
           status=0;
-          sprintf(event,"No CRPIX1 keyword detected in image: %s",output_image.name+1);
+          sprintf(event,"No CRPIX1 keyword detected in image: %s",input_image[ccdnum].name+1);
           reportevt(flag_verbose,STATUS,3,event);
         }else{ 
-          new_crpix1=old_crpix1-(input_image.trimsecn[0]-1.0);
-          if (fits_update_key(output_image.fptr,TDOUBLE,"CRPIX1",&new_crpix1,NULL,&status)){
-            sprintf(event,"Update CRPIX1 failed: %s",output_image.name+1);
+          new_crpix1=old_crpix1-(input_image[ccdnum].trimsecn[0]-1.0);
+          if (fits_update_key(nfptr,TDOUBLE,"CRPIX1",&new_crpix1,NULL,&status)){
+            sprintf(event,"Update CRPIX1 failed: %s",input_image[ccdnum].name+1);
             reportevt(flag_verbose,STATUS,5,event);
             printerror(status);
           }else{
@@ -2050,14 +2008,14 @@ int DECamXTalk(int argc,char *argv[])
 /*          printf(" RAG new CRPIX1: %lf --> %lf \n",old_crpix1,new_crpix1);  */
         } 
 
-        if (fits_read_key_dbl(output_image.fptr,"CRPIX2",&old_crpix2,oldcomment,&status)==KEY_NO_EXIST){
+        if (fits_read_key_dbl(nfptr,"CRPIX2",&old_crpix2,oldcomment,&status)==KEY_NO_EXIST){
           status=0;
-          sprintf(event,"No CRPIX2 keyword detected in image: %s",output_image.name+1);
+          sprintf(event,"No CRPIX2 keyword detected in image: %s",input_image[ccdnum].name+1);
           reportevt(flag_verbose,STATUS,3,event);
         }else{ 
-          new_crpix2=old_crpix2-(input_image.trimsecn[2]-1.0);
-          if (fits_update_key(output_image.fptr,TDOUBLE,"CRPIX2",&new_crpix2,NULL,&status)){
-            sprintf(event,"Update CRPIX2 failed: %s",output_image.name+1);
+          new_crpix2=old_crpix2-(input_image[ccdnum].trimsecn[2]-1.0);
+          if (fits_update_key(nfptr,TDOUBLE,"CRPIX2",&new_crpix2,NULL,&status)){
+            sprintf(event,"Update CRPIX2 failed: %s",input_image[ccdnum].name+1);
             reportevt(flag_verbose,STATUS,5,event);
             printerror(status);
           }else{
@@ -2069,13 +2027,13 @@ int DECamXTalk(int argc,char *argv[])
 
       }      
       if(flag_sat_beforextalk || flag_sat_afterxtalk) { 
-	if (fits_write_key_str(output_image.fptr,"DESSAT",comment,
+	if (fits_write_key_str(nfptr,"DESSAT",comment,
 			       "saturated pixels flagged",&status)) {
 	  sprintf(event,"Writing DESSAT failed: %s",nfilename);
 	  reportevt(flag_verbose,STATUS,5,event);
 	  printerror(status);
 	}	
-	if (fits_write_key_lng(output_image.fptr,"NSATPIX",(long)(nsata+nsatb),
+	if (fits_write_key_lng(nfptr,"NSATPIX",(long)(nsata+nsatb),
 			       "Number of saturated pixels",&status)) {
 	  sprintf(event,"Setting number of saturated pixels failed: %ld",(long)(nsata+nsatb));
 	  reportevt(flag_verbose,STATUS,5,event);
@@ -2086,14 +2044,14 @@ int DECamXTalk(int argc,char *argv[])
       sprintf(longcomment,"DESDM:");
       //      for (j=0;j<argc;j++) sprintf(longcomment,"%s %s",longcomment,argv[j]);
       sprintf(longcomment,"%s %s",longcomment,command_line);
-      if (fits_write_history(output_image.fptr,longcomment,&status)) {
+      if (fits_write_history(nfptr,longcomment,&status)) {
 	sprintf(event,"DESDM: longcomment insert in %s failed",nfilename);
 	reportevt(flag_verbose,STATUS,5,event);
 	printerror(status);
       }
       if (flag_verbose>=3) printf("  => %s\n",longcomment);
       /* mark this as an image extension */
-      if (fits_write_key_str(output_image.fptr,"DES_EXT","IMAGE","Image extension",
+      if (fits_write_key_str(nfptr,"DES_EXT","IMAGE","Image extension",
 			     &status)) {
 	sprintf(event,"Keyword DES_EXT insert in %s failed",nfilename);
 	reportevt(flag_verbose,STATUS,5,event);
@@ -2102,26 +2060,25 @@ int DECamXTalk(int argc,char *argv[])
 
       if((flag_sat_beforextalk || flag_sat_afterxtalk) && ccdnum < 63){
 	/* Create extension for the mask */
-	if (fits_create_img(output_image.fptr,USHORT_IMG,2,output_image.axes,&status)) {
+	if (fits_create_img(nfptr,USHORT_IMG,2,input_image[ccdnum].axes,&status)) {
 	  sprintf(event,"Creating image mask failed.");
 	  reportevt(flag_verbose,STATUS,5,event);
 	  printerror(status);
 	}
 	/* Write the mask data */	  
-	if (fits_write_img(output_image.fptr,TUSHORT,1,output_image.npixels,output_image.mask,
-			   &status)) {
+	if (fits_write_img(nfptr,TUSHORT,1,input_image[ccdnum].npixels,maskdata,&status)) {
 	  sprintf(event,"Writing image mask failed.");
 	  reportevt(flag_verbose,STATUS,5,event);
 	  printerror(status);
 	}
 	/* Indicate it's a MASK extension */
-	if (fits_update_key_str(output_image.fptr,"DES_EXT","MASK",
+	if (fits_update_key_str(nfptr,"DES_EXT","MASK",
 				"Extension type",&status)) {
 	  reportevt(flag_verbose,STATUS,5,"Setting DES_EXT=MASK failed.");
 	  printerror(status);
 	}
 	/* May be needed */
-	if (fits_update_key_lng(output_image.fptr,"EXTVER",2,
+	if (fits_update_key_lng(nfptr,"EXTVER",2,
 				"Extension version",&status)) {
 	  reportevt(flag_verbose,STATUS,5,"Setting EXTVER=2 failed");
 	  printerror(status); 
@@ -2129,14 +2086,14 @@ int DECamXTalk(int argc,char *argv[])
       }
 
       /* close the new image */
-      if (fits_close_file(output_image.fptr,&status)) {
+      if (fits_close_file(nfptr,&status)) {
 	sprintf(event,"Closing %s failed",nfilename);
 	reportevt(flag_verbose,STATUS,5,event);
 	printerror(status);
       }
       if (flag_verbose) {
 	sprintf(event,"Closed image %ld X %ld  OBSTYPE = %s PHOTFLAG = %d : %s",
-		output_image.axes[0],output_image.axes[1],filetype,flag_phot,nfilename+1);
+		input_image[ccdnum].axes[0],input_image[ccdnum].axes[1],filetype,flag_phot,nfilename+1);
 	reportevt(flag_verbose,STATUS,1,event);
       }
 
@@ -2188,9 +2145,6 @@ int DECamXTalk(int argc,char *argv[])
 
     if (maskdata != NULL) free(maskdata);
     if (outdata != NULL) free(outdata);
-
-    if (outdata2 != NULL) free(outdata2);
-    if (maskdata2 != NULL) free(maskdata2);
 
     if (rl != NULL) free_replacement_list(rl);
 
@@ -2418,7 +2372,7 @@ rlist *init_replacement_list(char *replace_file, int flag_verbose)
             //rl->type = type;
             strncpy(rl->key, key, FLEN_KEYWORD);
 
-            if (sVal[0] == '\'')
+            if (sVal[0] == '\'') // if 'text' field
             {
                 for (j = 0; j < FLEN_VALUE; j++)
                     rl->sVal[j] = '\0';
