@@ -1444,7 +1444,8 @@ int DECamXTalk(int argc,char *argv[])
                 nsata = nsatb = 0;
                 /* Reset the mask */
                 for(j = 0; j < input_image[ccdnum].npixels; j++)
-                    maskdata[locout] = 0;
+                    /* RAG fixed maskdata[locout]=0; */
+                    maskdata[j] = 0;
 
                 //input_image[ccdnum].mask = maskdata;
             }
