@@ -2428,7 +2428,7 @@ int MakeBleedMask(const char *argv[])
     if(starrresult){
       Out << "Unable to determine radius for star at (x,y) = (" << cx << "," 
 	  << cy << "), defaulting to " << srstarr << ".";
-      LX::ReportMessage(flag_verbose,STATUS,4,Out.str());
+      LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
     }
     // profiler.FunctionExit("StarRadius");
     if(debug)
