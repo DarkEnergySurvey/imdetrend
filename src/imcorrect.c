@@ -352,7 +352,7 @@ int ImCorrect(int argc,char *argv[])
 {
   
   int	badpix_wgt0,badpix_downwgt,hdunum,x,y,nfound,imtype,c,
-    xmin,xmax,anynull,maskedpixels,interppixels,
+    xmin,xmax,xpos,anynull,maskedpixels,interppixels,
     saturatepixels,mkpath(),i,keysexist,j,n,nkeys,
     scaleregionn[4]={500,1500,1500,2500},
     miniscaleregionn[4],scalenum,ccdnum=0,
@@ -1766,8 +1766,10 @@ int ImCorrect(int argc,char *argv[])
 
             /* Premask saturation  */
 
+            xpos=(i%output.axes[0])+1;
+
             if (maxsaturate > 0.){
-               if (column_in_section((i%output.axes[0])+1,output.ampsecan)){
+               if (column_in_section(xpos,output.ampsecan)){
                   /* amplifier A */
                   if (image_val>=output.saturateA){
                      output.mask[i] |= BADPIX_SATURATE;
@@ -1804,7 +1806,7 @@ int ImCorrect(int argc,char *argv[])
 //                  printf("RAG mask=%d wgt set to 0.0 \n",output.mask[i]);
                   uncval=0.0;
                }else{
-                  if(column_in_section((i%output.axes[0])+1,output.ampsecan)){
+                  if(column_in_section(xpos,output.ampsecan)){
                      /* in AMP A section */	      
 	             uncval=Squ((double)output.rdnoiseA/(double)output.gainA);
                      if (image_val > 0.){
@@ -1850,7 +1852,7 @@ int ImCorrect(int argc,char *argv[])
             /* Linearity Correction */
    
             if (flag_linear && flag_imlinear){
-               if (column_in_section((i%output.axes[0])+1,output.ampsecan)){
+               if (column_in_section(xpos,output.ampsecan)){
                   image_val=lut_srch(image_val,luta,flag_lutinterp);
                }else{ 
                   image_val=lut_srch(image_val,lutb,flag_lutinterp);
@@ -2139,7 +2141,8 @@ int ImCorrect(int argc,char *argv[])
                /* Now cases where smoothing should be attempted */
 	       /* extract median */
 	       count=0;
-               amp_check=column_in_section((loc%output.axes[0])+1,output.ampsecan);
+/*               amp_check=column_in_section((loc%output.axes[0])+1,output.ampsecan); */
+               amp_check=column_in_section((x+1),output.ampsecan);
 	       ylen=ymax-ymin;
 	       xlen=xmax-xmin;
 	       totpix=ylen*xlen;
@@ -2151,7 +2154,8 @@ int ImCorrect(int argc,char *argv[])
                        /* Check and make sure that the pixel is not flagged (unless fixed) */
                        /* Then check that the pixel is not on the opposite amplifier */
                        if ((!output.mask[rpos])||(output.mask[rpos]==BADPIX_FIX)){
-                          ramp_check=column_in_section((rpos%output.axes[0])+1,output.ampsecan);
+/*                          ramp_check=column_in_section((rpos%output.axes[0])+1,output.ampsecan); */
+                          ramp_check=column_in_section((l+1),output.ampsecan);
                           if (ramp_check == amp_check){
                              vecsort[count++]=output.varim[rpos];
                           }
@@ -2172,7 +2176,9 @@ int ImCorrect(int argc,char *argv[])
 	            if (l>=xmax) l=xmax-1;
                     rpos=l+k*output.axes[0];
                     if ((!output.mask[rpos])||(output.mask[rpos]==BADPIX_FIX)){
-                       ramp_check=column_in_section((rpos%output.axes[0])+1,output.ampsecan);
+/*                       printf("RAG  %d  %d   \n",(l+1),((rpos%output.axes[0])+1)); */
+/*                       ramp_check=column_in_section((rpos%output.axes[0])+1,output.ampsecan); */
+                       ramp_check=column_in_section((l+1),output.ampsecan);
                        if (ramp_check == amp_check){
 	    	          vecsort[count++]=output.varim[rpos];
                        }
