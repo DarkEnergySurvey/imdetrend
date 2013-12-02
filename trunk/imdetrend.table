@@ -1,0 +1,6 @@
+setupRequired(imsupport 7.1.9+0)
+setupRequired(nrecipes 2.0+1)
+setupRequired(ccfits 2.4+2)
+setupTest(destestutils 0.1.1+1)
+setupTest(imdetrendTestData 1.0+0)
+envPrepend(PATH, ${PRODUCT_DIR}/bin)
