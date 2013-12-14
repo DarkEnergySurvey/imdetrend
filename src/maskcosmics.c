@@ -90,6 +90,7 @@ void print_usage(char *program_name)
   printf("    -crays \n");
   printf("    -crfract <cosmic ray flux fraction> (default 0.2)\n");
   printf("    -crsig2 <cosmic variance> (default 2)\n");
+  printf("    -output <output filename>\n");
   printf("  Output Options\n");
   printf("    -verbose <0-3>\n");
   printf("    -help    (print usage and exit)\n");
@@ -274,10 +275,11 @@ int main(int argc,char *argv[])
        //sprintf(astrostdsfile,"%s",optarg);
        //flag_stars=YES;
        //break;
-       //case OPT_OUTPUT: // -output
+       case OPT_OUTPUT: // -output
        //sprintf(outputname,"%s",optarg);
-       //flag_output=YES;
-       //break;
+       sprintf(outputname,"%s",optarg);
+       flag_output=YES;
+       break;
      case OPT_VERBOSE: // -verbose
        // already parsed verbosity
        break;
@@ -347,27 +349,83 @@ int main(int argc,char *argv[])
   /* ********************************** */
   
   sprintf(input.name,"%s",inname_temp);
- 
-  if (flag_output) { 
-    rd_desimage(&input,READONLY,flag_verbose);
-   }
-  else {
+
+
+  if (!flag_output || !strcmp(input.name,outputname)) {
     rd_desimage(&input,READWRITE,flag_verbose);
   }
-
+  else {
+    rd_desimage(&input,READONLY,flag_verbose);
+  }
 
   fits_file_mode(input.fptr,&filemode,&status);
-
   headervalue(&input,"FILTER",filter,filemode);
-    
   sprintf(event,"Input image FILTER=%s\n",filter,input.name);
-
   reportevt(flag_verbose,STATUS,1,event);
   
   headervalue(&input,"OBSTYPE",imagetype,filemode);
   getfloatheader(&input,"EXPTIME",&exposure,filemode);
   /*	printf ("OBSTYPE=%s\n",imagetype); */ 
   if(!strcmp(imagetype,"remap") || (flag_horiz ==1))horiztrails = 1 ;
+
+  /* create an output image with same parameters as input image */
+  output=input;
+  tempimage=input;
+  
+  /* copy the correct output name into place */
+  if (!flag_output || !strcmp(input.name,outputname)) { 
+    sprintf(output.name,"%s",input.name);
+  }
+  else {
+    sprintf(output.name,"%s",outputname);
+  
+  /* create image, mask and varim arrays and copy from input */
+  output.image=(float *)calloc(output.npixels,sizeof(float));
+  if (output.image==NULL) reportevt(flag_verbose,STATUS,5,
+                                    "Calloc of output.image failed");
+  output.mask=(short *)calloc(output.npixels,sizeof(short));
+  if (output.mask==NULL) reportevt(flag_verbose,STATUS,5,
+		  "Calloc of output.mask failed");
+  output.varim=(float *)calloc(output.npixels,sizeof(float));
+  if (output.varim==NULL) reportevt(flag_verbose,STATUS,5,
+                                    "Calloc of output.varim failed");
+  tempimage.varim=(float *)calloc(output.npixels,sizeof(float));
+  if (tempimage.varim==NULL) reportevt(flag_verbose,STATUS,5,
+                                       "Calloc of tempimage.varim failed");
+  for (i=0;i<output.npixels;i++) {
+    output.image[i]=input.image[i];
+    output.mask[i]=input.mask[i];
+    output.varim[i]=input.varim[i];
+    tempimage.varim[i]=input.varim[i];
+  }
+   
+  sprintf(event,"Writing results to %s",output.name);
+  reportevt(flag_verbose,STATUS,1,event);
+  /* make sure path exists for new image */
+  if (mkpath(output.name,flag_verbose)) {
+    sprintf(event,"Failed to create path to file: %s",output.name);
+    reportevt(flag_verbose,STATUS,5,event);
+    exit(0);
+  }
+  else {
+    sprintf(event,"Created path to file: %s",output.name);
+    reportevt(flag_verbose,STATUS,1,event);
+  }
+
+  /* create the output file using input file as template */
+  strcpy(outputnamewithtempl, "!");
+  strcat(outputnamewithtempl, output.name);
+  strcat(outputnamewithtempl, "(");
+  strcat(outputnamewithtempl, input.name);
+  strcat(outputnamewithtempl, ")");
+
+  if (fits_create_file(&output.fptr,outputnamewithtempl,&status)) {
+    sprintf(event,"File creation failed: %s",outputnamewithtempl);
+    reportevt(flag_verbose,STATUS,5,event);
+    printerror(status);
+  }
+
+  }
 
   if (input.axes[0] != NXSIZE || input.axes[1] != NYSIZE)
     {
@@ -464,36 +522,7 @@ int main(int argc,char *argv[])
   sprintf(event,"Values used according to FWHM from image are: crfract=%.2f and crsig2=%.2f \n", crfract, crsig2);
   reportevt(flag_verbose,STATUS,1,event);
 
- 
-  /* create an output image with same parameters as input image */
-  output=input;
-  tempimage=input;
-  
-  /* copy the correct output name into place */
-  if (!flag_output) { 
-    sprintf(output.name,"%s",input.name);
-  
-  /* create image, mask and varim arrays and copy from input */
-  output.image=(float *)calloc(output.npixels,sizeof(float));
-  if (output.image==NULL) reportevt(flag_verbose,STATUS,5,
-                                    "Calloc of output.image failed");
-  output.mask=(short *)calloc(output.npixels,sizeof(short));
-  if (output.mask==NULL) reportevt(flag_verbose,STATUS,5,
-		  "Calloc of output.mask failed");
-  output.varim=(float *)calloc(output.npixels,sizeof(float));
-  if (output.varim==NULL) reportevt(flag_verbose,STATUS,5,
-                                    "Calloc of output.varim failed");
-  tempimage.varim=(float *)calloc(output.npixels,sizeof(float));
-  if (tempimage.varim==NULL) reportevt(flag_verbose,STATUS,5,
-                                       "Calloc of tempimage.varim failed");
-  for (i=0;i<output.npixels;i++) {
-    output.image[i]=input.image[i];
-    output.mask[i]=input.mask[i];
-    output.varim[i]=input.varim[i];
-    tempimage.varim[i]=input.varim[i];
-  }
-    
-  
+
   
   
   /* Get Sky level */
@@ -513,7 +542,7 @@ int main(int argc,char *argv[])
     {
       sprintf(event,"Error in Computing sky level for image: %s. Exiting without attempting to detect Cosmics rays", input.name);
       reportevt(flag_verbose,STATUS,4,event);
-      
+     
       /* Start building command line used*/
       strcpy(updated_command_line,argv[0]);
       strcat(updated_command_line," ");
@@ -608,7 +637,7 @@ int main(int argc,char *argv[])
     }
 
 
-  }
+
   /* *************************************** */
   /* *********  COSMIC RAY SECTION  ******** */
   /* *************************************** */
@@ -695,7 +724,12 @@ int main(int argc,char *argv[])
     reportevt(flag_verbose,STATUS,1,event);
   }
 
-  output.fptr = input.fptr;
+  if (!flag_output) {
+    printf(" Overwritting input image\n");
+    output.fptr = input.fptr;
+  } else {
+    printf(" Writing output file");
+  }
   /* write the corrected image*/
   if (fits_write_img(output.fptr,TFLOAT,1,output.npixels,output.image,&status)) {
     sprintf(event,"Writing image failed: %s",output.name);
