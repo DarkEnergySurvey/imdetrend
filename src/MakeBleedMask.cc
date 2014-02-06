@@ -27,33 +27,39 @@ Options:
                            a background level. (defualt=2)
 
   Filter Description Options:
-   -t,--trail_length <pix>: Use specified <npixels> for trail structuring 
-                            element in Y. (default=20)
-   -n,--numtrail <pix>:     Number of contiguous pixels required for trail
+   -t,--trail_length <pix>:  Use specified <npixels> for trail structuring 
+                             element in Y. (default=20)
+   -n,--numtrail <pix>:      Number of contiguous pixels required for trail
                              detection. (default=trail_length/2)
-   -f,--scalefactor <value>:Use specified <value> as scalefactor on background 
-                            to detect bleedtrails. (default=10.0)
+   -f,--scalefactor <value>: Use specified <value> as scalefactor on background 
+                             to detect bleedtrails. (default=10.0)
 
   Bleed Trail Options:
-  -i,--interpolate:         Interpolate over bleedtrails.
+   -i,--interpolate:         Interpolate over bleedtrails.
+   -E,--Expand <numx_dilate>: Include additional dilation of mask followed by N              
+                              x-only mask dilations of long bleedtrails 
+                              (controlled by -e option)
+   -L,--Long_strong <npix>:  Controls size/length over which check occurs when
+                              attempting to make x-dilations of long/strong 
+                              bleed trails (default=30)
 
   Saturated Object Options:
-  -l,--starlevel <value>:   Use specified <value> as scalefactor on background 
-                            to detect stars. (default=5.0)
-  -w,--growrad <value>:     Factor by which to grow detected star radii. 
-                            (default=1.0)
-  -a,--interpolate-stars:   Do radial interpolation over saturated stars for 
-                            which bleedtrails were detected (default=No)
-  -m,--starmask:            Create a mask for the detected bright objects.
-                            (default=No)
-  -z,--zerostarweights:     Set weights to zero for masked stars. (default=No)
+   -l,--starlevel <value>:   Use specified <value> as scalefactor on background 
+                             to detect stars. (default=5.0)
+   -w,--growrad <value>:     Factor by which to grow detected star radii. 
+                             (default=1.0)
+   -a,--interpolate-stars:   Do radial interpolation over saturated stars for 
+                             which bleedtrails were detected (default=No)
+   -m,--starmask:            Create a mask for the detected bright objects.
+                             (default=No)
+   -z,--zerostarweights:     Set weights to zero for masked stars. (default=No)
 
   Miscellaneous Output Options:
-  -o,--saturated_objects <filename>: Filename for saturated star table.(None)
-  -x,--trailboxes <filename>: Filename for trail box table.(None)
+   -o,--saturated_objects <filename>: Filename for saturated star table.(None)
+   -x,--trailboxes <filename>: Filename for trail box table.(None)
 
-  -h,--help:                Prints long version of help.
-  -v,--verb <level>:        Verbosity level [0-3], default = 1.
+   -h,--help:                Prints long version of help.
+   -v,--verb <level>:        Verbosity level [0-3], default = 1.
 
 Summary:
   Detects bleedtrails in Y for incoming FITS image.
@@ -88,6 +94,8 @@ Detailed Description:
     The default behavior is to flag the pixels within the bleed trail but 
     if the -i option is given then pixels identified as part of the trail
     are also interpolated (using values of pixels adjacent to the trail).
+    The -E and -L options control number of extra dilations (and length which 
+    used to check) when handling long/strong bleed trails.
 
   Saturated Object Options:
     In addition to flagging/interpolating bleed trails, saturated objects can
@@ -170,7 +178,8 @@ public:
     AddOption('y',"holelevel",2,"value");
     AddOption('z',"zerostarweights");
     AddOption('D',"Debug");
-    AddOption('E',"Expand");
+    AddOption('E',"Expand",2,"num_x_dilations");
+    AddOption('L',"Long_strong",2,"npix");
     AddOption('W',"trail_weight_factor",2,"factor");
     AddArgument("infile",1);
     AddArgument("outfile",1);
@@ -196,7 +205,8 @@ public:
     AddHelp("trailboxes","Filename for trail box table.(None)");
     AddHelp("zerostarweights","Set weights to zero for masked stars.");
     AddHelp("Debug","Turn on debug/development mode.");
-    AddHelp("Expand","Expand bleed trails using dilation in order to capture anomalous adjacent pixels.");
+    AddHelp("Expand","Expand bleed trails using dilation in order to capture anomalous adjacent pixels (0).");
+    AddHelp("Long_strong","Length scale used to check when dilating long/strong bleed trails (30).");
     AddHelp("trail_weight_factor","Factor by which to downweight pixels flagged as bleed trails. (0)");
     //    AddHelp("starmask","Set BADPIX_STAR for bright stars from USNO-B.");
     std::ostringstream Ostr;
@@ -317,7 +327,9 @@ int MakeBleedMask(const char *argv[])
   bool do_interp         = !comline.GetOption("interpolate").empty();
   bool debug             = !comline.GetOption("Debug").empty();
   bool do_star_interp    = !comline.GetOption("interpolate-stars").empty();
-  bool do_trail_dilation = !comline.GetOption("Expand").empty();
+//  bool do_trail_dilation = !comline.GetOption("Expand").empty();
+  std::string sexpand    =  comline.GetOption("Expand");
+  std::string slongstrong =  comline.GetOption("Long_strong");
   std::string stw        =  comline.GetOption("trail_length");
   std::string eds        =  comline.GetOption("edgesize");
   std::string hols       =  comline.GetOption("holelevel");
@@ -464,6 +476,35 @@ int MakeBleedMask(const char *argv[])
 	  << ntrail_reject << ", resetting to 1." << std::endl;
       LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
       ntrail_reject = 1;
+    }
+  }
+
+  // This option is needed to allow for multiple x-dilations for long bleed trails
+  int num_ex_dilations = 0;
+  bool do_trail_dilation = 0;
+  if(!sexpand.empty()){
+    do_trail_dilation = 1;
+    std::istringstream Istr(sexpand);
+    Istr >> num_ex_dilations;
+    if(num_ex_dilations < 0){
+      Out << program_name << ": Invalid number of extra-X-dilations, " 
+	  << num_ex_dilations << ", resetting to 0." << std::endl;
+      LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
+      num_ex_dilations = 0;
+    }
+  }
+
+  // This option is controls the length scale considered when making x-dilations for long/strong bleed trails
+  Morph::IndexType long_strong;
+  long_strong = 30;
+  if(!slongstrong.empty()){
+    std::istringstream Istr(slongstrong);
+    Istr >> long_strong;
+    if(long_strong < 3){
+      Out << program_name << ": Invalid length scale (must be at least 3), " 
+	  << num_ex_dilations << ", resetting to 3" << std::endl;
+      LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
+      long_strong = 3;
     }
   }
 
@@ -779,6 +820,13 @@ int MakeBleedMask(const char *argv[])
   structuring_element[5] = Nx-1;
   structuring_element[6] = Nx;
   structuring_element[7] = Nx+1;
+ 
+  // Structuring element for new X-only dilation 
+  // RAG Dec 13, 2013
+ 
+  std::vector<long> structuring_elementx(2,0);
+  structuring_elementx[0] = -1;
+  structuring_elementx[1] = 1;
 
   // TEST MOVE DILATION
   // Dilate twice.  This *should* speed up the bleedtrail detection because
@@ -1793,7 +1841,21 @@ int MakeBleedMask(const char *argv[])
   Morph::BlobsType trail_blobs;
   
   if(do_trail_dilation){
+    int idilations;
+    if(flag_verbose){
+       Out.str("");
+       Out << "Performing extra dilation of bleed-trails" << std::endl;
+       LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
+    }
     Morph::DilateMask(Inimage.DES()->mask,Nx,Ny,structuring_element,trail_mask);
+    for(idilations=0;idilations<num_ex_dilations;idilations++){
+      if(flag_verbose){
+        Out.str("");
+        Out << "Performing " << idilations+1 << " of " << num_ex_dilations << " x-dilation(s) of long/strong bleed-trails" << std::endl;
+        LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
+      }
+      Morph::DilateMaskX(Inimage.DES()->mask,Nx,Ny,structuring_elementx,long_strong,trail_mask);
+    }
     Morph::GetBlobs(Inimage.DES()->mask,Nx,Ny,trail_mask,blob_image,trail_blobs);
   } else {
     Morph::GetBlobs(Inimage.DES()->mask,Nx,Ny,trail_mask,blob_image,trail_blobs);
