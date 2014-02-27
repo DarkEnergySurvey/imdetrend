@@ -556,7 +556,7 @@ int main(int argc,char *argv[])
 
   error = doSky(3,1,&sky,output.image,output.mask,output.varim);
 /*  RAG: use for test to force failed sky fit */
-  error=1; 
+/*  error=1;  */
   if (error){
       sprintf(event,"Error in Computing sky level for image: %s. Exiting without attempting to detect Cosmics rays", input.name);
       reportevt(flag_verbose,STATUS,4,event);
