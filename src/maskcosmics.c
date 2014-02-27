@@ -375,8 +375,7 @@ int main(int argc,char *argv[])
   /* copy the correct output name into place */
   if (!flag_output || !strcmp(input.name,outputname)) { 
     sprintf(output.name,"%s",input.name);
-  }
-  else {
+  } else {
     sprintf(output.name,"%s",outputname);
   }
 
@@ -439,18 +438,16 @@ int main(int argc,char *argv[])
 //  }
 
 
-  if (input.axes[0] != NXSIZE || input.axes[1] != NYSIZE)
-    {
+  if (input.axes[0] != NXSIZE || input.axes[1] != NYSIZE){
       sprintf(event,"Error: Wrong size of image NXSIZE=%i, NYSIZE=%i, image %s\n", input.axes[0], input.axes[1], input.name);
       reportevt(flag_verbose,STATUS,5,event);      
-    } else 
-    {
+  } else {
       naxis1 = input.axes[0];
       naxis2 = input.axes[1];
       naxis=2;
       printf("naxis=%li naxis1=%li naxis2=%li \n",
              naxis,naxis1,naxis2);
-    }
+  }
 
   /**********************************************************/
   /*************  Read Header from Nth Extension ************/
@@ -477,11 +474,11 @@ int main(int argc,char *argv[])
   sprintf(event,"Estimated gain=%f skybrite=%f skysigma=%f saturate=%f \n",estgain,skybrite,skysigma,saturate);
   reportevt(3, STATUS, 1, event);
 
-  if (SATURATED>saturate)
-    {
-      printf("Saturation level requested is greater than level in fits header.  SATURATE=%f keyword value.\n",saturate);
-      SATURATED = saturate;
-    }
+  if (SATURATED>saturate){
+       /* RAG removed print statement because this has apparently been constructed to always occur but it looks like a warning */
+/*     printf("Saturation level requested is greater than level in fits header.  SATURATE=%f keyword value.\n",saturate); */
+     SATURATED = saturate;
+  }
  
   /**********************************************************/
   /* Set crfract and crsig2 based on the seeing (FWHM) unless explicitly set on the command line. */
@@ -1449,7 +1446,7 @@ int doSky(int verbose,int dogain,skypar *sky,float *image,short *bpm,float *weig
               continue;
             }
       
-          Qsort(gindex,pixel,nsample-1);
+          johnQsort(gindex,pixel,nsample-1);
 
           n = 0.5*nsample;
           ie = gindex[n];
@@ -1652,6 +1649,8 @@ int fitsky(skypar *sky,double *data,double *sigma)
   H[2][0] = H[0][2];
   H[2][1] = H[1][2];
   //Solve for parameters 
+/* void ludcmp(double* a, const int n, const int ndim, int* indx, */
+/*           double* d, int* icon) */
   ludcmp(&H[0][0],3,3,indx,&desc,&icon);
   lubksb(&H[0][0],3,3,indx,Y);
   
@@ -1875,154 +1874,154 @@ void lubksb(const double* a, const int n, const int ndim,
 } /* lubksb */
 
 
-void Qsort(int gindex[],double value[], int last)
-{
-  //Quick sort routine
-  //Sort according to value.  Last element in array is value[last]
-  //On entry gindex[n] = n.  On exit value[gindex[n]] will be ordered for n=0,1,2,... 
-
-  int stack_pointer = 0;
-  int first_stack[32];
-  int last_stack[32];
-  int ifirst, ilast, imed, idown, iup;
-  int first=0;
-  for (;;)
-    {
-      if (last - first <= INSERTION_SORT_BOUND)
-        {
-          /* for small sort, use insertion sort */
-          int indx;
-          int prev_val = gindex[first];
-          int cur_val;
-
-          for (indx = first + 1; indx <= last; ++indx)
-            {
-              cur_val = gindex[indx];
-              if (value[prev_val]>value[cur_val])
-                {
-                  /* out of order: array[indx-1] > array[indx] */
-                  int indx2;
-                  gindex[indx] = prev_val; /* move up the larger item first */
-
-                  /* find the insertion point for the smaller item */
-                  for (indx2 = indx - 1; indx2 > first; )
-                    {
-                      int temp_val = gindex[indx2 - 1];
-                      if (value[temp_val]>value[cur_val])
-                        {
-                          gindex[indx2--] = temp_val;
-                          /* still out of order, move up 1 slot to make room */
-                        }
-                      else
-                        break;
-                    }
-                  gindex[indx2] = cur_val; /* insert the smaller item right here */
-                }
-              else
-                {
-                  /* in order, advance to next element */
-                  prev_val = cur_val;
-                }
-            }
-        }
-      else
-        {
-          int pivot;
-
-          /* try quick sort */
-          {
-            int temp;
-            int med = (first + last) >> 1;
-            /* Choose pivot from first, last, and median position. */
-            /* Sort the three elements. */
-            temp = gindex[first];
-            ilast = gindex[last];
-            if (value[temp]>value[ilast])
-              {
-                gindex[first] = gindex[last]; gindex[last] = temp;
-              }
-            temp = gindex[med];
-            ifirst = gindex[first];
-            if (value[ifirst]>value[temp])
-              {
-                gindex[med] = gindex[first]; gindex[first] = temp;
-              }
-            temp = gindex[last];
-            imed = gindex[med];
-            if (value[imed]>value[temp])
-              {
-                gindex[last] = gindex[med]; gindex[med] = temp;
-              }
-            pivot = gindex[med];
-          }
-          {
-            int up;
-            {
-              int down;
-              /* First and last element will be loop stopper. */
-              /* Split array into two partitions. */
-              down = first;
-              up = last;
-              for (;;)
-                {
-        do
-          {
-            ++down;
-            idown = gindex[down];
-          } while (value[pivot]>value[idown]);
-        do
-          {
-            --up;
-            iup = gindex[up];
-          } while (value[iup]>value[pivot]);
-
-
-        if (up > down)
-          {
-            int temp;
-            /* interchange L[down] and L[up] */
-            temp = gindex[down]; gindex[down]= gindex[up]; gindex[up] = temp;
-          }
-        else
-          break;
-                }
-            }
-            {
-              int len1; /* length of first segment */
-              int len2; /* length of second segment */
-              len1 = up - first + 1;
-              len2 = last - up;
-              /* stack the partition that is larger */
-              if (len1 >= len2)
-                {
-                  first_stack[stack_pointer] = first;
-                  last_stack[stack_pointer++] = up;
-
-                  first = up + 1;
-                  /*  tail recursion elimination of                                                                         
-                   *  Qsort(gindex,fun_ptr,up + 1,last)                                                                                         */
-                }
-              else
-                {
-                  first_stack[stack_pointer] = up + 1;
-                  last_stack[stack_pointer++] = last;
-
-                  last = up;
-                  /* tail recursion elimination of                                                                                              * Qsort(gindex,fun_ptr,first,up)                                                                                             */
-                }
-            }
-            continue;
-          }
-          /* end of quick sort */
-        }
-      if (stack_pointer > 0)
-        {
-          /* Sort segment from stack. */
-          first = first_stack[--stack_pointer];
-          last = last_stack[stack_pointer];
-        }
-      else
-        break;
-    } /* end for */
-  return;
-}
+// void Qsort(int gindex[],double value[], int last)
+// 
+//  //Quick sort routine
+//  //Sort according to value.  Last element in array is value[last]
+//  //On entry gindex[n] = n.  On exit value[gindex[n]] will be ordered for n=0,1,2,... 
+// 
+//  int stack_pointer = 0;
+//  int first_stack[32];
+//  int last_stack[32];
+//  int ifirst, ilast, imed, idown, iup;
+//  int first=0;
+//  for (;;)
+//    {
+//      if (last - first <= INSERTION_SORT_BOUND)
+//        {
+//          /* for small sort, use insertion sort */
+//          int indx;
+//          int prev_val = gindex[first];
+//          int cur_val;
+// 
+//          for (indx = first + 1; indx <= last; ++indx)
+//            {
+//              cur_val = gindex[indx];
+//              if (value[prev_val]>value[cur_val])
+//                {
+//                  /* out of order: array[indx-1] > array[indx] */
+//                  int indx2;
+//                  gindex[indx] = prev_val; /* move up the larger item first */
+// 
+//                  /* find the insertion point for the smaller item */
+//                  for (indx2 = indx - 1; indx2 > first; )
+//                    {
+//                      int temp_val = gindex[indx2 - 1];
+//                      if (value[temp_val]>value[cur_val])
+//                        {
+//                          gindex[indx2--] = temp_val;
+//                          /* still out of order, move up 1 slot to make room */
+//                        }
+//                      else
+//                        break;
+//                    }
+//                  gindex[indx2] = cur_val; /* insert the smaller item right here */
+//                }
+//              else
+//                {
+//                  /* in order, advance to next element */
+//                  prev_val = cur_val;
+//                }
+//            }
+//        }
+//      else
+//        {
+//          int pivot;
+// 
+//          /* try quick sort */
+//          {
+//            int temp;
+//            int med = (first + last) >> 1;
+//            /* Choose pivot from first, last, and median position. */
+//            /* Sort the three elements. */
+//            temp = gindex[first];
+//            ilast = gindex[last];
+//            if (value[temp]>value[ilast])
+//              {
+//                gindex[first] = gindex[last]; gindex[last] = temp;
+//              }
+//            temp = gindex[med];
+//            ifirst = gindex[first];
+//            if (value[ifirst]>value[temp])
+//              {
+//                gindex[med] = gindex[first]; gindex[first] = temp;
+//              }
+//            temp = gindex[last];
+//            imed = gindex[med];
+//            if (value[imed]>value[temp])
+//              {
+//                gindex[last] = gindex[med]; gindex[med] = temp;
+//              }
+//            pivot = gindex[med];
+//          }
+//          {
+//            int up;
+//            {
+//              int down;
+//              /* First and last element will be loop stopper. */
+//              /* Split array into two partitions. */
+//              down = first;
+//              up = last;
+//              for (;;)
+//                {
+//        do
+//          {
+//            ++down;
+//            idown = gindex[down];
+//          } while (value[pivot]>value[idown]);
+//        do
+//          {
+//            --up;
+//            iup = gindex[up];
+//          } while (value[iup]>value[pivot]);
+// 
+// 
+//        if (up > down)
+//          {
+//            int temp;
+//            /* interchange L[down] and L[up] */
+//            temp = gindex[down]; gindex[down]= gindex[up]; gindex[up] = temp;
+//          }
+//        else
+//          break;
+//                }
+//            }
+//            {
+//              int len1; /* length of first segment */
+//              int len2; /* length of second segment */
+//              len1 = up - first + 1;
+//              len2 = last - up;
+//              /* stack the partition that is larger */
+//              if (len1 >= len2)
+//                {
+//                  first_stack[stack_pointer] = first;
+//                  last_stack[stack_pointer++] = up;
+// 
+//                  first = up + 1;
+//                  /*  tail recursion elimination of                                                                         
+//                    *  johnQsort(gindex,fun_ptr,up + 1,last)                                                                                         */
+//                 }
+//              else
+//                {
+//                  first_stack[stack_pointer] = up + 1;
+//                  last_stack[stack_pointer++] = last;
+//
+//                  last = up;
+//                  /* tail recursion elimination of                                                                                              * johnQsort(gindex,fun_ptr,first,up)                                                                                             */
+//                }
+//            }
+//            continue;
+//          }
+//          /* end of quick sort */
+//        }
+//      if (stack_pointer > 0)
+//        {
+//          /* Sort segment from stack. */
+//          first = first_stack[--stack_pointer];
+//          last = last_stack[stack_pointer];
+//        }
+//      else
+//        break;
+//    } /* end for */
+//  return;
+//}
