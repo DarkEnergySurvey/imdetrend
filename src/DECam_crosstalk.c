@@ -2477,7 +2477,7 @@ int apply_replacement_list(char *header, rlist *rl, int flag_verbose)
                     {
                         strncpy(new_str, &header[i*80], 80);
                         new_str[80] = '\0';
-                        sprintf(event,"Replaced <%s> with <%s>\n", old_str, new_str);
+                        sprintf(event,"Replaced <%s> with <%s>", old_str, new_str);
                         reportevt(flag_verbose, STATUS, 1, event);
                     }
 
