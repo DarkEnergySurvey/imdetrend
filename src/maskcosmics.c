@@ -177,7 +177,7 @@ int main(int argc,char *argv[])
 
    time_t	tm;
    float	interp_noise=1.0,interp_fwhm=0.0;
-   int	flag_output=0,flag_crays=0,flag_stars=0,flag_srcgrowrad=0, flag_crfract = 0, flag_crsig2 = 0,
+   int	flag_output=0,flag_crays=0,flag_skip_crays=0,flag_FWHM=0,flag_SKY=0,flag_stars=0,flag_srcgrowrad=0, flag_crfract = 0, flag_crsig2 = 0,
      num = 0,filemode=0,goodpix,badpix,hdutype,flag_small_fwhm=0;
    enum {OPT_CRAYS=1,OPT_CRFRACT,OPT_CRSIG2,OPT_FLAG_HORIZTRAILS,
          OPT_NOINTERPOLATE,OPT_OUTPUT,OPT_VERBOSE,OPT_HELP,OPT_VERSION};
@@ -375,8 +375,7 @@ int main(int argc,char *argv[])
   /* copy the correct output name into place */
   if (!flag_output || !strcmp(input.name,outputname)) { 
     sprintf(output.name,"%s",input.name);
-  }
-  else {
+  } else {
     sprintf(output.name,"%s",outputname);
   }
 
@@ -405,50 +404,50 @@ int main(int argc,char *argv[])
    
   sprintf(event,"Writing results to %s",output.name);
   reportevt(flag_verbose,STATUS,1,event);
-  /* make sure path exists for new image */
-  if (mkpath(output.name,flag_verbose)) {
-    sprintf(event,"Failed to create path to file: %s",output.name);
-    reportevt(flag_verbose,STATUS,5,event);
-    exit(0);
-  }
-  else {
-    sprintf(event,"Created path to file: %s",output.name);
-    reportevt(flag_verbose,STATUS,1,event);
-  }
+//  /* make sure path exists for new image */
+//  if (mkpath(output.name,flag_verbose)) {
+//    sprintf(event,"Failed to create path to file: %s",output.name);
+//    reportevt(flag_verbose,STATUS,5,event);
+//    exit(0);
+//  }
+//  else {
+//    sprintf(event,"Created path to file: %s",output.name);
+//    reportevt(flag_verbose,STATUS,1,event);
+//  }
 
-  if (flag_output) {
+/* RAG moved to occur when file write occurs */
 
-    /* create the output file using input file as template */
-    strcpy(outputnamewithtempl, "!");
-    strcat(outputnamewithtempl, output.name);
-    strcat(outputnamewithtempl, "(");
-    strcat(outputnamewithtempl, input.name);
-    strcat(outputnamewithtempl, ")");
+//  if (flag_output) {
+//
+//    /* create the output file using input file as template */
+//    strcpy(outputnamewithtempl, "!");
+//    strcat(outputnamewithtempl, output.name);
+//    strcat(outputnamewithtempl, "(");
+//    strcat(outputnamewithtempl, input.name);
+//    strcat(outputnamewithtempl, ")");
+//
+//    /* printf("output filename %s", outputnamewithtempl);*/
+//
+//    if (fits_create_file(&output.fptr,outputnamewithtempl,&status)) {
+//      sprintf(event,"File creation failed: %s",outputnamewithtempl);
+//      reportevt(flag_verbose,STATUS,5,event);
+//      printerror(status);
+//    }
+//  } else {
+//    output.fptr = input.fptr;
+//  }
 
-    /* printf("output filename %s", outputnamewithtempl);*/
 
-    if (fits_create_file(&output.fptr,outputnamewithtempl,&status)) {
-      sprintf(event,"File creation failed: %s",outputnamewithtempl);
-      reportevt(flag_verbose,STATUS,5,event);
-      printerror(status);
-    }
-  } else {
-    output.fptr = input.fptr;
-  }
-
-
-  if (input.axes[0] != NXSIZE || input.axes[1] != NYSIZE)
-    {
+  if (input.axes[0] != NXSIZE || input.axes[1] != NYSIZE){
       sprintf(event,"Error: Wrong size of image NXSIZE=%i, NYSIZE=%i, image %s\n", input.axes[0], input.axes[1], input.name);
       reportevt(flag_verbose,STATUS,5,event);      
-    } else 
-    {
+  } else {
       naxis1 = input.axes[0];
       naxis2 = input.axes[1];
       naxis=2;
       printf("naxis=%li naxis1=%li naxis2=%li \n",
              naxis,naxis1,naxis2);
-    }
+  }
 
   /**********************************************************/
   /*************  Read Header from Nth Extension ************/
@@ -475,11 +474,11 @@ int main(int argc,char *argv[])
   sprintf(event,"Estimated gain=%f skybrite=%f skysigma=%f saturate=%f \n",estgain,skybrite,skysigma,saturate);
   reportevt(3, STATUS, 1, event);
 
-  if (SATURATED>saturate)
-    {
-      printf("Saturation level requested is greater than level in fits header.  SATURATE=%f keyword value.\n",saturate);
-      SATURATED = saturate;
-    }
+  if (SATURATED>saturate){
+       /* RAG removed print statement because this has apparently been constructed to always occur but it looks like a warning */
+/*     printf("Saturation level requested is greater than level in fits header.  SATURATE=%f keyword value.\n",saturate); */
+     SATURATED = saturate;
+  }
  
   /**********************************************************/
   /* Set crfract and crsig2 based on the seeing (FWHM) unless explicitly set on the command line. */
@@ -493,7 +492,7 @@ int main(int argc,char *argv[])
 
   if (!flag_crfract && flag_nofwhm){
     crfract=0.1;
-    sprintf(event,"No FWHM measurement present. Defaulting to CRFRACT=%.2f\n",crfract);
+    sprintf(event,"No FWHM measurement present. Defaulting to CRFRACT=%.2f",crfract);
     reportevt(flag_verbose,STATUS,4,event);
   }else{
     if (fwhm > 3.3 && fwhm < 4.0) {
@@ -501,18 +500,22 @@ int main(int argc,char *argv[])
     }else if (fwhm >= 4.0) {
       crfract = 0.2;
     }else{
-      sprintf(event,"Image with FWHM=%.2f (<3.3 pix) is not suitable for automatic detection of CR.\n",fwhm);
+      sprintf(event,"Image with FWHM=%.2f (<3.3 pix) is not suitable for automatic detection of CR.",fwhm);
       reportevt(flag_verbose,STATUS,3,event);
-      exit(0);
+      /* RAG: Set flag to prevent CRAY masking algorithm from running */
+      /* and set flag so that report can be made when file written */
+      flag_skip_crays=TRUE;
+      flag_FWHM=TRUE;
+//      exit(0);
     }
   }
-  sprintf(event," Value for CRFRACT set automaically based on seeing to CRFACT=%.2f\n",crfract);
+  sprintf(event," Value for CRFRACT set automaically based on seeing to CRFACT=%.2f",crfract);
   reportevt(flag_verbose,STATUS,1,event);
   
 
   if (!flag_crsig2 && flag_nofwhm){
     crsig2=1.0;
-    sprintf(event,"No FWHM measurement present.  Defaulting to CRSIG2=%.2f\n",crsig2);
+    sprintf(event,"No FWHM measurement present.  Defaulting to CRSIG2=%.2f",crsig2);
     reportevt(flag_verbose,STATUS,3,event);
   }else{
     if (fwhm > 3.3 && fwhm < 4.0){
@@ -520,20 +523,21 @@ int main(int argc,char *argv[])
     }else if (fwhm >= 4.0) {
       crsig2 = 2.0;
     }else{
-      sprintf(event,"Image with FWHM=%.2f (<3.3 pix) is not suitable for automatic detection of CR.\n",fwhm);
+      sprintf(event,"Image with FWHM=%.2f (<3.3 pix) is not suitable for automatic detection of CR.",fwhm);
       reportevt(flag_verbose,STATUS,3,event);
-      exit(0);
+      /* RAG: Set flag to prevent CRAY masking algorithm from running */
+      /* and set flag so that report can be made when file written */
+      flag_skip_crays=TRUE;
+      flag_FWHM=TRUE;
+//      exit(0);
     }
   }
-  sprintf(event," Value for CRSIG2 set automaically based on FWHM to CRSIG2=%.2f\n",crsig2);
+  sprintf(event," Value for CRSIG2 set automaically based on FWHM to CRSIG2=%.2f",crsig2);
   reportevt(flag_verbose,STATUS,1,event);
 
 
-  sprintf(event,"Values used according to FWHM from image are: crfract=%.2f and crsig2=%.2f \n", crfract, crsig2);
+  sprintf(event,"Values used according to FWHM from image are: crfract=%.2f and crsig2=%.2f", crfract, crsig2);
   reportevt(flag_verbose,STATUS,1,event);
-
-
-  
   
   /* Get Sky level */
   //  doSky(image,bpm,weight);
@@ -548,104 +552,110 @@ int main(int argc,char *argv[])
   // printf("sky values %d %d %f %d %f %f %f \n", sky.npixX,sky.npixY,sky.weightmin,sky.minsample,sky.minline,sky.underflow,sky.saturated);
 
   error = doSky(3,1,&sky,output.image,output.mask,output.varim);
-  if (error)
-    {
+/*  RAG: use for test to force failed sky fit */
+/*  error=1;  */
+  if (error){
       sprintf(event,"Error in Computing sky level for image: %s. Exiting without attempting to detect Cosmics rays", input.name);
       reportevt(flag_verbose,STATUS,4,event);
-     
-      /* Start building command line used*/
-      strcpy(updated_command_line,argv[0]);
-      strcat(updated_command_line," ");
-      strcat(updated_command_line,input.name);
-      
-      strcat(updated_command_line, ": Unable to fit sky. No cosmics ray detections done. Saving with no changes to either masks.");
-      
-      
-      sprintf(event,"Writing results to %s",output.name);
-      reportevt(flag_verbose,STATUS,1,event);
-      
-      /* make sure path exists for new image */
-      if (mkpath(output.name,flag_verbose)) {
-        sprintf(event,"Failed to create path to file: %s",output.name);
-        reportevt(flag_verbose,STATUS,5,event);
-        exit(0);
-      }
-      else {
-        sprintf(event,"Created path to file: %s",output.name);
-        reportevt(flag_verbose,STATUS,1,event);
-      }
-      
-      output.fptr = input.fptr;
-      /* write the corrected image*/
-      if (fits_write_img(output.fptr,TFLOAT,1,output.npixels,output.image,&status)) {
-        sprintf(event,"Writing image failed: %s",output.name);
-        reportevt(flag_verbose,STATUS,5,event);
-        printerror(status);
-      }
-	  
-      /* Write information into the header describing the processing */
-      /* get system time */
-      tm=time(NULL);
-      sprintf(comment,"%s",asctime(localtime(&tm)));
-      comment[strlen(comment)-1]=0;
-      if (fits_write_key_str(output.fptr,"DESCRMSK",comment, "Run Maskcosmics. Unable to fit sky",&status)) {
-        sprintf(event,"Writing processing history failed: %s", output.name);
-        reportevt(flag_verbose,STATUS,5,event);
-        printerror(status);
-      }
-      sprintf(longcomment,"DESDM:");
-      //  for (i=0;i<argc;i++) sprintf(longcomment,"%s %s",longcomment,argv[i]);
-      sprintf(longcomment,"%s %s",longcomment,updated_command_line);
-      reportevt(flag_verbose,STATUS,1,longcomment);
-      if (fits_write_history(output.fptr,longcomment,&status)) {
-        sprintf(event,"Writing longcomment failed: %s",output.name);
-        reportevt(flag_verbose,STATUS,5,event);
-        printerror(status);
-      }
-      
-      fits_movrel_hdu(output.fptr, 1, NULL, &status);
-      /*if (fits_write_img(output.fptr,TUSHORT,1,output.npixels,output.mask, &status)) {*/
-      if (fits_write_img(output.fptr,TUSHORT,1,output.npixels,output.mask, &status)) {
-        sprintf(event,"Writing image mask failed: %s",output.name);
-        reportevt(flag_verbose,STATUS,5,event);
-        printerror(status);
-      }
-      if (fits_update_key_str(output.fptr,"DES_EXT","MASK", "Extension type",&status)) {
-        reportevt(flag_verbose,STATUS,5,"Setting DES_EXT=MASK failed");
-        printerror(status);
-      }
-      
-      /* now store the variance image that has been created or updated */
-      fits_movrel_hdu(output.fptr, 1, NULL, &status);
-      if (fits_write_img(output.fptr,TFLOAT,1,output.npixels,output.varim, &status)) {
-        sprintf(event,"Writing variance image failed: %s",output.name);
-        reportevt(flag_verbose,STATUS,5,event);
-        printerror(status);
-      }
-      
-      if (fits_update_key_str(output.fptr,"DES_EXT","WEIGHT", "Extension type",&status)) {
-        sprintf(event,"Writing DES_EXT=WEIGHT failed: %s",output.name);
-        reportevt(flag_verbose,STATUS,5,event);
-        printerror(status);
-      }
-      
-      
-      /* close the corrected image */
-      if (fits_close_file(output.fptr,&status)) {
-        sprintf(event,"File close failed: %s",output.name);
-        reportevt(flag_verbose,STATUS,5,event);
-        printerror(status);
-      }
-      
-
-      printf("End of maskcosmics program");      
-      
-      printf("\n");
-      return(0);
-      
-      exit(0);
-    }
-
+      /* RAG: Set flag to prevent CRAY masking algorithm from running */
+      /* and set flag so that report can be made when file written */
+      flag_skip_crays=TRUE;
+      flag_SKY=TRUE;
+  } 
+  
+//     /* Start building command line used*/
+//      strcpy(updated_command_line,argv[0]);
+//      strcat(updated_command_line," ");
+//      strcat(updated_command_line,input.name);
+//      
+//      strcat(updated_command_line, ": Unable to fit sky. No cosmics ray detections done. Saving with no changes to either masks.");
+//      
+//      
+//      sprintf(event,"Writing results to %s",output.name);
+//      reportevt(flag_verbose,STATUS,1,event);
+//      
+//      /* make sure path exists for new image */
+//      if (mkpath(output.name,flag_verbose)) {
+//        sprintf(event,"Failed to create path to file: %s",output.name);
+//        reportevt(flag_verbose,STATUS,5,event);
+//        exit(0);
+//      }
+//      else {
+//        sprintf(event,"Created path to file: %s",output.name);
+//        reportevt(flag_verbose,STATUS,1,event);
+//      }
+//      
+//      output.fptr = input.fptr;
+//      /* write the corrected image*/
+//      if (fits_write_img(output.fptr,TFLOAT,1,output.npixels,output.image,&status)) {
+//        sprintf(event,"Writing image failed: %s",output.name);
+//        reportevt(flag_verbose,STATUS,5,event);
+//        printerror(status);
+//      }
+//	  
+//      /* Write information into the header describing the processing */
+//      /* get system time */
+//      tm=time(NULL);
+//      sprintf(comment,"%s",asctime(localtime(&tm)));
+//      comment[strlen(comment)-1]=0;
+//      if (fits_write_key_str(output.fptr,"DESCRMSK",comment, "Run Maskcosmics. Unable to fit sky",&status)) {
+//        sprintf(event,"Writing processing history failed: %s", output.name);
+//        reportevt(flag_verbose,STATUS,5,event);
+//        printerror(status);
+//      }
+//      sprintf(longcomment,"DESDM:");
+//      //  for (i=0;i<argc;i++) sprintf(longcomment,"%s %s",longcomment,argv[i]);
+//      sprintf(longcomment,"%s %s",longcomment,updated_command_line);
+//      reportevt(flag_verbose,STATUS,1,longcomment);
+//      if (fits_write_history(output.fptr,longcomment,&status)) {
+//        sprintf(event,"Writing longcomment failed: %s",output.name);
+//        reportevt(flag_verbose,STATUS,5,event);
+//        printerror(status);
+//      }
+//      
+//      fits_movrel_hdu(output.fptr, 1, NULL, &status);
+//      /*if (fits_write_img(output.fptr,TUSHORT,1,output.npixels,output.mask, &status)) {*/
+//      if (fits_write_img(output.fptr,TUSHORT,1,output.npixels,output.mask, &status)) {
+//        sprintf(event,"Writing image mask failed: %s",output.name);
+//        reportevt(flag_verbose,STATUS,5,event);
+//        printerror(status);
+//      }
+//      if (fits_update_key_str(output.fptr,"DES_EXT","MASK", "Extension type",&status)) {
+//        reportevt(flag_verbose,STATUS,5,"Setting DES_EXT=MASK failed");
+//        printerror(status);
+//      }
+//      
+//      /* now store the variance image that has been created or updated */
+//      fits_movrel_hdu(output.fptr, 1, NULL, &status);
+//      if (fits_write_img(output.fptr,TFLOAT,1,output.npixels,output.varim, &status)) {
+//        sprintf(event,"Writing variance image failed: %s",output.name);
+//        reportevt(flag_verbose,STATUS,5,event);
+//        printerror(status);
+//      }
+//      
+//      if (fits_update_key_str(output.fptr,"DES_EXT","WEIGHT", "Extension type",&status)) {
+//        sprintf(event,"Writing DES_EXT=WEIGHT failed: %s",output.name);
+//        reportevt(flag_verbose,STATUS,5,event);
+//        printerror(status);
+//      }
+//      
+//      
+//      /* close the corrected image */
+//      if (fits_close_file(output.fptr,&status)) {
+//        sprintf(event,"File close failed: %s",output.name);
+//        reportevt(flag_verbose,STATUS,5,event);
+//        printerror(status);
+//      }
+//      
+//
+//      printf("End of maskcosmics program");      
+//      
+//      printf("\n");
+//      return(0);
+//      
+//      exit(0);
+//    }
+//
 
 
   /* *************************************** */
@@ -653,8 +663,8 @@ int main(int argc,char *argv[])
   /* *************************************** */
   /*******************************************/
 
-    
-  if (flag_crays) {
+  /* RAG added check that flag to skip CR-rejection has not been thrown */    
+  if ((flag_crays)&&(!flag_skip_crays)) {
     if (flag_verbose) 
       {
         sprintf(event,"Masking cosmic rays in %s\n",input.name);
@@ -702,40 +712,74 @@ int main(int argc,char *argv[])
   /* **********   WRITE OUTPUT IMAGE  *********** */
   /* ******************************************** */
 
-  /* Start building command line used*/
-  strcpy(updated_command_line,argv[0]);
-  strcat(updated_command_line," ");
-  strcat(updated_command_line,input.name);
+//  printf("COMMAND LINE WAS: %s\n",command_line);
+  /* RAG removed because the command line as issued already exists as a string? why alter it */
 
-  if (flag_crays) {
-    strcat(updated_command_line, " -crays");
-  }
-  if (flag_crfract) {
-    sprintf(event," -crfract %.2f",crfract);
-    strcat(updated_command_line,event);
-  }
-  if (flag_crsig2) {
-    sprintf(event," -crsig2 %.2f",crsig2);
-    strcat(updated_command_line,event);
-  }
-  if (flag_output) {
-    sprintf(event," -output %s ", output.name);
-    strcat(updated_command_line, event);
-  }
-  
+//  /* Start building command line used*/
+//
+//  strcpy(updated_command_line,argv[0]);
+//  strcat(updated_command_line," ");
+//  strcat(updated_command_line,input.name);
+//
+//  if (flag_crays) {
+//    strcat(updated_command_line, " -crays");
+//  }
+//  if (flag_crfract) {
+//    sprintf(event," -crfract %.2f",crfract);
+//    strcat(updated_command_line,event);
+//  }
+//  if (flag_crsig2) {
+//    sprintf(event," -crsig2 %.2f",crsig2);
+//    strcat(updated_command_line,event);
+//  }
+//  if (flag_output) {
+//    sprintf(event," -output %s ", output.name);
+//    strcat(updated_command_line, event);
+//  }
+//  printf("UPDATED COMMAND LINE WAS: %s\n",updated_command_line);
 
   sprintf(event,"Writing results to %s",output.name);
   reportevt(flag_verbose,STATUS,1,event);
 
   /* make sure path exists for new image */
-  if (mkpath(output.name,flag_verbose)) {
-    sprintf(event,"Failed to create path to file: %s",output.name);
-    reportevt(flag_verbose,STATUS,5,event);
-    exit(0);
-  }
-  else {
-    sprintf(event,"Created path to file: %s",output.name);
-    reportevt(flag_verbose,STATUS,1,event);
+//  if (mkpath(output.name,flag_verbose)) {
+//   sprintf(event,"Failed to create path to file: %s",output.name);
+//    reportevt(flag_verbose,STATUS,5,event);
+//    exit(0);
+//  }
+//  else {
+//    sprintf(event,"Created path to file: %s",output.name);
+//    reportevt(flag_verbose,STATUS,1,event);
+//  }
+
+  if (flag_output) {
+
+     if (mkpath(output.name,flag_verbose)) {
+        sprintf(event,"Failed to create path to file: %s",output.name);
+        reportevt(flag_verbose,STATUS,5,event);
+        exit(1);
+     }else{
+        sprintf(event,"Created path to file: %s",output.name);
+        reportevt(flag_verbose,STATUS,1,event);
+     }
+
+
+     /* create the output file using input file as template */
+     strcpy(outputnamewithtempl, "!");
+     strcat(outputnamewithtempl, output.name);
+     strcat(outputnamewithtempl, "(");
+     strcat(outputnamewithtempl, input.name);
+     strcat(outputnamewithtempl, ")");
+ 
+     /* printf("output filename %s", outputnamewithtempl);*/
+ 
+     if (fits_create_file(&output.fptr,outputnamewithtempl,&status)) {
+       sprintf(event,"File creation failed: %s",outputnamewithtempl);
+       reportevt(flag_verbose,STATUS,5,event);
+       printerror(status);
+     }
+  }else{
+    output.fptr = input.fptr;
   }
 
   /*if (!flag_output) {
@@ -757,14 +801,56 @@ int main(int argc,char *argv[])
   tm=time(NULL);
   sprintf(comment,"%s",asctime(localtime(&tm)));
   comment[strlen(comment)-1]=0;
-  if (fits_write_key_str(output.fptr,"DESCRMSK",comment, "Masked the image",&status)) {
-    sprintf(event,"Writing processing history failed: %s", output.name);
-    reportevt(flag_verbose,STATUS,5,event);
-    printerror(status);
+
+  /* RAG: Four outcomes are possible: */
+  /*     1) CRmasking occurred, */
+  /*     2) No CRmasking because -cray flag not present */
+  /*     3) NO CRmasking due to small FWHM, */
+  /*     3) NO CRmasking due to sky estimate failure */
+
+
+  if (!flag_skip_crays) {
+     if (flag_crays){
+        /* Case 1: CR masking occurred */
+        if (fits_write_key_str(output.fptr,"DESCRMSK",comment, "Masked the image",&status)) {
+           sprintf(event,"Writing processing history failed: %s", output.name);
+           reportevt(flag_verbose,STATUS,5,event);
+           printerror(status);
+        }
+     }else{
+        /* Case 2: No CR masking requested (not sure why this is an options but currently it is) */
+        if (fits_write_key_str(output.fptr,"DESCRMSK",comment, "No CRmasking, no -cray option",&status)) {
+           sprintf(event,"Writing processing history failed: %s", output.name);
+           reportevt(flag_verbose,STATUS,5,event);
+           printerror(status);
+        }
+     }
+  }else{
+     /* Note for these cases multulpe DESCRMSK keywords can be written */
+     if (flag_FWHM){
+        /* Case 3: CR masking skipped due to small FWHM */
+        if (fits_write_key_str(output.fptr,"DESCRMSK",comment, "No CRmasking, FWHM<3.3 pix",&status)) {
+           sprintf(event,"Writing processing history failed: %s", output.name);
+           reportevt(flag_verbose,STATUS,5,event);
+           printerror(status);
+        }
+     }
+     if(flag_SKY){
+        /* Case 4: CR masking skipped, unable to fit sky */
+        if (fits_write_key_str(output.fptr,"DESCRMSK",comment, "No CRmasking, unable to fit sky",&status)) {
+           sprintf(event,"Writing processing history failed: %s", output.name);
+           reportevt(flag_verbose,STATUS,5,event);
+           printerror(status);
+        }
+     }
   }
+
+  /* Add command line call to header */
+  /* RAG switched to use actual command line than reconstructed/updated command line */
+
   sprintf(longcomment,"DESDM:");
   //  for (i=0;i<argc;i++) sprintf(longcomment,"%s %s",longcomment,argv[i]);
-  sprintf(longcomment,"%s %s",longcomment,updated_command_line);
+  sprintf(longcomment,"%s %s",longcomment,command_line);
   reportevt(flag_verbose,STATUS,1,longcomment);
   if (fits_write_history(output.fptr,longcomment,&status)) {
     sprintf(event,"Writing longcomment failed: %s",output.name);
@@ -1360,7 +1446,7 @@ int doSky(int verbose,int dogain,skypar *sky,float *image,short *bpm,float *weig
               continue;
             }
       
-          Qsort(gindex,pixel,nsample-1);
+          johnQsort(gindex,pixel,nsample-1);
 
           n = 0.5*nsample;
           ie = gindex[n];
@@ -1563,6 +1649,8 @@ int fitsky(skypar *sky,double *data,double *sigma)
   H[2][0] = H[0][2];
   H[2][1] = H[1][2];
   //Solve for parameters 
+/* void ludcmp(double* a, const int n, const int ndim, int* indx, */
+/*           double* d, int* icon) */
   ludcmp(&H[0][0],3,3,indx,&desc,&icon);
   lubksb(&H[0][0],3,3,indx,Y);
   
@@ -1786,154 +1874,154 @@ void lubksb(const double* a, const int n, const int ndim,
 } /* lubksb */
 
 
-void Qsort(int gindex[],double value[], int last)
-{
-  //Quick sort routine
-  //Sort according to value.  Last element in array is value[last]
-  //On entry gindex[n] = n.  On exit value[gindex[n]] will be ordered for n=0,1,2,... 
-
-  int stack_pointer = 0;
-  int first_stack[32];
-  int last_stack[32];
-  int ifirst, ilast, imed, idown, iup;
-  int first=0;
-  for (;;)
-    {
-      if (last - first <= INSERTION_SORT_BOUND)
-        {
-          /* for small sort, use insertion sort */
-          int indx;
-          int prev_val = gindex[first];
-          int cur_val;
-
-          for (indx = first + 1; indx <= last; ++indx)
-            {
-              cur_val = gindex[indx];
-              if (value[prev_val]>value[cur_val])
-                {
-                  /* out of order: array[indx-1] > array[indx] */
-                  int indx2;
-                  gindex[indx] = prev_val; /* move up the larger item first */
-
-                  /* find the insertion point for the smaller item */
-                  for (indx2 = indx - 1; indx2 > first; )
-                    {
-                      int temp_val = gindex[indx2 - 1];
-                      if (value[temp_val]>value[cur_val])
-                        {
-                          gindex[indx2--] = temp_val;
-                          /* still out of order, move up 1 slot to make room */
-                        }
-                      else
-                        break;
-                    }
-                  gindex[indx2] = cur_val; /* insert the smaller item right here */
-                }
-              else
-                {
-                  /* in order, advance to next element */
-                  prev_val = cur_val;
-                }
-            }
-        }
-      else
-        {
-          int pivot;
-
-          /* try quick sort */
-          {
-            int temp;
-            int med = (first + last) >> 1;
-            /* Choose pivot from first, last, and median position. */
-            /* Sort the three elements. */
-            temp = gindex[first];
-            ilast = gindex[last];
-            if (value[temp]>value[ilast])
-              {
-                gindex[first] = gindex[last]; gindex[last] = temp;
-              }
-            temp = gindex[med];
-            ifirst = gindex[first];
-            if (value[ifirst]>value[temp])
-              {
-                gindex[med] = gindex[first]; gindex[first] = temp;
-              }
-            temp = gindex[last];
-            imed = gindex[med];
-            if (value[imed]>value[temp])
-              {
-                gindex[last] = gindex[med]; gindex[med] = temp;
-              }
-            pivot = gindex[med];
-          }
-          {
-            int up;
-            {
-              int down;
-              /* First and last element will be loop stopper. */
-              /* Split array into two partitions. */
-              down = first;
-              up = last;
-              for (;;)
-                {
-        do
-          {
-            ++down;
-            idown = gindex[down];
-          } while (value[pivot]>value[idown]);
-        do
-          {
-            --up;
-            iup = gindex[up];
-          } while (value[iup]>value[pivot]);
-
-
-        if (up > down)
-          {
-            int temp;
-            /* interchange L[down] and L[up] */
-            temp = gindex[down]; gindex[down]= gindex[up]; gindex[up] = temp;
-          }
-        else
-          break;
-                }
-            }
-            {
-              int len1; /* length of first segment */
-              int len2; /* length of second segment */
-              len1 = up - first + 1;
-              len2 = last - up;
-              /* stack the partition that is larger */
-              if (len1 >= len2)
-                {
-                  first_stack[stack_pointer] = first;
-                  last_stack[stack_pointer++] = up;
-
-                  first = up + 1;
-                  /*  tail recursion elimination of                                                                         
-                   *  Qsort(gindex,fun_ptr,up + 1,last)                                                                                         */
-                }
-              else
-                {
-                  first_stack[stack_pointer] = up + 1;
-                  last_stack[stack_pointer++] = last;
-
-                  last = up;
-                  /* tail recursion elimination of                                                                                              * Qsort(gindex,fun_ptr,first,up)                                                                                             */
-                }
-            }
-            continue;
-          }
-          /* end of quick sort */
-        }
-      if (stack_pointer > 0)
-        {
-          /* Sort segment from stack. */
-          first = first_stack[--stack_pointer];
-          last = last_stack[stack_pointer];
-        }
-      else
-        break;
-    } /* end for */
-  return;
-}
+// void Qsort(int gindex[],double value[], int last)
+// 
+//  //Quick sort routine
+//  //Sort according to value.  Last element in array is value[last]
+//  //On entry gindex[n] = n.  On exit value[gindex[n]] will be ordered for n=0,1,2,... 
+// 
+//  int stack_pointer = 0;
+//  int first_stack[32];
+//  int last_stack[32];
+//  int ifirst, ilast, imed, idown, iup;
+//  int first=0;
+//  for (;;)
+//    {
+//      if (last - first <= INSERTION_SORT_BOUND)
+//        {
+//          /* for small sort, use insertion sort */
+//          int indx;
+//          int prev_val = gindex[first];
+//          int cur_val;
+// 
+//          for (indx = first + 1; indx <= last; ++indx)
+//            {
+//              cur_val = gindex[indx];
+//              if (value[prev_val]>value[cur_val])
+//                {
+//                  /* out of order: array[indx-1] > array[indx] */
+//                  int indx2;
+//                  gindex[indx] = prev_val; /* move up the larger item first */
+// 
+//                  /* find the insertion point for the smaller item */
+//                  for (indx2 = indx - 1; indx2 > first; )
+//                    {
+//                      int temp_val = gindex[indx2 - 1];
+//                      if (value[temp_val]>value[cur_val])
+//                        {
+//                          gindex[indx2--] = temp_val;
+//                          /* still out of order, move up 1 slot to make room */
+//                        }
+//                      else
+//                        break;
+//                    }
+//                  gindex[indx2] = cur_val; /* insert the smaller item right here */
+//                }
+//              else
+//                {
+//                  /* in order, advance to next element */
+//                  prev_val = cur_val;
+//                }
+//            }
+//        }
+//      else
+//        {
+//          int pivot;
+// 
+//          /* try quick sort */
+//          {
+//            int temp;
+//            int med = (first + last) >> 1;
+//            /* Choose pivot from first, last, and median position. */
+//            /* Sort the three elements. */
+//            temp = gindex[first];
+//            ilast = gindex[last];
+//            if (value[temp]>value[ilast])
+//              {
+//                gindex[first] = gindex[last]; gindex[last] = temp;
+//              }
+//            temp = gindex[med];
+//            ifirst = gindex[first];
+//            if (value[ifirst]>value[temp])
+//              {
+//                gindex[med] = gindex[first]; gindex[first] = temp;
+//              }
+//            temp = gindex[last];
+//            imed = gindex[med];
+//            if (value[imed]>value[temp])
+//              {
+//                gindex[last] = gindex[med]; gindex[med] = temp;
+//              }
+//            pivot = gindex[med];
+//          }
+//          {
+//            int up;
+//            {
+//              int down;
+//              /* First and last element will be loop stopper. */
+//              /* Split array into two partitions. */
+//              down = first;
+//              up = last;
+//              for (;;)
+//                {
+//        do
+//          {
+//            ++down;
+//            idown = gindex[down];
+//          } while (value[pivot]>value[idown]);
+//        do
+//          {
+//            --up;
+//            iup = gindex[up];
+//          } while (value[iup]>value[pivot]);
+// 
+// 
+//        if (up > down)
+//          {
+//            int temp;
+//            /* interchange L[down] and L[up] */
+//            temp = gindex[down]; gindex[down]= gindex[up]; gindex[up] = temp;
+//          }
+//        else
+//          break;
+//                }
+//            }
+//            {
+//              int len1; /* length of first segment */
+//              int len2; /* length of second segment */
+//              len1 = up - first + 1;
+//              len2 = last - up;
+//              /* stack the partition that is larger */
+//              if (len1 >= len2)
+//                {
+//                  first_stack[stack_pointer] = first;
+//                  last_stack[stack_pointer++] = up;
+// 
+//                  first = up + 1;
+//                  /*  tail recursion elimination of                                                                         
+//                    *  johnQsort(gindex,fun_ptr,up + 1,last)                                                                                         */
+//                 }
+//              else
+//                {
+//                  first_stack[stack_pointer] = up + 1;
+//                  last_stack[stack_pointer++] = last;
+//
+//                  last = up;
+//                  /* tail recursion elimination of                                                                                              * johnQsort(gindex,fun_ptr,first,up)                                                                                             */
+//                }
+//            }
+//            continue;
+//          }
+//          /* end of quick sort */
+//        }
+//      if (stack_pointer > 0)
+//        {
+//          /* Sort segment from stack. */
+//          first = first_stack[--stack_pointer];
+//          last = last_stack[stack_pointer];
+//        }
+//      else
+//        break;
+//    } /* end for */
+//  return;
+//}
