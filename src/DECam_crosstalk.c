@@ -1285,7 +1285,7 @@ int DECamXTalk(int argc,char *argv[])
                                             tmp_image.ampsecbn[3] : tmp_image.ampsecbn[2]);
 
             /* update datasec within the output image */
-            sprintf(input_image[ccdnum].datasec,"[%d:%d,%d:%d]",1,input_image[ccdnum].axes[0], 1,input_image[ccdnum].axes[1]);
+            sprintf(input_image[ccdnum].datasec,"[%d:%ld,%d:%ld]",1,input_image[ccdnum].axes[0], 1,input_image[ccdnum].axes[1]);
             sprintf(input_image[ccdnum].dataseca,"[%d:%d,%d:%d]",input_image[ccdnum].datasecan[0],
                     input_image[ccdnum].datasecan[1],input_image[ccdnum].datasecan[2],input_image[ccdnum].datasecan[3]);
             sprintf(input_image[ccdnum].datasecb,"[%d:%d,%d:%d]",input_image[ccdnum].datasecbn[0],
@@ -2477,7 +2477,7 @@ int apply_replacement_list(char *header, rlist *rl, int flag_verbose)
                     {
                         strncpy(new_str, &header[i*80], 80);
                         new_str[80] = '\0';
-                        sprintf(event,"Replaced <%s> with <%s>\n", old_str, new_str);
+                        sprintf(event,"Replaced <%s> with <%s>", old_str, new_str);
                         reportevt(flag_verbose, STATUS, 1, event);
                     }
 
