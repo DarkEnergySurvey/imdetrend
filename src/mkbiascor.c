@@ -125,7 +125,7 @@ void print_usage()
 }
 
 int 
-MakeBiasCorrection(int argc,char *argv[])
+MakeBiasCorrection(int argc, char* argv[])
 {
   int	i,im,num,x,y,loca,locb,delta,ncompare=0,
     len,xmin,xmax,ymin,ymax,loc,hdutype,flag_verbose=1,
@@ -160,8 +160,17 @@ MakeBiasCorrection(int argc,char *argv[])
   desimage *data=NULL,template,datain,output;
   fitsfile *fptr=NULL;
 
+  /* Specialized resouces for keywords that are needed for the refactored system */
+
+  /* variables for CAMSYM */
+
+  char camsym_card[80];
+  int  flag_camsym_fnd=0;
+
   /* variables to keep track of min/max date from nite header */
   char nite[80], mindate[80]="99999", maxdate[80]="0000", sawdate = 0;
+
+
   
   enum {OPT_AVERAGE=1,OPT_AVSIGCLIP,OPT_MEDIAN,OPT_AVMINMAXCLIP,OPT_VARIANCETYPE,
 	OPT_IMAGE_COMPARE,OPT_VERBOSE,OPT_HELP,OPT_VERSION};
@@ -443,7 +452,7 @@ MakeBiasCorrection(int argc,char *argv[])
 	  exit(0);
 	}
 
-                /* collect min/max nite keys*/
+        /* collect min/max nite keys*/
         if (fits_read_key_str(fptr,"NITE",nite,comment,&status) == KEY_NO_EXIST){
           sprintf(event, "NITE keyword not found in %s, we may not get a complete {MAX,MIN}DATE range", imagename);
           reportevt(flag_verbose,STATUS,3,event);
@@ -456,6 +465,21 @@ MakeBiasCorrection(int argc,char *argv[])
           if (0 < strcmp(nite,maxdate)) {
              strncpy(maxdate,nite,80);
           }
+        }
+
+        /* check headers for each input until a card containing CAMSYM keyword is found */
+        /* When found record the value for output later */
+        /* Note cards are used so that this is generic of the keyword type that must be propogated */
+        /* Would be nice if this operated as a loop over a set of keywords but currently this is unncessary */
+
+        if (!flag_camsym_fnd){
+           if (fits_read_card(fptr,"CAMSYM",camsym_card,&status) == KEY_NO_EXIST){
+              sprintf(event, "CAMSYM keyword not found in %s", imagename);
+              reportevt(flag_verbose,STATUS,3,event);
+              status=0;
+           }else{
+              flag_camsym_fnd=1;
+           }
         }
 
 	if (fits_close_file(fptr,&status)) {
@@ -1164,12 +1188,26 @@ MakeBiasCorrection(int argc,char *argv[])
     }
     if (fits_write_key_str(output.fptr,"MAXNITE",maxdate,
 			   "Latest NITE covered",&status)) {
-      sprintf(event,"Writing MAXNITE=%s failed: %s",mindate,output.name+1);
+      sprintf(event,"Writing MAXNITE=%s failed: %s",maxdate,output.name+1);
       reportevt(flag_verbose,STATUS,5,event);
       printerror(status);
     }
   }
 
+  /* Note cards are used so that this is generic of the keyword type that must be propogated */
+  /* Would be nice if this operated as a loop over a set of keywords but currently this is unncessary */
+  /* Currently only CAMSYM is needed extra structure not yet necessary */
+
+  if (flag_camsym_fnd){
+     if (fits_update_card(output.fptr,"CAMSYM",camsym_card,&status)){
+        sprintf(event, "Writing/updating %s failed in :%s",camsym_card,output.name+1);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
+     }
+  }else{
+     sprintf(event, "No CAMSYM card found among inputs.");
+     reportevt(flag_verbose,STATUS,3,event);
+  }
 	
   /* Write processing history into the header */
   /* get system time */
