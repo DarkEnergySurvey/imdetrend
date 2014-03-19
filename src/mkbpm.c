@@ -1,6 +1,13 @@
 /* Creates bad pixel mask from biascor and flatcor */
 /* $Id$ */
-#include "imageproc.h"
+#include "imsupport.h"
+#include <stdlib.h>
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+#include <getopt.h>
+#include "argutils.h"
 
 int check_for_fits_list(char *filename,int *nim)
 {
