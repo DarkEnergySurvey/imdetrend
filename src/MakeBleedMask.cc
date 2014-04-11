@@ -655,6 +655,29 @@ int MakeBleedMask(const char *argv[])
   Morph::IndexType Npix = npix;
   int ccdnum = 0;
   ccdnum = FitsTools::GetHeaderValue<int>(Inimage.ImageHeader(),"CCDNUM");
+  // RAG: Get other mandatory header values (to propogate into FITS table output 
+  std::string keyval_band="0";
+  std::string keyval_nite="0";
+  int keyval_expnum=0;
+  std::string keyval_camsym="0";
+  keyval_band = FitsTools::GetHeaderValue<std::string>(Inimage.ImageHeader(),"BAND");
+  if (keyval_band == ""){
+    LX::ReportMessage(flag_verbose,STATUS,3,"Missing value for keyword BAND");
+  }
+  keyval_nite = FitsTools::GetHeaderValue<std::string>(Inimage.ImageHeader(),"NITE");
+  if (keyval_nite == ""){
+    LX::ReportMessage(flag_verbose,STATUS,3,"Missing value for keyword NITE");
+  }
+  keyval_expnum = FitsTools::GetHeaderValue<int>(Inimage.ImageHeader(),"EXPNUM");
+  if (keyval_expnum < 1){
+    LX::ReportMessage(flag_verbose,STATUS,3,"Missing/invalid value for keyword EXPNUM");
+  }
+  keyval_camsym = FitsTools::GetHeaderValue<std::string>(Inimage.ImageHeader(),"CAMSYM");
+  if (keyval_camsym == ""){
+    LX::ReportMessage(flag_verbose,STATUS,3,"Missing value for keyword CAMSYM");
+  }
+//  std::cout << "RAG: Header probe test. ccdnum: " << ccdnum<< " band: " << keyval_band << " nite: " << keyval_nite << " expnum: " << keyval_expnum << " camsym: " << keyval_camsym << std::endl;
+  // Use ccdnum to determine whether read registers are at the top or bottom  of CCD
   if(ccdnum < 0)
     ccdnum = 0;
   bool read_register_on_bottom   = ((ccdnum > 31) || (ccdnum == 0));
@@ -1950,7 +1973,6 @@ int MakeBleedMask(const char *argv[])
     LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
   }
   
-
   // profiler.FunctionEntry("RejectSmall");
   // First pass rejects any trail of size <ntrail_reject> or smaller
   std::vector<Morph::BoxType>  trail_boxes;
@@ -1976,7 +1998,7 @@ int MakeBleedMask(const char *argv[])
     }
   }
   // profiler.FunctionExit("RejectSmall");
-  
+
   blob_image.resize(npix,0);
   trail_blobs.resize(0);					
   Morph::GetBlobs(Inimage.DES()->mask,Nx,Ny,trail_mask,blob_image,trail_blobs);
@@ -2200,7 +2222,6 @@ int MakeBleedMask(const char *argv[])
 	
 	int bleedsize = box[3] - box[2];
 	if(bleedsize > 400 && !ultra_edgebleed_left){
-	  //      if(bleedsize > 400){
 	  Out << "[edgebleed]  Suspect overflagging with region of "
 	      << bleedsize << " rows wide."
 	      << std::endl;
@@ -2431,6 +2452,24 @@ int MakeBleedMask(const char *argv[])
       }  
       LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
     }
+  }else{
+     // RAG: 2014 Apr 4
+     // If there were no edge bleeds, check to make sure there were surviving blogs and calculate their locations/boxes
+     // This is needed otherwise images with no edge-bleeds will not report any boxes for normal bleeds (for -x option)
+     if(!trail_blobs.empty()){
+        // Loop through the trail blobs and 
+        bbbi   = trail_blobs.begin();
+        while(bbbi != trail_blobs.end()){
+           int blobno = bbbi - trail_blobs.begin();
+           Morph::BlobType &blob = *bbbi++;
+           // Step 1 - Get blob bounding box
+           std::vector<Morph::IndexType> box;
+           std::sort(blob.begin(),blob.end());
+           Morph::GetBlobBoundingBox(blob,Nx,Ny,box);
+           //  adds the box to our list of blob boxes
+           trail_boxes.push_back(box);
+        }
+     }
   }
   // profiler.FunctionExit("EdgeBleed");
   
@@ -2997,6 +3036,16 @@ int MakeBleedMask(const char *argv[])
     TrailBoxesOut.SetOutStream(Out);
     TrailBoxesOut.CreateFile(TrailBoxesFileName,true,flag_verbose);
     TrailBoxesOut.MakeTable(8,field_names,field_types,field_units,"TABLE",flag_verbose);
+//    int check_wrthead=-1;
+//    if (keyval_camsym != ""){
+//       check_wrthead = FitsTools::PutHeaderValue<std::string>(TrailBoxesOut.Header(),"CAMSYM",keyval_camsym);
+//
+//    }else{
+//       std::string testval_camsym="unknown";
+//       check_wrthead = FitsTools::PutHeaderValue<std::string>(TrailBoxesOut.Header(),"CAMSYM",testval_camsym);
+//    }
+//    std::cout << "RAG: Check your head: " << check_wrthead << std::endl;
+//
     if(TrailBoxesOut.WriteTableColumn(1,trail_boxes.size(),TDOUBLE,(void *)&LocX1[0],flag_verbose)){
       Out << program_name << "::Error: Could not insert " << (get_wcs ? "RA " : "X coordinate ")
 	  << " of trailbox corner 1 in " << TrailBoxesFileName;
