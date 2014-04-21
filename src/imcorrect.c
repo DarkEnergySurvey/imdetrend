@@ -2667,6 +2667,40 @@ int ImCorrect(int argc,char *argv[])
 	reportevt(flag_verbose,STATUS,5,event);
 	printerror(status);
       }
+
+      /* RAG - 2014, Apr 7: Add IMG HDU compression keywords */
+      if (fits_update_key_str(output.fptr,"FZALGOR",IMG_FZALGOR,"Compression type",&status)){
+         sprintf(event,"Adding IMAGE HDU keyword FZALGOR=%s failed to %s",IMG_FZALGOR,output.name+1);
+         reportevt(flag_verbose,STATUS,5,event);
+         printerror(status);
+      }
+      if (IMG_FZQMETHD != "NONE"){
+         if (fits_update_key_str(output.fptr,"FZQMETHD",IMG_FZQMETHD,"Compression quantization method",&status)){
+            sprintf(event,"Adding IMAGE HDU keyword FZALGOR=%s failed to %s",IMG_FZQMETHD,output.name+1);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
+         }
+      }
+      if (IMG_FZQVALUE >= 0){
+         if (fits_update_key_lng(output.fptr,"FZQVALUE",IMG_FZQVALUE,"Compression quantization factor",&status)){
+            sprintf(event,"Adding IMAGE HDU keyword FZQVALUE=%s failed to %s",IMG_FZQVALUE,output.name+1);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
+         }
+      }
+      if (fits_update_key_str(output.fptr,"FZDTHRSD",IMG_FZDTHRSD,"Dithering seed value",&status)){
+         sprintf(event,"Adding IMAGE HDU keyword FZDTHRSD=%s failed to %s",IMG_FZDTHRSD,output.name+1);
+         reportevt(flag_verbose,STATUS,5,event);
+         printerror(status);
+      }
+
+      /* RAG - 2014, Apr 7: Add standard EXTNAME for image HDU */
+      if (fits_update_key_str(output.fptr,"EXTNAME",IMG_EXTNAME,"Extension name",&status)){
+         sprintf(event,"Adding IMAGE HDU keyword EXTNAME=%s failed to %s",IMG_EXTNAME,output.name+1);
+         reportevt(flag_verbose,STATUS,5,event);
+         printerror(status);
+      }
+
       if (fits_update_key_str(output.fptr,"DES_EXT",imtypename[DES_IMAGE],
 			      "Image extension",&status)) {
 	sprintf(event,"Writing DES_EXT=%s failed: %s",
@@ -2753,10 +2787,41 @@ int ImCorrect(int argc,char *argv[])
       free(data.mask);   
       free(output.mask);   
 
+      /* RAG - 2014, Apr 7: Add MSK HDU compression keywords */
+      if (fits_update_key_str(output.fptr,"FZALGOR",MSK_FZALGOR,"Compression type",&status)){
+         sprintf(event,"Adding MASK HDU keyword FZALGOR=%s failed to %s",MSK_FZALGOR,bpmname+1);
+         reportevt(flag_verbose,STATUS,5,event);
+         printerror(status);
+      }
+      if (MSK_FZQMETHD != "NONE"){
+         if (fits_update_key_str(output.fptr,"FZQMETHD",MSK_FZQMETHD,"Compression quantization method",&status)){
+            sprintf(event,"Adding MASK HDU keyword FZQMETHD=%s failed to %s",MSK_FZQMETHD,bpmname+1);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
+         }
+      }
+      if (MSK_FZQVALUE >= 0){
+         if (fits_update_key_lng(output.fptr,"FZQVALUE",MSK_FZQVALUE,"Compression quantization factor",&status)){
+            sprintf(event,"Adding MASK HDU keyword FZQVALUE=%s failed to %s",MSK_FZQVALUE,bpmname+1);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
+         }
+      }
+      if (fits_update_key_str(output.fptr,"FZDTHRSD",MSK_FZDTHRSD,"Dithering seed value",&status)){
+         sprintf(event,"Adding MASK HDU keyword FZDTHRSD=%s failed to %s",MSK_FZDTHRSD,bpmname+1);
+         reportevt(flag_verbose,STATUS,5,event);
+         printerror(status);
+      }
+
+      /* RAG - 2014, Apr 7: Add standard EXTNAME for mask HDU */
+      if (fits_update_key_str(output.fptr,"EXTNAME",MSK_EXTNAME,"Extension name",&status)){
+         sprintf(event,"Adding MASK HDU keyword EXTNAME=%s failed to %s",MSK_EXTNAME,bpmname+1);
+         reportevt(flag_verbose,STATUS,5,event);
+         printerror(status);
+      }
 	  
       if (fits_update_key_str(output.fptr,"DES_EXT",imtypename[DES_MASK],
 			      "Extension type",&status)) {
-
 	reportevt(flag_verbose,STATUS,5,"Setting DES_EXT=%s failed");
 	printerror(status);
       }
@@ -2813,20 +2878,51 @@ int ImCorrect(int argc,char *argv[])
 	free(data.varim);   
 	free(output.varim);   
 
+        /* RAG - 2014, Apr 7: Add WEIGHT HDU compression keywords */
+        if (fits_update_key_str(output.fptr,"FZALGOR",WGT_FZALGOR,"Compression type",&status)){
+           sprintf(event,"Adding WEIGHT HDU keyword FZALGOR=%s failed to %s",WGT_FZALGOR,varimname+1);
+           reportevt(flag_verbose,STATUS,5,event);
+           printerror(status);
+        }
+        if (WGT_FZQMETHD != "NONE"){
+           if (fits_update_key_str(output.fptr,"FZQMETHD",WGT_FZQMETHD,"Compression quantization method",&status)){
+              sprintf(event,"Adding WEIGHT HDU keyword FZQMETHD=%s failed to %s",WGT_FZQMETHD,varimname+1);
+              reportevt(flag_verbose,STATUS,5,event);
+              printerror(status);
+           }
+        }
+        if (WGT_FZQVALUE >= 0){
+           if (fits_update_key_lng(output.fptr,"FZQVALUE",WGT_FZQVALUE,"Compression quantization factor",&status)){
+              sprintf(event,"Adding WEIGHT HDU keyword FZQVALUE=%s failed to %s",WGT_FZQVALUE,varimname+1);
+              reportevt(flag_verbose,STATUS,5,event);
+              printerror(status);
+           }
+        }
+        if (fits_update_key_str(output.fptr,"FZDTHRSD",WGT_FZDTHRSD,"Dithering seed value",&status)){
+           sprintf(event,"Adding WEIGHT HDU keyword FZDTHRSD=%s failed to %s",WGT_FZDTHRSD,varimname+1);
+           reportevt(flag_verbose,STATUS,5,event);
+           printerror(status);
+        }
+
+        /* RAG - 2014, Apr 7: Add standard EXTNAME for mask HDU */
+        if (fits_update_key_str(output.fptr,"EXTNAME",WGT_EXTNAME,"Extension name",&status)){
+           sprintf(event,"Adding WEIGHT HDU keyword EXTNAME=%s failed to %s",WGT_EXTNAME,varimname+1);
+           reportevt(flag_verbose,STATUS,5,event);
+           printerror(status);
+        }
+
 	if (fits_update_key_str(output.fptr,"DES_EXT",
-				imtypename[output.variancetype],"Extension type",&status)) {
+                                imtypename[output.variancetype],"Extension type",&status)) {
 	  sprintf(event,"Writing DES_EXT=%s failed: %s",
 		  imtypename[output.variancetype],varimname+1);
 	  reportevt(flag_verbose,STATUS,5,event);
 	  printerror(status);
 	}
 	    
-	if (fits_update_key_lng(output.fptr,"EXTVER",3,
-				"Extension version",&status)) {
+	if (fits_update_key_lng(output.fptr,"EXTVER",3,"Extension version",&status)){
 	  reportevt(flag_verbose,STATUS,5,"Setting EXTVER=3 failed");
 	  printerror(status);
 	}
-	    
       }
 	  	    
       /* close the corrected image */
@@ -2836,24 +2932,26 @@ int ImCorrect(int argc,char *argv[])
 	printerror(status);
       }
       /* close the input image if needed */
-      if (flag_output)  
+      if (flag_output){
 	if (fits_close_file(data.fptr,&status)) {
 	  sprintf(event,"Closing input image failed: %s",data.name);
 	  reportevt(flag_verbose,STATUS,5,event);
 	  printerror(status);
 	}
+      }
       sprintf(event,"Closed %s: 2D ( %ld X %ld )",
 	      &(output.name[flag_output]),output.axes[0],output.axes[1]);
       reportevt(flag_verbose,STATUS,1,event);
     } /* end of image processing cycle with variable im */
 
     if (flag_list) {
-      if (flag_output) 
+      if (flag_output){
 	if (fclose(out)) {
 	  sprintf(event,"Failed to close output file list: %s",outputlist);
 	  reportevt(flag_verbose,STATUS,5,event);
 	  exit(0);
 	}
+      }
     }
 
     return (0);

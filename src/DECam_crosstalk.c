@@ -404,6 +404,7 @@ int DECamXTalk(int argc,char *argv[])
       print_usage(argv[0]);
       exit(0);
     }
+    printf("RAG: IMG_FZALGOR: %s\n",IMG_FZALGOR);
 
     //    sprintf(filename,"%s",argv[1]);
     /*sprintf(nfilename,"%s",argv[2]);*/
@@ -1787,8 +1788,7 @@ int DECamXTalk(int argc,char *argv[])
       if (flag_verbose) 
 	printf("  Copied %d keywords from current header, ",
 	       numwrittenkeys-3);
-	    
-      
+
       /* remove unneeded information from the header */
       if (flag_overscan && ccdnum < 63) {
 	nkeys=0;
@@ -2041,6 +2041,42 @@ int DECamXTalk(int argc,char *argv[])
 	  printerror(status);
 	}
       }
+
+      /* RAG - 2014, Apr 7: Add IMG HDU compression keywords */
+      if (fits_update_key_str(nfptr,"FZALGOR",IMG_FZALGOR,"Compression type",&status)){
+         sprintf(event,"Adding IMAGE HDU keyword FZALGOR=%s failed to %s",IMG_FZALGOR,input_image[ccdnum].name+1);
+         reportevt(flag_verbose,STATUS,5,event);
+         printerror(status);
+      }
+      if (IMG_FZQMETHD != "NONE"){
+         if (fits_update_key_str(nfptr,"FZQMETHD",IMG_FZQMETHD,"Compression quantization method",&status)){
+            sprintf(event,"Adding IMAGE HDU keyword FZQMETHD=%s failed to %s",IMG_FZQMETHD,input_image[ccdnum].name+1);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
+         }
+      }
+      if (IMG_FZQVALUE >= 0){
+         if (fits_update_key_lng(nfptr,"FZQVALUE",IMG_FZQVALUE,"Compression quantization factor",&status)){
+            sprintf(event,"Adding IMAGE HDU keyword FZQVALUE=%s failed to %s",IMG_FZQVALUE,input_image[ccdnum].name+1);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
+         }
+      }
+      if (fits_update_key_str(nfptr,"FZDTHRSD",IMG_FZDTHRSD,"Dithering seed value",&status)){
+         sprintf(event,"Adding IMAGE HDU keyword FZDTHRSD=%s failed to %s",IMG_FZDTHRSD,input_image[ccdnum].name+1);
+         reportevt(flag_verbose,STATUS,5,event);
+         printerror(status);
+      }
+
+
+      /* RAG - 2014, Apr 7: Add standard EXTNAME for image HDU */
+      if (fits_update_key_str(nfptr,"EXTNAME",IMG_EXTNAME,"Extension name",&status)){
+         sprintf(event,"Adding IMAGE HDU keyword EXTNAME=%s failed to %s",IMG_EXTNAME,input_image[ccdnum].name+1);
+         reportevt(flag_verbose,STATUS,5,event);
+         printerror(status);
+      }
+
+
       } /* if (ccdnum < 63) */
       sprintf(longcomment,"DESDM:");
       //      for (j=0;j<argc;j++) sprintf(longcomment,"%s %s",longcomment,argv[j]);
@@ -2060,30 +2096,63 @@ int DECamXTalk(int argc,char *argv[])
       }
 
       if((flag_sat_beforextalk || flag_sat_afterxtalk) && ccdnum < 63){
-	/* Create extension for the mask */
-	if (fits_create_img(nfptr,USHORT_IMG,2,input_image[ccdnum].axes,&status)) {
-	  sprintf(event,"Creating image mask failed.");
-	  reportevt(flag_verbose,STATUS,5,event);
-	  printerror(status);
-	}
-	/* Write the mask data */	  
-	if (fits_write_img(nfptr,TUSHORT,1,input_image[ccdnum].npixels,maskdata,&status)) {
-	  sprintf(event,"Writing image mask failed.");
-	  reportevt(flag_verbose,STATUS,5,event);
-	  printerror(status);
-	}
-	/* Indicate it's a MASK extension */
-	if (fits_update_key_str(nfptr,"DES_EXT","MASK",
-				"Extension type",&status)) {
-	  reportevt(flag_verbose,STATUS,5,"Setting DES_EXT=MASK failed.");
-	  printerror(status);
-	}
-	/* May be needed */
-	if (fits_update_key_lng(nfptr,"EXTVER",2,
+         /* Create extension for the mask */
+         if (fits_create_img(nfptr,USHORT_IMG,2,input_image[ccdnum].axes,&status)) {
+           sprintf(event,"Creating image mask failed.");
+           reportevt(flag_verbose,STATUS,5,event);
+           printerror(status);
+         }
+         /* Write the mask data */	  
+         if (fits_write_img(nfptr,TUSHORT,1,input_image[ccdnum].npixels,maskdata,&status)) {
+           sprintf(event,"Writing image mask failed.");
+           reportevt(flag_verbose,STATUS,5,event);
+           printerror(status);
+         }
+         /* Indicate it's a MASK extension */
+         if (fits_update_key_str(nfptr,"DES_EXT","MASK",
+                               	"Extension type",&status)) {
+           reportevt(flag_verbose,STATUS,5,"Setting DES_EXT=MASK failed.");
+           printerror(status);
+         }
+         /* May be needed */
+         if (fits_update_key_lng(nfptr,"EXTVER",2,
 				"Extension version",&status)) {
-	  reportevt(flag_verbose,STATUS,5,"Setting EXTVER=2 failed");
-	  printerror(status); 
-	}
+           reportevt(flag_verbose,STATUS,5,"Setting EXTVER=2 failed");
+           printerror(status); 
+         }
+
+         /* RAG - 2014, Apr 7: Add MSK HDU compression keywords */
+         if (fits_update_key_str(nfptr,"FZALGOR",MSK_FZALGOR,"Compression type",&status)){
+            sprintf(event,"Adding MASK HDU keyword FZALGOR=%s failed to %s",MSK_FZALGOR,input_image[ccdnum].name+1);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
+         }
+         if (MSK_FZQMETHD != "NONE"){
+            if (fits_update_key_str(nfptr,"FZQMETHD",MSK_FZQMETHD,"Compression quantization method",&status)){
+               sprintf(event,"Adding MASK HDU keyword FZQMETHD=%s failed to %s",MSK_FZQMETHD,input_image[ccdnum].name+1);
+               reportevt(flag_verbose,STATUS,5,event);
+               printerror(status);
+            }
+         }
+         if (MSK_FZQVALUE >= 0){
+            if (fits_update_key_lng(nfptr,"FZQVALUE",MSK_FZQVALUE,"Compression quantization factor",&status)){
+               sprintf(event,"Adding MASK HDU keyword FZQVALUE=%s failed to %s",MSK_FZQVALUE,input_image[ccdnum].name+1);
+               reportevt(flag_verbose,STATUS,5,event);
+               printerror(status);
+            }
+         }
+         if (fits_update_key_str(nfptr,"FZDTHRSD",MSK_FZDTHRSD,"Dithering seed value",&status)){
+            sprintf(event,"Adding MASK HDU keyword FZDTHRSD=%s failed to %s",MSK_FZDTHRSD,input_image[ccdnum].name+1);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
+         }
+
+         /* RAG - 2014, Apr 7: Add standard EXTNAME for mask HDU */
+         if (fits_update_key_str(nfptr,"EXTNAME",MSK_EXTNAME,"Extension name",&status)){
+            sprintf(event,"Adding MASK HDU keyword EXTNAME=%s failed to %s",MSK_EXTNAME,input_image[ccdnum].name+1);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
+         }
       }
 
       /* close the new image */
