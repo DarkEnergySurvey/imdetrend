@@ -1255,38 +1255,103 @@ MakeBiasCorrection(int argc, char* argv[])
     }
   }
 
-  if (fits_write_key_str(output.fptr,"DES_EXT",imtypename[DES_IMAGE],
-			 "Image extension",&status)) {
-    sprintf(event,"Writing DES_EXT=%s failed: %s",
-	    imtypename[DES_IMAGE],&(output.name[1]));
+  /* RAG - 2014, Apr 7: Add IMG HDU compression keywords */
+  if (fits_update_key_str(output.fptr,"FZALGOR",IMG_FZALGOR,"Compression type",&status)){
+     sprintf(event,"Adding IMAGE HDU keyword FZALGOR=%s failed to %s",IMG_FZALGOR,&(output.name[1]));
+     reportevt(flag_verbose,STATUS,5,event);
+     printerror(status);
+  }
+  if (IMG_FZQMETHD != "NONE"){
+     if (fits_update_key_str(output.fptr,"FZQMETHD",IMG_FZQMETHD,"Compression quantization method",&status)){
+        sprintf(event,"Adding IMAGE HDU keyword FZQMETHD=%s failed to %s",IMG_FZQMETHD,&(output.name[1]));
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
+     }
+  }
+  if (IMG_FZQVALUE >= 0){
+     if (fits_update_key_lng(output.fptr,"FZQVALUE",IMG_FZQVALUE,"Compression quantization factor",&status)){
+        sprintf(event,"Adding IMAGE HDU keyword FZQVALUE=%s failed to %s",IMG_FZQVALUE,&(output.name[1]));
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
+     }
+  }
+  if (fits_update_key_str(output.fptr,"FZDTHRSD",IMG_FZDTHRSD,"Dithering seed value",&status)){
+     sprintf(event,"Adding IMAGE HDU keyword FZDTHRSD=%s failed to %s",IMG_FZDTHRSD,&(output.name[1]));
+     reportevt(flag_verbose,STATUS,5,event);
+     printerror(status);
+  }
+
+
+  /* RAG - 2014, Apr 7: Add standard EXTNAME for image HDU */
+  if (fits_update_key_str(output.fptr,"EXTNAME",IMG_EXTNAME,"Extension name",&status)){
+     sprintf(event,"Adding IMAGE HDU keyword EXTNAME=%s failed to %s",IMG_EXTNAME,&(output.name[1]));
+     reportevt(flag_verbose,STATUS,5,event);
+     printerror(status);
+  }
+
+  if (fits_write_key_str(output.fptr,"DES_EXT",imtypename[DES_IMAGE],"Image extension",&status)) {
+    sprintf(event,"Writing DES_EXT=%s failed: %s",imtypename[DES_IMAGE],&(output.name[1]));
     reportevt(flag_verbose,STATUS,5,event);
     printerror(status);
   }
 
   if (flag_variance) {
-    /* now store the variance image that has been created or updated */
-    /* first create a new extension */
-    if (fits_create_img(output.fptr,FLOAT_IMG,2,output.axes,&status)) {
-      sprintf(event,"Creating extension for %s image failed: %s",
-	      imtypename[flag_variance],&(output.name[1]));
-      reportevt(flag_verbose,STATUS,5,event);
-      printerror(status);
-    }
-    /* write the data */	  
-    if (fits_write_img(output.fptr,TFLOAT,1,output.npixels,output.varim,
-		       &status)) {
-      sprintf(event,"Writing %s extension failed: %s",
-	      imtypename[flag_variance],&(output.name[1]));
-      reportevt(flag_verbose,STATUS,5,event);
-      printerror(status);
-    }
-    if (fits_write_key_str(output.fptr,"DES_EXT",
-			   imtypename[flag_variance],"Extension type",&status)) {
-      sprintf(event,"Writing DES_EXT=%s failed: %s",
-	      imtypename[flag_variance],&(output.name[1]));
-      reportevt(flag_verbose,STATUS,5,event);
-      printerror(status);
-    }
+     /* now store the variance image that has been created or updated */
+     /* first create a new extension */
+     if (fits_create_img(output.fptr,FLOAT_IMG,2,output.axes,&status)) {
+        sprintf(event,"Creating extension for %s image failed: %s",
+                imtypename[flag_variance],&(output.name[1]));
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
+     }
+     /* write the data */	  
+     if (fits_write_img(output.fptr,TFLOAT,1,output.npixels,output.varim,
+                        &status)) {
+        sprintf(event,"Writing %s extension failed: %s",
+                imtypename[flag_variance],&(output.name[1]));
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
+     }
+     if (fits_write_key_str(output.fptr,"DES_EXT",
+                            imtypename[flag_variance],"Extension type",&status)) {
+        sprintf(event,"Writing DES_EXT=%s failed: %s",
+                imtypename[flag_variance],&(output.name[1]));
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
+     }
+
+     /* RAG - 2014, Apr 7: Add WEIGHT HDU compression keywords */
+     if (fits_update_key_str(output.fptr,"FZALGOR",WGT_FZALGOR,"Compression type",&status)){
+        sprintf(event,"Adding WEIGHT HDU keyword FZALGOR=%s failed to %s",WGT_FZALGOR,&(output.name[1]));
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
+     }
+     if (WGT_FZQMETHD != "NONE"){
+        if (fits_update_key_str(output.fptr,"FZQMETHD",WGT_FZQMETHD,"Compression quantization method",&status)){
+           sprintf(event,"Adding WEIGHT HDU keyword FZQMETHD=%s failed to %s",WGT_FZQMETHD,&(output.name[1]));
+           reportevt(flag_verbose,STATUS,5,event);
+           printerror(status);
+        }
+     }
+     if (WGT_FZQVALUE >= 0){
+        if (fits_update_key_lng(output.fptr,"FZQVALUE",WGT_FZQVALUE,"Compression quantization factor",&status)){
+           sprintf(event,"Adding WEIGHT HDU keyword FZQVALUE=%s failed to %s",WGT_FZQVALUE,&(output.name[1]));
+           reportevt(flag_verbose,STATUS,5,event);
+           printerror(status);
+        }
+     }
+     if (fits_update_key_str(output.fptr,"FZDTHRSD",WGT_FZDTHRSD,"Dithering seed value",&status)){
+        sprintf(event,"Adding WEIGHT HDU keyword FZDTHRSD=%s failed to %s",WGT_FZDTHRSD,&(output.name[1]));
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
+     }
+
+     /* RAG - 2014, Apr 7: Add standard EXTNAME for mask HDU */
+     if (fits_update_key_str(output.fptr,"EXTNAME",WGT_EXTNAME,"Extension name",&status)){
+        sprintf(event,"Adding WEIGHT HDU keyword EXTNAME=%s failed to %s",WGT_EXTNAME,&(output.name[1]));
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
+     }
   }
 	
   /* mean and standard deviation of the output image*/
