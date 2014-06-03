@@ -315,11 +315,23 @@ int MakeBleedMask(const char *argv[])
     return(0);
   }
 
+  // - Set up IO objects -
+  //
+  // Default to reading in from stdin
+  std::ostringstream Out;
+  // Parse verbosity level
+  int flag_verbose = 3;
+
+  std::cout << "RAG:" << comline_status << std::endl;
   if(comline_status){
+    std::cout << "RAG2:" << comline_status << std::endl;
     std::cerr << comline.ErrorReport() << std::endl
 	      << std::endl
 	      << comline.ShortUsage()  << std::endl 
 	      << std::endl;
+    Out.str("");
+    Out << program_name << ": Invalid Command Line Encountered";
+    LX::ReportMessage(flag_verbose,STATUS,5,Out.str());
     return(1);
   }
   
@@ -352,8 +364,6 @@ int MakeBleedMask(const char *argv[])
 
   int bleedmask_status = 0;
 
-  // Parse verbosity level
-  int flag_verbose = 1;
   if(!sverb.empty()){
     std::istringstream Istr(sverb);
     Istr >> flag_verbose;
@@ -362,10 +372,6 @@ int MakeBleedMask(const char *argv[])
   }
   LX::ReportMessage(flag_verbose,STATUS,1,svn_id);
   
-  // - Set up IO objects -
-  //
-  // Default to reading in from stdin
-  std::ostringstream Out;
   // If user specified an input file, then switch to using
   // the specified input file.
   bool unknown_flags = false;
@@ -532,7 +538,7 @@ int MakeBleedMask(const char *argv[])
   // Set up a list of keywords we want
   // to exclude from our headers
   char **exclusion_list;
-  exclusion_list = new char * [43];
+  exclusion_list = new char * [42];
   exclusion_list[0] = (char *)"SIMPLE";
   exclusion_list[1] = (char *)"BITPIX";
   exclusion_list[2] = (char *)"NAXIS";
@@ -559,23 +565,22 @@ int MakeBleedMask(const char *argv[])
   exclusion_list[23] =(char *)"ZVAL1";
   exclusion_list[24] =(char *)"ZNAME2";
   exclusion_list[25] =(char *)"ZVAL2";
-  exclusion_list[26] =(char *)"EXTNAME";
-  exclusion_list[27] =(char *)"ZTENSION";
-  exclusion_list[28] =(char *)"ZBITPIX";
-  exclusion_list[29] =(char *)"ZNAXIS";
-  exclusion_list[30] =(char *)"ZNAXIS1";
-  exclusion_list[31] =(char *)"ZNAXIS2";
-  exclusion_list[32] =(char *)"ZPCOUNT";
-  exclusion_list[33] =(char *)"ZGCOUNT";
-  exclusion_list[34] =(char *)"DCREATED";
-  exclusion_list[35] =(char *)"TTYPE1";
-  exclusion_list[36] =(char *)"ZHECKSUM";
-  exclusion_list[37] =(char *)"TTYPE2";
-  exclusion_list[38] =(char *)"TTYPE3";
-  exclusion_list[39] =(char *)"ZSIMPLE";
-  exclusion_list[40] =(char *)"ZEXTEND";
-  exclusion_list[41] =(char *)"TFORM2";
-  exclusion_list[42] =(char *)"TFORM3";
+  exclusion_list[26] =(char *)"ZTENSION";
+  exclusion_list[27] =(char *)"ZBITPIX";
+  exclusion_list[28] =(char *)"ZNAXIS";
+  exclusion_list[29] =(char *)"ZNAXIS1";
+  exclusion_list[30] =(char *)"ZNAXIS2";
+  exclusion_list[31] =(char *)"ZPCOUNT";
+  exclusion_list[32] =(char *)"ZGCOUNT";
+  exclusion_list[33] =(char *)"DCREATED";
+  exclusion_list[34] =(char *)"TTYPE1";
+  exclusion_list[35] =(char *)"ZHECKSUM";
+  exclusion_list[36] =(char *)"TTYPE2";
+  exclusion_list[37] =(char *)"TTYPE3";
+  exclusion_list[38] =(char *)"ZSIMPLE";
+  exclusion_list[39] =(char *)"ZEXTEND";
+  exclusion_list[40] =(char *)"TFORM2";
+  exclusion_list[41] =(char *)"TFORM3";
   
   std::vector<std::string>::iterator inamei = infile_names.begin();
 
@@ -589,7 +594,7 @@ int MakeBleedMask(const char *argv[])
   FitsTools::FitsImage Inimage;
   //  Inimage.SetProfiler(profiler);
   Inimage.SetOutStream(Out);
-  Inimage.SetExclusions(exclusion_list,43);
+  Inimage.SetExclusions(exclusion_list,42);
 
   // Set input and output FITS filenames
   std::string filename(*inamei++);
