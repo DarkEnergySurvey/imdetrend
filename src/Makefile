@@ -132,8 +132,28 @@ DMWCS := ${DMWCS_LIB}/libwcs.a
 INCLUDE :=    	$(CCFITS_INCLUDE) /usr/include/cfitsio $(FFTW_INCLUDE) $(PSFEX_INCLUDE) $(SWARP_INCLUDE) ${WCS_INCLUDE} ${DMWCS_INCLUDE} ${PLPLOT_INCLUDE} $(IMSUPPORT_INCLUDE) 
 LIBS = $(FITSIO_LIB):$(NRECIPES_LIB):$(FFTW_LIB):$(PSFEX_LIB):$(SWARP_LIB):${WCS_LIB}:${DMWCS_LIB}:${PLPLOT_LIB}
 
+# ----------------------------------------------------
+# Define Flavor Shared lib extension -- FM
+FLAVOR = $(shell uname -s) # this give either Darwin/Linux
+$(info Discovered FLAVOR: $(FLAVOR))
+ifneq (,$(findstring Darwin, ${FLAVOR}))
+   SHLIB_SUFFIX = .dylib
+endif 
+ifneq (,$(findstring Linux, ${FLAVOR}))
+   SHLIB_SUFFIX = .so
+endif 
 
+# Path setup for eups 1.2.30 package.
+INCLUDE := $(CFITSIO_SHARED_DIR)/include $(CCFITS_DIR)/include $(CCFITS_DIR)/include/CCfits $(FFTW_DIR)/include $(IMSUPPORT_DIR)/include $(SWARP_DIR)/include
+LIBS = $(NRECIPES_DIR)/lib $(FFTW_DIR)/lib $(SWARP_DIR)/lib $(CFITSIO_SHARED_DIR)/lib
+TPIX_FITS := $(SWARP_DIR)/lib/fits/libfits.a
+FITSIO := -lcfitsio
+CCFITS := $(CCFITS_DIR)/lib/libCCfits$(SHLIB_SUFFIX) 
+$(info Setting up CCFITS: $(CCFITS) for $(FLAVOR) )
+WCS_C := $(SWARP_DIR)/lib/wcs/libwcs_c.a
+NR2 := $(NRECIPES_DIR)/lib/libpress2ndkr.a
 # END Temp addition
+# --------------------------------------------------- FM
 
 # We could add all the headers to this list to force rebuilds 
 # if a header changes
@@ -166,6 +186,8 @@ override CPPFLAGS += $(addprefix -I ,$(INCLUDE))
 override CFLAGS += $(addprefix -I ,$(INCLUDE))
 
 
+override CPPFLAGS += $(addprefix -L ,$(LIBS))
+override CFLAGS += $(addprefix -L ,$(LIBS))
 ################################################################################
 # Targets for all executables:
 # Right now a target needs to be here for the executable to get built
@@ -261,7 +283,7 @@ all: $(EXE)
 ../bin/mkbpm:  mkbpm.o ${LIBIMSUPPORT}  
 	$(CC) $(CFLAGS) -o $@ $^  $(NR2) $(FITSIO) -lm
 ../bin/mkbleedmask: MakeBleedMask.o BleedTrail.o ${LIBIMSUPPORT} fitswcs.o   
-	$(CPPC) -o $@ $^ -L$(DES_PREREQ)/lib $(WCS_C) $(TPIX_FITS) $(FITSIO) -lCCfits -lm
+	$(CPPC) $(CFLAGS) -o $@ $^ -L$(DES_PREREQ)/lib $(WCS_C) $(TPIX_FITS) $(FITSIO) $(CCFITS) -lm
 ../bin/maskcosmics: maskcosmics.o fitswcs.o ${LIBIMSUPPORT} 
 	$(CC) $(CFLAGS) -o $@ $^  $(NR2) $(WCS_C) $(TPIX_FITS) $(FITSIO) -lm
 

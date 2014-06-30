@@ -83,6 +83,13 @@ float skybrite, skysigma, estgain;
 
 static const char *svn_id = "$Id$";
 
+/* prototype for internal function DLP */
+void ludcmp_jm(double* a, const int n, const int ndim, int* indx,
+	       double* d, int* icon);
+/* prototype for internal function DLP */
+void lubksb_jm(const double* a, const int n, const int ndim,
+		 const int* indx, double* b);
+
 void print_usage(char *program_name)
 {
   printf("%s <input image> <options>\n",program_name);
@@ -1649,10 +1656,10 @@ int fitsky(skypar *sky,double *data,double *sigma)
   H[2][0] = H[0][2];
   H[2][1] = H[1][2];
   //Solve for parameters 
-/* void ludcmp(double* a, const int n, const int ndim, int* indx, */
+/* void ludcmp_jm(double* a, const int n, const int ndim, int* indx, */
 /*           double* d, int* icon) */
-  ludcmp(&H[0][0],3,3,indx,&desc,&icon);
-  lubksb(&H[0][0],3,3,indx,Y);
+  ludcmp_jm(&H[0][0],3,3,indx,&desc,&icon);
+  lubksb_jm(&H[0][0],3,3,indx,Y);
   
   chisq = 0.0;
   ndata = 0;
@@ -1690,7 +1697,7 @@ int fitsky(skypar *sky,double *data,double *sigma)
 
 
 
-void ludcmp(double* a, const int n, const int ndim, int* indx,
+void ludcmp_jm(double* a, const int n, const int ndim, int* indx,
             double* d, int* icon)
 {
   /* Local variables */
@@ -1719,7 +1726,7 @@ void ludcmp(double* a, const int n, const int ndim, int* indx,
 
       if (aamax == 0.0)
         {
-          printf("LU decomposition (ludcmp.c) : Singular matrix, but continue. %d %d %d %d %d\n",i,j,i1,i2,ndim);
+          printf("LU decomposition (ludcmp_jm.c) : Singular matrix, but continue. %d %d %d %d %d\n",i,j,i1,i2,ndim);
           *icon = -10;
           return;
 
@@ -1819,10 +1826,10 @@ void ludcmp(double* a, const int n, const int ndim, int* indx,
         }
     }
   return;
-} /* ludcmp */
+} /* ludcmp_jm */
 
 
-void lubksb(const double* a, const int n, const int ndim,
+void lubksb_jm(const double* a, const int n, const int ndim,
             const int* indx, double* b)
 {
 
@@ -1871,7 +1878,7 @@ void lubksb(const double* a, const int n, const int ndim,
       b[i] = sum / a[i + i * ndim];
     }
   return;
-} /* lubksb */
+} /* lubksb_jm */
 
 
 // void Qsort(int gindex[],double value[], int last)

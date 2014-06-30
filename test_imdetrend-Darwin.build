@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+
+FLAVOR=DarwinX86
+VERSION=7.3.0
+FULL_VERSION=$VERSION+0
+PRODUCT_DIR=$HOME/tmp/imdetrend/$FULL_VERSION
+PRODUCT=imdetrend
+
+mkdir $PRODUCT-$FULL_VERSION
+cd $PRODUCT-$FULL_VERSION
+
+svn export $SVNROOT/$PRODUCT/tags/$VERSION
+
+cd $VERSION
+cd src
+
+echo bye
+exit
+
+# Darwin
+if [[ $FLAVOR =~ Darwin ]] ; then 
+    svn export $SVNROOT/eupsScripts/external/$PRODUCT/tags/$FULL_VERSION/Darwin_Makefile.patch
+    patch Makefile < Darwin_Makefile.patch
+
+# Linux
+elif [[ $FLAVOR =~ Linux ]] ; then 
+    svn export $SVNROOT/eupsScripts/external/$PRODUCT/tags/$FULL_VERSION/Makefile.patch
+    patch Makefile < Makefile.patch
+else 
+    echo "ERROR: EUPS FLAVOR:$FLAVOR not supported"
+    exit
+fi
+
+cd ..
+
+export PREFIX=$PRODUCT_DIR
+
+make
+#make install

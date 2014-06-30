@@ -1,19 +1,8 @@
 #!/usr/bin/env bash
 
-#svn export $SVNROOT/$PRODUCT/tags/$VERSION
-#svn export $SVNROOT/eupsScripts/external/$PRODUCT/tags/$FULL_VERSION/Makefile.patch
-
 svn export $SVNROOT/$PRODUCT/tags/$FULL_VERSION
-svn export $SVNROOT/$PRODUCT/tags/$FULL_VERSION/Makefile.patch
-
 
 cd $FULL_VERSION
-cd src
-
-patch Makefile < ../../Makefile.patch
-
-cd ..
-
 export PREFIX=$PRODUCT_DIR
 
 make
