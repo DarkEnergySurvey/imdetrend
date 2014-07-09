@@ -28,111 +28,23 @@
 #
 #
 
-# $(info Using ${INCLUDE_FILE})
-# $(warning DES_HOME is $(DES_HOME) AND ${DES_HOME})
+# Simplified to make it EUPS compliant -- FM
 
-ifeq ("$(IMSUPPORT_DIR)", "")
-   LIBDETECT = $(wildcard $(DES_HOME)/lib/libimsupport.a))  
-   ifneq ("(LIBDETECT)", "") 
-       IMSUPPORT_DIR := $(DES_HOME)
-   endif 
-   $(info IM $(IMSUPPORT_DIR))
-endif 
-ifeq ("$(IMSUPPORT_DIR)", "")
+# IMSUPPORT_DIR is defined via EUPS
+ifndef IMSUPPORT_DIR
    $(error imsupport not defined)
 endif 
-IMSUPPORT_LIB := ${IMSUPPORT_DIR}/lib/
+
+IMSUPPORT_LIB     := ${IMSUPPORT_DIR}/lib/
 IMSUPPORT_INCLUDE := ${IMSUPPORT_DIR}/include  
-LIBIMSUPPORT:=${IMSUPPORT_LIB}/libimsupport.a
+LIBIMSUPPORT      := ${IMSUPPORT_LIB}/libimsupport.a
 
 ifndef PREFIX
-  ifdef DES_HOME
-    PREFIX=${DES_HOME}
-  else
-    PREFIX=../..
- endif
+  PREFIX=../..
 endif
 
-ifndef FITSIO_BASE
-  ifdef DES_PREREQ
-    FITSIO_BASE=${DES_PREREQ}
-  else
-    FITSIO_BASE=/usr
-  endif
-endif
-
-
-ifndef NRECIPES_BASE
-  ifdef DES_PREREQ
-     NRECIPES_BASE=${DES_PREREQ}
-  else
-    NRECIPES_BASE=/usr/local
-  endif
-endif
-
-ifndef FFTW_BASE
-  ifdef DES_PREREQ
-    FFTW_BASE=${DES_PREREQ}
-  else
-    FFTW_BASE = /usr/local
-  endif
-endif
-
-FITSIO_LIB = $(FITSIO_BASE)/lib
-FITSIO_INCLUDE = $(FITSIO_BASE)/cfitsio/include
-CCFITS_INCLUDE = $(FITSIO_BASE)/include/CCfits
-NRECIPES_LIB = $(NRECIPES_BASE)/lib
-FFTW_LIB=$(FFTW_BASE)/lib
-FFTW_INCLUDE=$(FFTW_BASE)/include
-
-
-
-ifdef DES_PREREQ
-  PSFEX_INCLUDE := ${DES_PREREQ}/include/psfex ${DES_PREREQ}/include/psfex/fits ${DES_PREREQ}/include/psfex/wcs ${DES_PREREQ}/include/fits ${DES_PREREQ}/include/wcs
-  SWARP_INCLUDE := ${DES_PREREQ}/include/swarp
-  PSFEX_LIB := ${DES_PREREQ}/lib/psfex
-  SWARP_LIB := ${DES_PREREQ}/lib/swarp
-  WCS_INCLUDE := ${DES_PREREQ}/include
-  WCS_LIB := ${DES_PREREQ}/lib
-  PLPLOT_LIB := ${DES_PREREQ}/lib
-  PLPLOT_INCLUDE := ${DES_PREREQ}/include/plplot
-else
-  PSFEX_INCLUDE := ../../../terapix/trunk/psfex/src
-  SWARP_INCLUDE := ../../../terapix/trunk/swarp/src
-  PSFEX_LIB := ../../../terapix/trunk/psfex/src
-  SWARP_LIB := ../../../terapix/trunk/swarp/src
-endif
-
-FITSIO :=       $(FITSIO_LIB)/libcfitsio.so
-NR2 :=          $(NRECIPES_LIB)/libpress2ndkr.a
-NR2D :=         $(NRECIPES_LIB)/libpress2ndkrD.a
-FFTW := 	$(FFTW_LIB)/libfftw3f.a
-FFTW_THREADS :=	$(FFTW_LIB)/libfftw3f_threads.a
-#WCS_C :=        $(DES_PREREQ)/lib/psfex/wcs/libwcs_c.a
-WCS_C :=        $(DES_PREREQ)/lib/wcs/libwcs_c.a
-# TPIX_FITS :=    $(DES_PREREQ)/lib/psfex/fits/libfits.a
-TPIX_FITS :=    $(DES_PREREQ)/lib/fits/libfits.a
-#TPIX_FITS :=    $(PSFEX_LIB)/fits/libfits.a
-
-BINDIR := 	$(PREFIX)/bin
-LIBDIR := 	$(PREFIX)/lib
-
-#INCLUDE :=    	$(FITSIO_INCLUDE) $(FFTW_INCLUDE) $(PSFEX_INCLUDE) $(SWARP_INCLUDE) ${WCS_INCLUDE}
-#LIBS = $(FITSIO_LIB):$(NRECIPES_LIB):$(FFTW_LIB):$(PSFEX_LIB):$(SWARP_LIB):${WCS_LIB}
-
-## Temp addition for WCSTOOLS library
-
-DMWCS_INCLUDE := ${DES_PREREQ}/include
-DMWCS_LIB := ${DES_PREREQ}/lib
-DMWCS := ${DMWCS_LIB}/libwcs.a 
-
-## Temp addition for PLPLOT library
-
-
-INCLUDE :=    	$(CCFITS_INCLUDE) /usr/include/cfitsio $(FFTW_INCLUDE) $(PSFEX_INCLUDE) $(SWARP_INCLUDE) ${WCS_INCLUDE} ${DMWCS_INCLUDE} ${PLPLOT_INCLUDE} $(IMSUPPORT_INCLUDE) 
-LIBS = $(FITSIO_LIB):$(NRECIPES_LIB):$(FFTW_LIB):$(PSFEX_LIB):$(SWARP_LIB):${WCS_LIB}:${DMWCS_LIB}:${PLPLOT_LIB}
-
-# ----------------------------------------------------
+# -------------------------------------------------
+# Path setup for eups 1.2.30 package.
 # Define Flavor Shared lib extension -- FM
 FLAVOR = $(shell uname -s) # this give either Darwin/Linux
 $(info Discovered FLAVOR: $(FLAVOR))
@@ -142,17 +54,15 @@ endif
 ifneq (,$(findstring Linux, ${FLAVOR}))
    SHLIB_SUFFIX = .so
 endif 
-
-# Path setup for eups 1.2.30 package.
-INCLUDE := $(CFITSIO_SHARED_DIR)/include $(CCFITS_DIR)/include $(CCFITS_DIR)/include/CCfits $(FFTW_DIR)/include $(IMSUPPORT_DIR)/include $(SWARP_DIR)/include
-LIBS = $(NRECIPES_DIR)/lib $(FFTW_DIR)/lib $(SWARP_DIR)/lib $(CFITSIO_SHARED_DIR)/lib
+INCLUDE   := $(CFITSIO_SHARED_DIR)/include $(CCFITS_DIR)/include $(CCFITS_DIR)/include/CCfits $(FFTW_DIR)/include $(IMSUPPORT_DIR)/include $(SWARP_DIR)/include
+LIBS       = $(NRECIPES_DIR)/lib $(FFTW_DIR)/lib $(SWARP_DIR)/lib $(CFITSIO_SHARED_DIR)/lib
 TPIX_FITS := $(SWARP_DIR)/lib/fits/libfits.a
-FITSIO := -lcfitsio
-CCFITS := $(CCFITS_DIR)/lib/libCCfits$(SHLIB_SUFFIX) 
+FITSIO    := -lcfitsio
+CCFITS    := $(CCFITS_DIR)/lib/libCCfits$(SHLIB_SUFFIX) 
 $(info Setting up CCFITS: $(CCFITS) for $(FLAVOR) )
-WCS_C := $(SWARP_DIR)/lib/wcs/libwcs_c.a
-NR2 := $(NRECIPES_DIR)/lib/libpress2ndkr.a
-# END Temp addition
+WCS_C     := $(SWARP_DIR)/lib/wcs/libwcs_c.a
+NR2       := $(NRECIPES_DIR)/lib/libpress2ndkr.a
+# END of EUPS addition
 # --------------------------------------------------- FM
 
 # We could add all the headers to this list to force rebuilds 
@@ -175,12 +85,6 @@ CPPFLAGS:=      -g -O3
 CPPCOPTS :=	-c -Wall -funroll-loops -O3 -Wno-unused-variable 
 FC :=		f77
 CFLAGS := 	-O3 -g -Wall -Wno-unused-variable #-ftree-vectorize -ffast-math -msse2 -ftree-vectorizer-verbose=6  -DTRY2VECT
-# Intel
-#CC :=		icc
-#CPPC := 	icpc
-#CPPCOPTS :=	-O2 -w -g
-#FC :=		ifort
-#CFLAGS := 	-O2 -w -g
 
 override CPPFLAGS += $(addprefix -I ,$(INCLUDE))
 override CFLAGS += $(addprefix -I ,$(INCLUDE))
@@ -217,12 +121,6 @@ EXE_REST =  ../bin/imcorrect			\
 #        ../bin/mkmask                          \
 
 EXE = ${EXE_REST}
-# Sample add another list:
-# EXE = ${EXE_REST} ${EXE_set1}
-
-# Sample add another target:
-#.PHONY: somecodes
-#somecodes: ${EXE_set1}
 
 # Target to make all executables:
 .PHONY: all
@@ -245,8 +143,6 @@ all: $(EXE)
 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $< -o $@
 %.o : %.cc
 	$(CPPC) $(CFLAGS) $(CPPFLAGS) $(CPPCOPTS) -c $^ -o $@
-
-
 
 
 #############################################################
@@ -300,7 +196,6 @@ tidy:
 
 clean: tidy
 	for f in $(EXE_REST) ; do rm -f $$f ; done
-
 
 install:
 	false #nothing to install here.

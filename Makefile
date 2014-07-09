@@ -6,10 +6,10 @@ INSTALLDIRS=bin
 #
 #  PREFIX is used solely for the install target, right?
 #
+
+# Set PREFIX to "." in undefined
 ifndef PREFIX
-   ifdef DES_HOME
-       PREFIX=${DES_HOME}
-   endif 
+  export PREFIX=.
 endif
 
 #

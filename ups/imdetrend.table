@@ -1,1 +1,4 @@
-envPrepend (PATH, ${PRODUCT_DIR}/bin)
+setupRequired(imsupport 7.1.13+1)
+setupRequired(ccfits 2.4+3)
+setupRequired(nrecipes 2.0+3)
+envPrepend(PATH, ${PRODUCT_DIR}/bin)
