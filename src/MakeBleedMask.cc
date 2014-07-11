@@ -322,9 +322,7 @@ int MakeBleedMask(const char *argv[])
   // Parse verbosity level
   int flag_verbose = 3;
 
-  std::cout << "RAG:" << comline_status << std::endl;
   if(comline_status){
-    std::cout << "RAG2:" << comline_status << std::endl;
     std::cerr << comline.ErrorReport() << std::endl
 	      << std::endl
 	      << comline.ShortUsage()  << std::endl 
@@ -618,6 +616,7 @@ int MakeBleedMask(const char *argv[])
   //  Inimage.Copy(ofilename,flag_verbose);
   // Close the input FITS file, we're done with it.
   Inimage.Close();
+
   // Let stdout know what file was actually read.
   // (it can be different due to the various valid extensions)
   if(flag_verbose){
@@ -633,6 +632,39 @@ int MakeBleedMask(const char *argv[])
 	<< filename;
     LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
   }
+
+  // RAG: Define and fill LDAC_HEADER with HEADER from the first/zeroeth 
+  //      HDU from the input image.  
+  //
+  //      This was built in order to forward meta-data to the ingestion 
+  //      process in the refactored framework.  That has since been determined
+  //      to be unncessary.  The code has been commented out but not dropped in
+  //      case this changes in the future (the reason to drop it if not needed
+  //      is that this increases the file sizes for the BLEED and SATSTAR tables
+  //      by a factor of 5-10.
+  //
+//  std::ostringstream LDAC_HEADER_str;
+//  int orig_HEADER_size=Inimage.ImageHeader().length();
+//  int orig_HEADER_nrec=orig_HEADER_size/81;
+//  LDAC_HEADER_str.str("");
+//  for (int i=0; i < orig_HEADER_nrec; i++){
+//     LDAC_HEADER_str << Inimage.ImageHeader().substr(i*81,80);
+//  }
+//  std::string LDAC_HEADER=LDAC_HEADER_str.str();
+//  int LDAC_HEADER_size=LDAC_HEADER.length();
+//  int LDAC_HEADER_nrec=LDAC_HEADER_size/80;
+
+  // RAG: Prepare header items pertinent to an LDAC HDU
+//  std::vector<std::string> LDAC_fnames,LDAC_ftypes,LDAC_funits;
+//  LDAC_fnames.push_back("Field Header Card"); 
+//  LDAC_funits.push_back(""); 
+//  char LDAC_stringsize[50];
+//  sprintf(LDAC_stringsize,"%dA",LDAC_HEADER_size);
+//  LDAC_ftypes.push_back(LDAC_stringsize); 
+// RAG: Note the item below is built but I had not yet worked out how to populate the actual header item.
+// RAG: See comment above regarding the LDAC header before bothering to fix this...
+//  char LDAC_tdim[50];
+//  sprintf(LDAC_tdim,"(80,%d)",LDAC_HEADER_nrec);
 
   // If *really* verbose, dump the headers to stdout
   if(flag_verbose>4){
@@ -2915,7 +2947,28 @@ int MakeBleedMask(const char *argv[])
     FitsTools::FitsImage StarTableOut;
     StarTableOut.SetOutStream(Out);
     StarTableOut.CreateFile(SaturatedObjectFileName,true,flag_verbose);
-    StarTableOut.MakeTable(3,field_names,field_types,field_units,"TABLE",flag_verbose);
+
+    // RAG: Write HDU containing an LDAC TABLE containing header from the input IMAGE.
+//
+//      This was built in order to forward meta-data to the ingestion 
+//      process in the refactored framework.  That has since been determined
+//      to be unncessary.  The code has been commented out but not dropped in
+//      case this changes in the future (the reason to drop it if not needed
+//      is that this increases the file sizes for the BLEED and SATSTAR tables
+//      by a factor of 5-10.
+//
+//    StarTableOut.MakeTable(1,LDAC_fnames,LDAC_ftypes,LDAC_funits,"LDAC_IMHEAD",flag_verbose);
+    // RAG: To be strictly an LDAC HDU I beleive TDIM1 should be set to (80,#cards) but have not
+    //      figured out how to set that.
+//    if (StarTableOut.WriteTableColumn(1,1,TSTRING, (void *)&LDAC_HEADER,flag_verbose)){
+//       std::cout << "Failed to write LDAC HDU" << std::endl;
+//    }else{
+//       std::cout << "RAG: STAR table column written successfully " << std::endl;
+//    }
+
+    // Write HDU with actual TABLE ontaining information about saturated stars.
+
+    StarTableOut.MakeTable(3,field_names,field_types,field_units,"SAT_STAR",flag_verbose);
 
     // write center coordinate 1 to object table.
     if(StarTableOut.WriteTableColumn(1,star_centers_x.size(),TDOUBLE,
@@ -3040,17 +3093,30 @@ int MakeBleedMask(const char *argv[])
     FitsTools::FitsImage TrailBoxesOut;
     TrailBoxesOut.SetOutStream(Out);
     TrailBoxesOut.CreateFile(TrailBoxesFileName,true,flag_verbose);
-    TrailBoxesOut.MakeTable(8,field_names,field_types,field_units,"TABLE",flag_verbose);
-//    int check_wrthead=-1;
-//    if (keyval_camsym != ""){
-//       check_wrthead = FitsTools::PutHeaderValue<std::string>(TrailBoxesOut.Header(),"CAMSYM",keyval_camsym);
+
+    // RAG: Write HDU containing an LDAC TABLE containing header from the input IMAGE.
 //
+//      This was built in order to forward meta-data to the ingestion 
+//      process in the refactored framework.  That has since been determined
+//      to be unncessary.  The code has been commented out but not dropped in
+//      case this changes in the future (the reason to drop it if not needed
+//      is that this increases the file sizes for the BLEED and SATSTAR tables
+//      by a factor of 5-10.
+//
+//    TrailBoxesOut.MakeTable(1,LDAC_fnames,LDAC_ftypes,LDAC_funits,"LDAC_IMHEAD",flag_verbose);
+    // RAG: To be strictly an LDAC HDU I beleive TDIM1 should be set to (80,#cards) but have not
+    //      figured out how to set that.
+
+    //  Write out Trail_Boxes table
+//    if (TrailBoxesOut.WriteTableColumn(1,1,TSTRING, (void *)&LDAC_HEADER,flag_verbose)){
+//       std::cout << "Failed to write LDAC HDU for BleedTrail Table" << std::endl;
 //    }else{
-//       std::string testval_camsym="unknown";
-//       check_wrthead = FitsTools::PutHeaderValue<std::string>(TrailBoxesOut.Header(),"CAMSYM",testval_camsym);
+//       std::cout << "RAG: Bleed Trail table column written successfully " << std::endl;
 //    }
-//    std::cout << "RAG: Check your head: " << check_wrthead << std::endl;
-//
+
+    // Write out table containing LDAC for Bleed Trail Table
+    TrailBoxesOut.MakeTable(8,field_names,field_types,field_units,"BLEEDTRAIL_TABLE",flag_verbose);
+
     if(TrailBoxesOut.WriteTableColumn(1,trail_boxes.size(),TDOUBLE,(void *)&LocX1[0],flag_verbose)){
       Out << program_name << "::Error: Could not insert " << (get_wcs ? "RA " : "X coordinate ")
 	  << " of trailbox corner 1 in " << TrailBoxesFileName;
