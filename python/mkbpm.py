@@ -7,7 +7,9 @@ Creates bad pixel mask from biascor and flatcor
 06/05/2014: Alex Drlica-Wagner <kadrlica@fnal.gov>
   Adapted J. Marriner's mkbpm.c into python.
   First commit is a functionally identical version.
-
+10/15/2014: Alex Drlica-Wagner <kadrlica@fnal.gov>
+  More pythonized and streamlined. Added wacky pixel
+  finder. Added TODO list...
 
 TODO:
 - Find 'dim' columns that aren't quite 'funky'
