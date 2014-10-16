@@ -9,11 +9,15 @@ Creates bad pixel mask from biascor and flatcor
   First commit is a functionally identical version.
 
 
+TODO:
+- Find 'dim' columns that aren't quite 'funky'
+- Apply other column BPMs before looking for 'wacky' pixels
+
 @author: Alex Drlica-Wagner <kadrlica@fnal.gov>
 """
 __author__   = "Alex Drlica-Wagner"
 __version__  = "0.0.1"
-__revision__ = "$Rev$".split()[-1]
+__revision__ = "$Rev$".strip('$').split()[-1]
 
 import sys
 import os
@@ -267,8 +271,6 @@ class BadPixelMasker(object):
     
     @staticmethod
     def load_pixel_list(filename, ccdnum):
-        logging.info("Loading pixel list: %s"%filename)
-
         bpm = np.zeros(SHAPE,dtype=int) 
         badpix = np.loadtxt(filename)
         for i,xmin,xmax,ymin,ymax in badpix:
@@ -278,7 +280,6 @@ class BadPixelMasker(object):
 
     @staticmethod
     def load_bpm(filename):
-        logging.info("Loading bad pixel mask: %s"%filename)
         f = pyfits.open(filename)
         bpm = copy.copy(f[0].data)
         return bpm.astype(np.uint16)
@@ -460,6 +461,8 @@ class BadPixelMasker(object):
         flatmin_bpm = copy.copy(bpm)
 
         flatnames = self.load_file_list(opts.flatcor)
+        if not len(flatnames): return bpm
+
         logging.info("Processing %i flats"%len(flatnames))
         for i,flatname in enumerate(flatnames):
             flat = pyfits.open(flatname)
@@ -488,6 +491,8 @@ class BadPixelMasker(object):
         biaswarm_bpm = copy.copy(bpm)
 
         biasnames = self.load_file_list(opts.biascor)
+        if not len(biasnames): return bpm
+
         logging.info("Processing %i biases"%len(biasnames))
         for i,biasname in enumerate(biasnames):
             bias = pyfits.open(biasname)
@@ -549,12 +554,10 @@ class BadPixelMasker(object):
         """
         bpm = np.zeros(SHAPE,dtype=int) 
 
-        EDGE = opts.edgesize
-
         imagenames = self.load_file_list(opts.images)
+        if not len(imagenames): return bpm
 
         data = np.zeros([len(imagenames)]+SHAPE, dtype=float)
-
         if (not opts.funkycol) or (not opts.wackypix):
             logging.info("Processing %i images"%len(imagenames))
             for i,imagename in enumerate(imagenames):
