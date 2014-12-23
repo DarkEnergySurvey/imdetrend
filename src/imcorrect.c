@@ -389,7 +389,7 @@ int ImCorrect(int argc,char *argv[])
     float *lutx;
     double *luta,*lutb;
     float over;
-    int	check_image_name();
+    int check_image_name();
 
     fitsfile *tmp_fptr;
     int ihdu,nhdunum;
@@ -407,7 +407,7 @@ int ImCorrect(int argc,char *argv[])
     FILE  *out=NULL;
     /* list of keywords to be removed from the header after imcorrect */
     /* RAG notes these should already be gone if overscan was run in DECam_crosstalk */
-    char	delkeys[100][10]={"CCDSUM","TRIMSEC","BIASSECA","BIASSECB",""};
+    char    delkeys[100][10]={"CCDSUM","TRIMSEC","BIASSECA","BIASSECB",""};
 
     enum {OPT_BPM=1,OPT_OBPM,OPT_FIXCOL,OPT_BIAS,OPT_LINEAR,OPT_PUPIL,OPT_FLATTEN,
           OPT_DARKCOR,OPT_PHOTFLATTEN,OPT_ILLUMINATION,OPT_FRINGE,
@@ -477,7 +477,7 @@ int ImCorrect(int argc,char *argv[])
     while(1){
         int curind = optind;
         static struct option imcorrect_options[] =
-       	{
+        {
             {"bpm",             required_argument, 0,OPT_BPM},
             {"obpm",            required_argument, 0,OPT_OBPM},
             {"bias",            required_argument, 0,OPT_BIAS},
@@ -507,18 +507,18 @@ int ImCorrect(int argc,char *argv[])
             {"help",            no_argument,       0,OPT_HELP},
             {"fast",            no_argument,       &flag_fast,YES},
             {0,0,0,0}
-    	};
+        };
         int clopx = 0;
         clop = getopt_long_only(argc,argv,"",imcorrect_options,&clopx);
         if(clop == -1)
             break;
         switch(clop){
         case 0:
-    	// For straightforward flags
-     	    if (imcorrect_options[clopx].flag != 0){
+        // For straightforward flags
+            if (imcorrect_options[clopx].flag != 0){
                 break;
             }
-           	printf("Option %s is set",imcorrect_options[clopx].name);
+            printf("Option %s is set",imcorrect_options[clopx].name);
             if (optarg){
                 printf(" with %s",optarg);
             }
@@ -526,143 +526,143 @@ int ImCorrect(int argc,char *argv[])
             break;
         case OPT_BPM: // -bpm
             cloperr = 0;
-        	flag_bpm=YES;
-        	if(optarg){
+            flag_bpm=YES;
+            if(optarg){
                 if (!check_image_name(optarg,CHECK_FITS,flag_verbose)) {
-            	    cloperr = 1;
-            	}else{
-                     sprintf(bpm.name,"%s",optarg);
-                }
-        	}else{
-                cloperr = 1;
-            }
-        	if(cloperr){
-                reportevt(flag_verbose,STATUS,5, "Bad Pixel Mask image must follow -bpm");
-                command_line_errors++;
-            	exit(1);
-        	}
-        	break;
-        case OPT_OBPM: // -obpm
-        	cloperr = 0;
-        	flag_bpm=YES;
-        	flag_bpm_override=YES;
-        	if(optarg){
-                if (!check_image_name(optarg,CHECK_FITS,flag_verbose)) {
-              	    cloperr = 1;
+                    cloperr = 1;
                 }else{
                      sprintf(bpm.name,"%s",optarg);
                 }
-        	}else{
+            }else{
+                cloperr = 1;
+            }
+            if(cloperr){
+                reportevt(flag_verbose,STATUS,5, "Bad Pixel Mask image must follow -bpm");
+                command_line_errors++;
+                exit(1);
+            }
+            break;
+        case OPT_OBPM: // -obpm
+            cloperr = 0;
+            flag_bpm=YES;
+            flag_bpm_override=YES;
+            if(optarg){
+                if (!check_image_name(optarg,CHECK_FITS,flag_verbose)) {
+                    cloperr = 1;
+                }else{
+                     sprintf(bpm.name,"%s",optarg);
+                }
+            }else{
                 cloperr = 1;
             }
             if(cloperr){
                 reportevt(flag_verbose,STATUS,5,"Bad Pixel Mask image must follow -obpm");
-            	command_line_errors++;
+                command_line_errors++;
                 exit(1);
             }
-        	break;
+            break;
         case OPT_FIXCOL: // -fixcol
             flag_fixcol=YES;
             break;
         case OPT_BIAS: // -bias
-        	cloperr = 0;
-        	flag_bias=YES;
-        	if(optarg){
+            cloperr = 0;
+            flag_bias=YES;
+            if(optarg){
                 if (!check_image_name(optarg,CHECK_FITS,flag_verbose)) {
                     cloperr = 1;
-            	}else{
+                }else{
                     sprintf(bias.name,"%s",optarg);
                 }
-        	}else{
+            }else{
                 cloperr = 1;
             }
-        	if(cloperr){
-            	reportevt(flag_verbose,STATUS,5,"Bias correction image must follow -bias");
+            if(cloperr){
+                reportevt(flag_verbose,STATUS,5,"Bias correction image must follow -bias");
                 command_line_errors++;
                 exit(1);
-        	}
-        	break;
+            }
+            break;
         case OPT_LINEAR: // -linear
-        	cloperr = 0;
-        	flag_linear=YES;
-        	if(optarg){
+            cloperr = 0;
+            flag_linear=YES;
+            if(optarg){
                 if (!check_image_name(optarg,CHECK_FITS,flag_verbose)) {
-            	    cloperr = 1;
-           	    }else{
+                    cloperr = 1;
+                }else{
                      sprintf(linear_tab,"%s",optarg);
                 }
-        	}else{
+            }else{
                 cloperr = 1;
             }
-        	if(cloperr){
-            	reportevt(flag_verbose,STATUS,5,"Linearity correction look-up table must follow -linear");
-            	command_line_errors++;
+            if(cloperr){
+                reportevt(flag_verbose,STATUS,5,"Linearity correction look-up table must follow -linear");
+                command_line_errors++;
                 exit(1);
-        	}
-        	break;
+            }
+            break;
         case OPT_PUPIL: // -pupil
-        	cloperr = 0;
-        	flag_pupil=YES;
-        	if(optarg){
+            cloperr = 0;
+            flag_pupil=YES;
+            if(optarg){
                 if (!check_image_name(optarg,CHECK_FITS,flag_verbose)) {
-            	    cloperr = 1;
-            	}else{
+                    cloperr = 1;
+                }else{
                     sprintf(pupil.name,"%s",optarg);
                 }
-           	}else{
+            }else{
                 cloperr = 1;
             }
-        	if(cloperr){
+            if(cloperr){
                 reportevt(flag_verbose,STATUS,5,"Pupil correction image must follow -pupil");
-            	command_line_errors++;
-            	exit(1);
-        	}
-        	break;
+                command_line_errors++;
+                exit(1);
+            }
+            break;
         case OPT_FLATTEN: // -flatten
-        	cloperr = 0;
-        	flag_flatten=YES;
-        	if(optarg){
-            	if (!check_image_name(optarg,CHECK_FITS,flag_verbose)) {
-            	    cloperr = 1;
+            cloperr = 0;
+            flag_flatten=YES;
+            if(optarg){
+                if (!check_image_name(optarg,CHECK_FITS,flag_verbose)) {
+                    cloperr = 1;
                 }else{
                     sprintf(flat.name,"%s",optarg);
                 }
-        	}else{
+            }else{
                 cloperr = 1;
             }
-        	if(cloperr){
+            if(cloperr){
                 reportevt(flag_verbose,STATUS,5,"Flat correction image must follow -flatten");
                 command_line_errors++;
-            	exit(1);
-        	}
-        	break;
+                exit(1);
+            }
+            break;
         case OPT_DARKCOR: // -darkcor
-        	cloperr = 0;
-        	flag_dark=YES;
-        	if(optarg){
+            cloperr = 0;
+            flag_dark=YES;
+            if(optarg){
                 if (!check_image_name(optarg,CHECK_FITS,flag_verbose)) {
-               	    cloperr = 1;
-            	}else{
+                    cloperr = 1;
+                }else{
                     sprintf(darkimage.name,"%s",optarg);
                 }
-        	}else{
+            }else{
                 cloperr = 1;
             }
-        	if(cloperr){
+            if(cloperr){
                 reportevt(flag_verbose,STATUS,5,"Master dark correction image must follow -dark");
                 command_line_errors++;
                 exit(1);
-        	}
-        	break;
+            }
+            break;
         case OPT_PHOTFLATTEN: // -photflatten
-        	cloperr = 0;
-        	flag_photflatten=YES;
-        	if(optarg){
+            cloperr = 0;
+            flag_photflatten=YES;
+            if(optarg){
                 if (!check_image_name(optarg,CHECK_FITS,flag_verbose)) {
-            	    cloperr = 1;
+                    cloperr = 1;
                 }else{
                     sprintf(photflat.name,"%s",optarg);
-            	}
+                }
             }else{
                 cloperr = 1;
             }
@@ -670,8 +670,8 @@ int ImCorrect(int argc,char *argv[])
                 reportevt(flag_verbose,STATUS,5,"Photometricflat correction image must follow -photflatten");
                 command_line_errors++;
                 exit(1);
-        	}
-        	break;
+            }
+            break;
         case OPT_ILLUMINATION: // -illumination
             cloperr = 0;
             flag_illumination=YES;
@@ -681,7 +681,7 @@ int ImCorrect(int argc,char *argv[])
                 }else{
                     sprintf(illumination.name,"%s",optarg);
                 }
-        	}else{
+            }else{
                 cloperr = 1;
             }
             if(cloperr){
@@ -689,263 +689,263 @@ int ImCorrect(int argc,char *argv[])
                 command_line_errors++;
                 exit(1);
             }
-        	break;
+            break;
         case OPT_FRINGE: // -fringe
-        	cloperr = 0;
-        	flag_fringe=YES;
-        	if(optarg){
+            cloperr = 0;
+            flag_fringe=YES;
+            if(optarg){
                 if (!check_image_name(optarg,CHECK_FITS,flag_verbose)) {
-            	    cloperr = 1;
+                    cloperr = 1;
                 }else{
                     sprintf(fringe.name,"%s",optarg);
                 }
-        	}else{
+            }else{
                 cloperr = 1;
             }
-        	if(cloperr){
+            if(cloperr){
                 reportevt(flag_verbose,STATUS,5,"Fringe correction image must follow -fringe");
                 command_line_errors++;
                 exit(1);
-        	}
-        	break;
+            }
+            break;
         case OPT_MASKWEIGHTZERO: // -maskweightzero
             cloperr = 0;
-        	if(optarg){
+            if(optarg){
                 sscanf(optarg,"%d",&badpix_wgt0);
-        	}else{
+            }else{
                 cloperr = 1;
             }
-        	if(cloperr){
+            if(cloperr){
                 reportevt(flag_verbose,STATUS,5,"Mask/Integer specification must follow -maskweightzero");
                 command_line_errors++;
-            	exit(1);	 	  	  
-        	}
-        	break;
+                exit(1);              
+            }
+            break;
         case OPT_MASKWEIGHTFACTOR: // -maskweightfactor
             cloperr = 0;
-        	if(optarg){
+            if(optarg){
                 sscanf(optarg,"%d",&badpix_downwgt);
-        	}else{
+            }else{
                 cloperr = 1;
             }
             if (cloperr){
                 reportevt(flag_verbose,STATUS,5,"Mask/Integer specification must follow -maskweightfactor");
                 command_line_errors++;
-                exit(1);	 	  	  
+                exit(1);              
             }
-        	break;
+            break;
         case OPT_WEIGHTFACTOR: // -weightfactor
             cloperr = 0;
-        	if(optarg){
+            if(optarg){
                 sscanf(optarg,"%f",&downweight_factor);
                 if (downweight_factor<0.0){
-            	    sprintf(event,"Weightfactor must be greater than or equal to zero (found %f)", downweight_factor);
-            	    reportevt(flag_verbose,STATUS,5,event);
-            	    command_line_errors++;
-            	    exit(1);
+                    sprintf(event,"Weightfactor must be greater than or equal to zero (found %f)", downweight_factor);
+                    reportevt(flag_verbose,STATUS,5,event);
+                    command_line_errors++;
+                    exit(1);
                 }
-        	}else{
+            }else{
                 cloperr = 1;
             }
             if (cloperr){
                 reportevt(flag_verbose,STATUS,5,"Weightfactor specification must follow -weightfactor");
                 command_line_errors++;
-                exit(1);	 	  	  
+                exit(1);              
             }
-         	break;
+            break;
         case OPT_SCALEREGION: // -scaleregion
-        	cloperr = 0;
-        	if(optarg){
+            cloperr = 0;
+            if(optarg){
                 sprintf(scaleregion,"%s",optarg);
                 decodesection(scaleregion,scaleregionn,flag_verbose);
             }else{
                 cloperr = 1;
             }
-        	if(cloperr){
+            if(cloperr){
                 reportevt(flag_verbose,STATUS,5,"Region specification must follow -scaleregion");
                 command_line_errors++;
                 exit(1);
-        	}
-        	break;
+            }
+            break;
         case OPT_OUTPUT: // -output
             cloperr = 0;
-        	flag_output=YES;
+            flag_output=YES;
             if(optarg){
                 if (check_image_name(optarg,CHECK_FITS,flag_verbose)) {
-            	    imoutnum = 1;
-            	    sprintf(output.name,"%s",optarg);
+                    imoutnum = 1;
+                    sprintf(output.name,"%s",optarg);
                 }else{
-            	    sprintf(outputlist,"%s",optarg);
-            	    imoutnum=0;
-            	    out=fopen(outputlist,"r");
-            	    if (out==NULL) {
-                	    sprintf(event,"Output file list not found: %s",outputlist);
+                    sprintf(outputlist,"%s",optarg);
+                    imoutnum=0;
+                    out=fopen(outputlist,"r");
+                    if (out==NULL) {
+                        sprintf(event,"Output file list not found: %s",outputlist);
                         reportevt(flag_verbose,STATUS,5,event);
                         command_line_errors++;
                         exit(1);
-            	    }
-            	    while (fscanf(out,"%s",imagename)!=EOF) {
+                    }
+                    while (fscanf(out,"%s",imagename)!=EOF) {
                         imoutnum++;
                         if (!check_image_name(imagename,CHECK_FITS,flag_verbose)) {
                             reportevt(flag_verbose,STATUS,5,"Output list must contain FITS or compressed FITS images");
-                      		command_line_errors++;
-                    		exit(1);
+                            command_line_errors++;
+                            exit(1);
                         }
-            	    }
-            	    if (fclose(out)) {
+                    }
+                    if (fclose(out)) {
                         sprintf(event,"Closing file failed: %s",outputlist);
                         reportevt(flag_verbose,STATUS,5,event);
                         command_line_errors++;
                         exit(1);
-            	    }
+                    }
                 }
-        	}else{
+            }else{
                 cloperr = 1;
             }
-        	if(cloperr){
+            if(cloperr){
                 reportevt(flag_verbose,STATUS,5,"Output FITS image or list must follow -output");
                 command_line_errors++;
                 exit(1);
-        	}
-        	break;
+            }
+            break;
         case OPT_VARIANCETYPE: // -variancetype
-        	cloperr = 0;
-        	if(optarg){
+            cloperr = 0;
+            if(optarg){
                 if (!strcmp(optarg,"SIGMA")) flag_variance=DES_SIGMA;
-            	else if (!strcmp(optarg,"WEIGHT")) flag_variance=DES_WEIGHT;
-            	else if (!strcmp(optarg,"INVERSE_VARIANCE")) flag_variance=DES_VARIANCE;
+                else if (!strcmp(optarg,"WEIGHT")) flag_variance=DES_WEIGHT;
+                else if (!strcmp(optarg,"INVERSE_VARIANCE")) flag_variance=DES_VARIANCE;
                 else{
-            	    sprintf(event,"Variancetype %s undefined",optarg);
-            	    reportevt(flag_verbose,STATUS,5,event);
-            	    command_line_errors++;
-            	    exit(1);
-            	}
-        	}else{
+                    sprintf(event,"Variancetype %s undefined",optarg);
+                    reportevt(flag_verbose,STATUS,5,event);
+                    command_line_errors++;
+                    exit(1);
+                }
+            }else{
                 cloperr = 1;
             }
-        	if(cloperr){
+            if(cloperr){
                 reportevt(flag_verbose,STATUS,5,"Variance type specification must follow -variancetype");
                 command_line_errors++;
-                exit(1);	 
-        	}
-        	break;
+                exit(1);     
+            }
+            break;
         case OPT_NOISEMODEL: // -noisemodel
-        	cloperr = 0;
-        	if(optarg){
+            cloperr = 0;
+            if(optarg){
                 if (!strcmp(optarg,"SKYONLY")) flag_noisemodel=DES_SKYONLY;
                 else if (!strcmp(optarg,"FULL")) flag_noisemodel=DES_FULL;
                 else{
-            	    sprintf(event,"Noisemodel %s undefined",optarg);
-            	    reportevt(flag_verbose,STATUS,5,event);
-            	    exit(1);
+                    sprintf(event,"Noisemodel %s undefined",optarg);
+                    reportevt(flag_verbose,STATUS,5,event);
+                    exit(1);
                 }
-        	}else{
+            }else{
                 cloperr = 1;
             }
-        	if(cloperr){
+            if(cloperr){
                 reportevt(flag_verbose,STATUS,5,"Noisemodel specification must follow -noisemodel");
                 command_line_errors++;
-                exit(1);	 	  
-        	}
-        	break;
+                exit(1);          
+            }
+            break;
         case OPT_INTERPOLATE_COL: // -interpolate_col
-        	cloperr = 0;
-        	flag_interpolate_col=YES;
-        	if(optarg){
+            cloperr = 0;
+            flag_interpolate_col=YES;
+            if(optarg){
                 sscanf(optarg,"%f",&scale_interpolate);
                 if (scale_interpolate<1.0 || scale_interpolate>10.0) {
-            	    sprintf(event,"Noise scale factor for interpolated pixels must be between 1 and 10 (%f)",scale_interpolate);
-            	    reportevt(flag_verbose,STATUS,5,event);
-            	    command_line_errors++;
-            	    exit(1);
+                    sprintf(event,"Noise scale factor for interpolated pixels must be between 1 and 10 (%f)",scale_interpolate);
+                    reportevt(flag_verbose,STATUS,5,event);
+                    command_line_errors++;
+                    exit(1);
                 }else{
-            	    sprintf(event,"Pixel noise scale factor for interpolated pixels %.2f",scale_interpolate);
-            	    reportevt(flag_verbose,STATUS,1,event);
-            	}
-        	}else{
+                    sprintf(event,"Pixel noise scale factor for interpolated pixels %.2f",scale_interpolate);
+                    reportevt(flag_verbose,STATUS,1,event);
+                }
+            }else{
                 cloperr = 1;
             }
-        	if(cloperr){
+            if(cloperr){
                 reportevt(flag_verbose,STATUS,5,"Pixel noise scale factor must follow -interpolate_col");
                 command_line_errors++;
-                exit(1);	 	  
-        	}
-        	break;
+                exit(1);          
+            }
+            break;
         case OPT_MINSIZE: // -minsize
-        	cloperr = 0;
-        	if(optarg){
+            cloperr = 0;
+            if(optarg){
                 sscanf(optarg,"%d",&minsize);
-        	}else{
+            }else{
                 cloperr = 1;
             }
-        	if(cloperr){
+            if(cloperr){
                 reportevt(flag_verbose,STATUS,5,"Min size specification must follow -minsize");
                 command_line_errors++;
-                exit(1);	 	  	  
-        	}
-        	break;
+                exit(1);              
+            }
+            break;
         case OPT_MAXSIZE: // -maxsize
-        	cloperr = 0;
-        	if(optarg){
+            cloperr = 0;
+            if(optarg){
                 sscanf(optarg,"%d",&maxsize);
-        	}else{
+            }else{
                 cloperr = 1;
             }
-        	if(cloperr){
+            if(cloperr){
                 reportevt(flag_verbose,STATUS,5,"Max size specification must follow -maxsize");
                 command_line_errors++;
-                exit(1);	 	  	  
-        	}
-        	break;
+                exit(1);              
+            }
+            break;
         case OPT_VERBOSE: // -verbose
-        	// already parsed verbosity
-        	break;
+            // already parsed verbosity
+            break;
         case OPT_RANSEED: // -ranseed
-        	cloperr = 0;
-        	if(optarg){
+            cloperr = 0;
+            if(optarg){
                 sscanf(optarg,"%ld",&ranseed);
             }else{
                 cloperr = 1;
             }
-        	if(cloperr){
+            if(cloperr){
                 reportevt(flag_verbose,STATUS,5,"Random seed specification must follow -ranseed");
-            	command_line_errors++;
-                exit(1);	 	  	  
-        	}
-        	break;
+                command_line_errors++;
+                exit(1);              
+            }
+            break;
         case OPT_UPDATESKY: // -updatesky
-        	flag_updateskybrite=YES;
-        	flag_updateskysigma=YES;
-        	break;
+            flag_updateskybrite=YES;
+            flag_updateskysigma=YES;
+            break;
         case OPT_MEF: // -MEF
-        	flag_mef=YES;
-        	break;
+            flag_mef=YES;
+            break;
         case OPT_VERSION: // -version
-        	// Actually, the version has already been printed above.  Just exit!
-        	//	printf("Version: %s\n",svn_id);
-        	exit(0);     
-           	break;
+            // Actually, the version has already been printed above.  Just exit!
+            //  printf("Version: %s\n",svn_id);
+            exit(0);     
+            break;
         case OPT_HELP: // -help
-        	print_usage(argv[0]);
-        	exit(0);     
-        	break;
+            print_usage(argv[0]);
+            exit(0);     
+            break;
         case '?': // unknown/unrecognized
-        	// Actually, getopt has already printed an error to stderr.
-        	sprintf(event,"Unrecognized option detected, ");
-        	if(optopt){
+            // Actually, getopt has already printed an error to stderr.
+            sprintf(event,"Unrecognized option detected, ");
+            if(optopt){
                 sprintf(event,"%c.",optopt);
-        	}else{
+            }else{
                 sprintf(event,"%s.",argv[curind]);
-        	}
-        	reportevt(flag_verbose,STATUS,5,event);
-        	command_line_errors++;
-        	break;
+            }
+            reportevt(flag_verbose,STATUS,5,event);
+            command_line_errors++;
+            break;
         default:
-        	// should never get here
-        	abort();
+            // should never get here
+            abort();
         }
     }          
-	
+    
     /* ********************************************** */
     /* ********* Handle Input Image/File  *********** */
     /* ********************************************** */
@@ -954,34 +954,34 @@ int ImCorrect(int argc,char *argv[])
     if(optind < argc){
         /* copy input image name if FITS file*/
         if(check_image_name(argv[optind],CHECK_FITS,flag_verbose)){
-        	sprintf(data.name,"%s",argv[optind]);
-        	sprintf(firstimage,"%s",argv[optind]);
-        	imnum = 1;
+            sprintf(data.name,"%s",argv[optind]);
+            sprintf(firstimage,"%s",argv[optind]);
+            imnum = 1;
         }else{ 
             /* expect file containing list of images */
-        	imnum=0;flag_list=YES;
-        	sprintf(input_list_name,"%s",argv[optind]);
-        	inp=fopen(argv[optind],"r");
-        	if (inp==NULL) {
+            imnum=0;flag_list=YES;
+            sprintf(input_list_name,"%s",argv[optind]);
+            inp=fopen(argv[optind],"r");
+            if (inp==NULL) {
                 sprintf(event,"File not found: %s",argv[optind]);
                 reportevt(flag_verbose,STATUS,5,event);
                 command_line_errors++;
                 exit(1);
-        	}
-        	while (fscanf(inp,"%s",imagename)!=EOF) {
+            }
+            while (fscanf(inp,"%s",imagename)!=EOF) {
                 imnum++;
                 if (!check_image_name(imagename,CHECK_FITS,flag_verbose)) {
-            	    reportevt(flag_verbose,STATUS,5,"Input image list must contain FITS or compressed FITS images");
-            	    command_line_errors++;
-            	    exit(1);
+                    reportevt(flag_verbose,STATUS,5,"Input image list must contain FITS or compressed FITS images");
+                    command_line_errors++;
+                    exit(1);
                 }
                 if (imnum == 1){
                     sprintf(firstimage,"%s",imagename);
                 }
             }
-        	if (fclose(inp)) {
+            if (fclose(inp)) {
                 reportevt(flag_verbose,STATUS,5,"Closing input image list failed");
-        	}
+            }
         }
     }else{
         reportevt(flag_verbose,STATUS,5,"Missing required input FITS image or input list.");
@@ -992,8 +992,8 @@ int ImCorrect(int argc,char *argv[])
     if(optind != argc){
         reportevt(flag_verbose,STATUS,5,"Extra/Unknown command line arguments encountered:");
         while(optind < argc){
-        	sprintf(event,"%s",argv[optind++]);
-        	reportevt(flag_verbose,STATUS,5,event);
+            sprintf(event,"%s",argv[optind++]);
+            reportevt(flag_verbose,STATUS,5,event);
         }
         command_line_errors++;
         exit(1);
@@ -1003,7 +1003,7 @@ int ImCorrect(int argc,char *argv[])
 
     if (imoutnum==imnum) {
         if (flag_verbose>=3){
-        	reportevt(flag_verbose,STATUS,1,"Output and input lists of same length");
+            reportevt(flag_verbose,STATUS,1,"Output and input lists of same length");
         }
     }else{
         sprintf(event,"Input(%d) and output(%d) lists must be of same length in multi image mode",imoutnum,imnum);
@@ -1053,32 +1053,32 @@ int ImCorrect(int argc,char *argv[])
         /* reopen output list for processing */
         out=fopen(outputlist,"r");
         if (out==NULL) {
-        	sprintf(event,"File not found: %s",outputlist);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	exit(1);
+            sprintf(event,"File not found: %s",outputlist);
+            reportevt(flag_verbose,STATUS,5,event);
+            exit(1);
         }
     }
 
     /* ****************************************** */
     /* ********** READ CALIBRATION DATA ********* */
     /* ****************************************** */
-			
+            
     /* read bias image */
     if (flag_bias){
         rd_desimage(&bias,READONLY,flag_verbose);
         /* confirm that this is actual bias image */
         /* make sure we are in the 1st extension */
         if (fits_movabs_hdu(bias.fptr,1,&hdutype,&status)) {
-        	sprintf(event,"Move to HDU=1 failed: %s",bias.name);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            sprintf(event,"Move to HDU=1 failed: %s",bias.name);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
         /* confirm that this is bias image */
         headercheck(&bias,"NOCHECK",&ccdnum,"DESMKBCR",flag_verbose);
         if (fits_close_file(bias.fptr,&status)) {
-        	sprintf(event,"File close failed: %s",bias.name);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            sprintf(event,"File close failed: %s",bias.name);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
     }
 
@@ -1088,52 +1088,52 @@ int ImCorrect(int argc,char *argv[])
         /* confirm that this is actual bias image */
         /* make sure we are in the 1st extension */
         if (fits_movabs_hdu(darkimage.fptr,1,&hdutype,&status)) {
-        	sprintf(event,"Move to HDU=1 failed: %s",bias.name);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            sprintf(event,"Move to HDU=1 failed: %s",bias.name);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
         /* confirm that this is dark image */
         headercheck(&darkimage,"NOCHECK",&ccdnum,"DESMKDCR",flag_verbose);
         if (fits_close_file(bias.fptr,&status)) {
-        	sprintf(event,"File close failed: %s",bias.name);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            sprintf(event,"File close failed: %s",bias.name);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
     }
 
-    /* read flat image */	
+    /* read flat image */   
     if (flag_flatten) {
         rd_desimage(&flat,READONLY,flag_verbose);
         /* make sure we are in the 1st extension */
         if (fits_movabs_hdu(flat.fptr,1,&hdutype,&status)) {
-        	sprintf(event,"Move to HDU=1 failed: %s",flat.name);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            sprintf(event,"Move to HDU=1 failed: %s",flat.name);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
         /* confirm that this is flat image */
         headercheck(&flat,filter,&ccdnum,"DESMKFCR",flag_verbose);
         if (fits_close_file(flat.fptr,&status)) {
-        	sprintf(event,"File close failed: %s",flat.name);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            sprintf(event,"File close failed: %s",flat.name);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
     }
 
-    /* read photflat image */	
+    /* read photflat image */   
     if (flag_photflatten) {
         rd_desimage(&photflat,READONLY,flag_verbose);
         /* make sure we are in the 1st extension */
         if (fits_movabs_hdu(photflat.fptr,1,&hdutype,&status)) {
-        	sprintf(event,"Move to HDU=1 failed: %s",photflat.name);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            sprintf(event,"Move to HDU=1 failed: %s",photflat.name);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
         /* confirm that this is photflat image */
         headercheck(&photflat,"NOCHECK",&ccdnum,"DESMKPFC",flag_verbose);
         if (fits_close_file(photflat.fptr,&status)) {
-        	sprintf(event,"File close failed: %s",photflat.name);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            sprintf(event,"File close failed: %s",photflat.name);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
     }
 
@@ -1142,16 +1142,16 @@ int ImCorrect(int argc,char *argv[])
         rd_desimage(&pupil,READONLY,flag_verbose);
         /* make sure we are in the 1st extension */
         if (fits_movabs_hdu(pupil.fptr,1,&hdutype,&status)) {
-        	sprintf(event,"Move to HDU=1 failed: %s",pupil.name);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            sprintf(event,"Move to HDU=1 failed: %s",pupil.name);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
         /* confirm that this is pupil ghost image */
         headercheck(&pupil,"NOCHECK",&ccdnum,"DESMKPUP",flag_verbose);
         if (fits_close_file(pupil.fptr,&status)) {
-        	sprintf(event,"File close failed: %s",pupil.name);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            sprintf(event,"File close failed: %s",pupil.name);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
     }
 
@@ -1160,55 +1160,55 @@ int ImCorrect(int argc,char *argv[])
         rd_desimage(&bpm,READONLY,flag_verbose);
         /* make sure we are in the 1st extension */
         if (fits_movabs_hdu(bpm.fptr,1,&hdutype,&status)) {
-        	sprintf(event,"Move to HDU=1 failed: %s",bpm.name);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            sprintf(event,"Move to HDU=1 failed: %s",bpm.name);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
         /* confirm that this is bpm image */
         headercheck(&bpm,"NOCHECK",&ccdnum,"DESMKBPM",flag_verbose);
         if (fits_close_file(bpm.fptr,&status)) {
-         	sprintf(event,"File close failed: %s",bpm.name);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            sprintf(event,"File close failed: %s",bpm.name);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
     }
 
     /* create a mock bpm regardless */
-    /*   else bpm=bias;  */	
-		
-    /* read illumination image */	
+    /*   else bpm=bias;  */ 
+        
+    /* read illumination image */   
     if (flag_illumination) {
         rd_desimage(&illumination,READONLY,flag_verbose);
         /* make sure we are in the 1st extension */
         if (fits_movabs_hdu(illumination.fptr,1,&hdutype,&status)) {
-        	sprintf(event,"Move to HDU=1 failed: %s",illumination.name);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            sprintf(event,"Move to HDU=1 failed: %s",illumination.name);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
         /* confirm that this is illumination image */
         headercheck(&illumination,filter,&ccdnum,"DESMKICR",flag_verbose);
         if (fits_close_file(illumination.fptr,&status)) {
-        	sprintf(event,"File close failed: %s",illumination.name);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            sprintf(event,"File close failed: %s",illumination.name);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
     }
-		
-    /* read fringe image */	
+        
+    /* read fringe image */ 
     if (flag_fringe) {
         rd_desimage(&fringe,READONLY,flag_verbose);
         /* make sure we are in the 1st extension */
         if (fits_movabs_hdu(fringe.fptr,1,&hdutype,&status)) {
-        	sprintf(event,"Move to HDU=1 failed: %s",fringe.name);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            sprintf(event,"Move to HDU=1 failed: %s",fringe.name);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
         /* confirm that this is fringe image */
         headercheck(&fringe,filter,&ccdnum,"DESMKFRG",flag_verbose);
         if (fits_close_file(fringe.fptr,&status)) {
-        	sprintf(event,"File close failed: %s",fringe.name);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            sprintf(event,"File close failed: %s",fringe.name);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
     }
 
@@ -1287,20 +1287,20 @@ int ImCorrect(int argc,char *argv[])
 
         /* RAG: this looks like it is reading the input list file over (and over, and over) */
         if (flag_list) {
-        	inp=fopen(input_list_name,"r");
-        	if (inp==NULL) {
+            inp=fopen(input_list_name,"r");
+            if (inp==NULL) {
                 sprintf(event,"Failed to open input file list: %s",input_list_name);
                 reportevt(flag_verbose,STATUS,5,event);
-            	exit(1);
-    	    }
-        	for (c=0;c<=im;c++){
+                exit(1);
+            }
+            for (c=0;c<=im;c++){
                 fscanf(inp,"%s",data.name);
             }
-        	if (fclose(inp)) {
+            if (fclose(inp)) {
                 sprintf(event,"Failed to close input file list: %s",input_list_name);
                 reportevt(flag_verbose,STATUS,5,event);
                 exit(1);
-        	}
+            }
         }
       
         /* ************************************** */
@@ -1308,30 +1308,30 @@ int ImCorrect(int argc,char *argv[])
         /* ************************************** */
 
         if (flag_verbose==3) {
-        	sprintf(event,"Reading INPUT image %s",data.name);
-        	reportevt(flag_verbose,STATUS,1,event);
+            sprintf(event,"Reading INPUT image %s",data.name);
+            reportevt(flag_verbose,STATUS,1,event);
         }
         if (flag_output) { /* writing output to new image */
-        	rd_desimage(&data,READONLY,flag_verbose);  
-        	/* prepare output image */
-        	if (out){ 
+            rd_desimage(&data,READONLY,flag_verbose);  
+            /* prepare output image */
+            if (out){ 
                 /* involked with a file list */
                 fscanf(out,"%s",imagename);
             }else{
                 /* involked with single file */
                 sprintf(imagename,"%s",output.name);
-            	sprintf(output.name,"!%s",imagename);
+                sprintf(output.name,"!%s",imagename);
             }
         }else{
             /* overwriting input image */
-        	rd_desimage(&data,READWRITE,flag_verbose);
+            rd_desimage(&data,READWRITE,flag_verbose);
         }
 
         /*echo exposure time if applying dark current correction */
 
         if (flag_dark) {
-        	sprintf(event, "Using exposure time of %f seconds for dark current correction\n",data.exptime);
-        	reportevt(flag_verbose,STATUS,1,event);
+            sprintf(event, "Using exposure time of %f seconds for dark current correction\n",data.exptime);
+            reportevt(flag_verbose,STATUS,1,event);
         }
 
         /* prepare output image */
@@ -1341,7 +1341,7 @@ int ImCorrect(int argc,char *argv[])
         output.nfound=data.nfound;
         output.variancetype=data.variancetype;
         for (i=0;i<output.nfound;i++){
-        	output.axes[i]=data.axes[i];
+            output.axes[i]=data.axes[i];
         }
         output.bitpix=FLOAT_IMG;
         output.saturateA=data.saturateA;
@@ -1351,20 +1351,20 @@ int ImCorrect(int argc,char *argv[])
         output.rdnoiseA=data.rdnoiseA;
         output.rdnoiseB=data.rdnoiseB;
         if (output.saturateA>output.saturateB){
-        	maxsaturate=output.saturateA;
+            maxsaturate=output.saturateA;
         }else{
-        	maxsaturate=output.saturateB;
+            maxsaturate=output.saturateB;
         }
-		  
+          
         /* ************************************** */
         /* ***** READING IMAGE SECTIONS    ****** */
         /* ************************************** */
-	  
+      
         /* retrieve basic image information from header */
         if (fits_movabs_hdu(data.fptr,1,&hdutype,&status)) {
-        	sprintf(event,"Move to HDU=1 failed: %s",data.name);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            sprintf(event,"Move to HDU=1 failed: %s",data.name);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
         /* confirm correct filter and ccdnum */
         headercheck(&data,filter,&ccdnum,"NOCHECK",flag_verbose);
@@ -1372,36 +1372,36 @@ int ImCorrect(int argc,char *argv[])
         /* Why is this sitting here and then appearing 50 lines down again? */
         /* get the DATASEC information */
         if (fits_read_key_str(data.fptr,"DATASEC",data.datasec,comment,&status) ==KEY_NO_EXIST){
-        	sprintf(event,"Keyword DATASEC not found: %s",data.name);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            sprintf(event,"Keyword DATASEC not found: %s",data.name);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
         decodesection(data.datasec,data.datasecn,flag_verbose);
   
         /* get the AMPSEC information */
         if (fits_read_key_str(data.fptr,"AMPSECA",data.ampseca,comment,&status)==KEY_NO_EXIST) {
-        	sprintf(event,"Keyword AMPSECA not defined: %s",data.name);
-        	reportevt(flag_verbose,STATUS,3,event);
-        	status = 0;
-        	data.ampsecan[0] = 1;
-        	data.ampsecan[1] = 1024;
-        	data.ampsecan[2] = 1;
-        	data.ampsecan[3] = 4096;
+            sprintf(event,"Keyword AMPSECA not defined: %s",data.name);
+            reportevt(flag_verbose,STATUS,3,event);
+            status = 0;
+            data.ampsecan[0] = 1;
+            data.ampsecan[1] = 1024;
+            data.ampsecan[2] = 1;
+            data.ampsecan[3] = 4096;
         }else{
-        	decodesection(data.ampseca,data.ampsecan,flag_verbose);
+            decodesection(data.ampseca,data.ampsecan,flag_verbose);
         }
       
         /* get the AMPSEC information */
         if (fits_read_key_str(data.fptr,"AMPSECB",data.ampsecb,comment,&status) ==KEY_NO_EXIST) {
-        	sprintf(event,"Keyword AMPSECB not defined: %s",data.name);
-        	reportevt(flag_verbose,STATUS,3,event);
-        	status = 0;
-        	data.ampsecbn[0] = 1;
-        	data.ampsecbn[1] = 1024;
-        	data.ampsecbn[2] = 1;
-        	data.ampsecbn[3] = 4096;
+            sprintf(event,"Keyword AMPSECB not defined: %s",data.name);
+            reportevt(flag_verbose,STATUS,3,event);
+            status = 0;
+            data.ampsecbn[0] = 1;
+            data.ampsecbn[1] = 1024;
+            data.ampsecbn[2] = 1;
+            data.ampsecbn[3] = 4096;
         }else{
-        	decodesection(data.ampsecb,data.ampsecbn,flag_verbose);
+            decodesection(data.ampsecb,data.ampsecbn,flag_verbose);
         }
 
         output.ampsecan[0] = data.ampsecan[0];
@@ -1465,7 +1465,7 @@ int ImCorrect(int argc,char *argv[])
             if(flag_bpm_override){
                 /* case where BPM mask is supposed to override the existing mask -obpm */
                 /* added propagation of BPM=BPMDEF_EDGE into mask|=BADPIX_EDGE */
-        	    for (i=0;i<output.npixels;i++){
+                for (i=0;i<output.npixels;i++){
                     if (bpm.mask[i]){
                         output.mask[i] = BADPIX_BPM;
                         if (bpm.mask[i]&BPMDEF_EDGE){output.mask[i]|=BADPIX_EDGE;}
@@ -1474,7 +1474,7 @@ int ImCorrect(int argc,char *argv[])
                     }
                 }
                 reportevt(flag_verbose,STATUS,1," BPM override chosen.  Reinitialized mask to match BPM ");
-        	}else{
+            }else{
                 /* case where BPM mask is supposed to supplement (logically or) existing mask) -bpm */
                 /* added propagation of BPM=BPMDEF_EDGE into mask|=BADPIX_EDGE */
                 for (i=0;i<output.npixels;i++){
@@ -1505,7 +1505,7 @@ int ImCorrect(int argc,char *argv[])
         }
         /* MUST FIX THIS!!!!!  RAG believe THIS???? is now fixed but then that assumes that I understood what THIS was */
         if (data.varim!=NULL){
-            /* set variance flag */	
+            /* set variance flag */ 
             flag_variance=YES;  
             flag_newvarim=NO;
             for (i=0;i<output.npixels;i++){
@@ -1515,7 +1515,7 @@ int ImCorrect(int argc,char *argv[])
         }else{
             /* for now initialize to zero */
             if (flag_variance && data.varim==NULL) {
-        	    for (i=0;i<output.npixels;i++){
+                for (i=0;i<output.npixels;i++){
                     output.varim[i]=0.0;
                 }
                 flag_newvarim=YES;
@@ -1525,67 +1525,67 @@ int ImCorrect(int argc,char *argv[])
 
         /* *************************************************/
         /* ******** Confirm Correction Image Sizes  ********/
-        /* *************************************************/	  
+        /* *************************************************/     
       
         /* need to make sure bias and flat are same size as image */
         for (i=0;i<output.nfound;i++) {
-        	if (output.axes[i]!=bpm.axes[i] && flag_bpm) {
+            if (output.axes[i]!=bpm.axes[i] && flag_bpm) {
                 sprintf(event,"BPM image %s (%ldX%ld) different size than science image %s       (%ldX%ld)",
                         bpm.name,bpm.axes[0],bpm.axes[1],output.name,output.axes[0],output.axes[1]);
                 reportevt(flag_verbose,STATUS,5,event);
                 exit(1);
-        	}
-        	if (output.axes[i]!=bias.axes[i] && flag_bias) {
+            }
+            if (output.axes[i]!=bias.axes[i] && flag_bias) {
                 sprintf(event,"BIAS image %s (%ldX%ld) different size than science image %s       (%ldX%ld)",
-              		    bias.name,bias.axes[0],bias.axes[1], output.name,output.axes[0],output.axes[1]);
+                        bias.name,bias.axes[0],bias.axes[1], output.name,output.axes[0],output.axes[1]);
                 reportevt(flag_verbose,STATUS,5,event);
-        	    exit(1);
-        	}
-        	if (output.axes[i]!=flat.axes[i] && flag_flatten) {
+                exit(1);
+            }
+            if (output.axes[i]!=flat.axes[i] && flag_flatten) {
                 sprintf(event,"FLAT image %s (%ldX%ld) different size than science image %s       (%ldX%ld)",
                         flat.name,flat.axes[0],flat.axes[1],output.name,output.axes[0],output.axes[1]);
                 reportevt(flag_verbose,STATUS,5,event);
                 exit(1);
-        	}
+            }
             if (output.axes[i]!=fringe.axes[i] && flag_fringe) {
                 sprintf(event,"FRINGE image %s (%ldX%ld) different size than science image %s       (%ldX%ld)",
                         fringe.name,fringe.axes[0],fringe.axes[1],output.name,output.axes[0],output.axes[1]);
                 reportevt(flag_verbose,STATUS,5,event);
                 exit(1);
-        	}
-        	if (output.axes[i]!=pupil.axes[i] && flag_pupil) {
+            }
+            if (output.axes[i]!=pupil.axes[i] && flag_pupil) {
                 sprintf(event,"PUPIL GHOST image %s (%ldX%ld) different size than science image %s       (%ldX%ld)",
                         pupil.name,pupil.axes[0],pupil.axes[1],output.name,output.axes[0],output.axes[1]);
                 reportevt(flag_verbose,STATUS,5,event);
                 exit(1);
-        	}
-        	if (output.axes[i]!=photflat.axes[i] && flag_photflatten) {
+            }
+            if (output.axes[i]!=photflat.axes[i] && flag_photflatten) {
                 sprintf(event,"PHOTFLAT image %s (%ldX%ld) different size than science image %s       (%ldX%ld)",
-                     	photflat.name,photflat.axes[0],photflat.axes[1],output.name,output.axes[0], output.axes[1]);
+                        photflat.name,photflat.axes[0],photflat.axes[1],output.name,output.axes[0], output.axes[1]);
                 reportevt(flag_verbose,STATUS,5,event);
                 exit(1);
-        	}
-        	if (output.axes[i]!=illumination.axes[i] && flag_illumination) {
+            }
+            if (output.axes[i]!=illumination.axes[i] && flag_illumination) {
                 sprintf(event,"ILLUM image %s (%ldX%ld) different size than science image %s       (%ldX%ld)",
                         illumination.name,illumination.axes[0],illumination.axes[1],output.name,output.axes[0], output.axes[1]);
                 reportevt(flag_verbose,STATUS,5,event);
                 exit(1);
-        	}
+            }
         }
 
         /* ************************************************/
         /* ******** Report on Upcoming Processing  ********/
-        /* ************************************************/	  
+        /* ************************************************/      
 
         if (flag_bias) {
-        	if (fits_read_keyword(data.fptr,"DESBIAS",comment,comment,&status)==KEY_NO_EXIST) {
+            if (fits_read_keyword(data.fptr,"DESBIAS",comment,comment,&status)==KEY_NO_EXIST) {
                 reportevt(flag_verbose,STATUS,1,"BIAS correcting");
                 flag_imbias=1;
                 status=0;
-        	}else{
+            }else{
                 reportevt(flag_verbose,STATUS,1,"Already BIAS corrected");
                 flag_imbias=0;
-        	}
+            }
         }
 
 /*      RAG need to add check for previous linearity correction */
@@ -1605,31 +1605,31 @@ int ImCorrect(int argc,char *argv[])
         }
 
         if (flag_pupil) {
-        	if (fits_read_keyword(data.fptr,"DESPUPC",comment,comment,&status)==KEY_NO_EXIST) {
+            if (fits_read_keyword(data.fptr,"DESPUPC",comment,comment,&status)==KEY_NO_EXIST) {
                 flag_impupil=1;
                 status=0;
                 reportevt(flag_verbose,STATUS,1,"PUPIL GHOST correcting");
-        	}else{
+            }else{
                 reportevt(flag_verbose,STATUS,1,"Already PUPIL GHOST corrected");
                 flag_impupil=0;
-        	}
+            }
         }
 
         if (flag_flatten) {
-        	if (fits_read_keyword(data.fptr,"DESFLAT",comment,comment,&status)==KEY_NO_EXIST) {
+            if (fits_read_keyword(data.fptr,"DESFLAT",comment,comment,&status)==KEY_NO_EXIST) {
                 flag_imflatten=1;
                 status=0;
                 reportevt(flag_verbose,STATUS,1,"FLAT correcting");
-        	}else {
+            }else {
                 reportevt(flag_verbose,STATUS,1,"Already FLAT corrected");
                 flag_imflatten=0;
-        	}
+            }
         }
 
         /* ************************************************/
         /* ********* Mask Missing Image Sections   ********/
         /* *********  and mark Saturated Pixels    ********/
-        /* ************************************************/	  
+        /* ************************************************/      
 
         /* get scale value for image */
         /* note that this scalefactor is pre-bias correction */
@@ -1642,7 +1642,7 @@ int ImCorrect(int argc,char *argv[])
 
         if (flag_pupil && flag_impupil){
             sprintf(event," Scale factor used for pupil correction is: %.3f ",scalefactor);
-        	reportevt(flag_verbose,QA,1,event);
+            reportevt(flag_verbose,QA,1,event);
         }
 
         /* ***** RAG 1st attempt rewrite ******************************* */
@@ -1663,7 +1663,7 @@ int ImCorrect(int argc,char *argv[])
                 sprintf(event,"Will create CCD statical %s image",imtypename[flag_variance]);
                 reportevt(flag_verbose,STATUS,1,event);
             }else{
-         	    /* mark image structure as containing SIGMA image */
+                /* mark image structure as containing SIGMA image */
                 output.variancetype=DES_SIGMA;
                 sprintf(event,"Will create CCD statical %s image",imtypename[output.variancetype]);
                 reportevt(flag_verbose,STATUS,1,event);
@@ -1706,13 +1706,13 @@ int ImCorrect(int argc,char *argv[])
                         uncval=0.0;
                     }else{
                         if(column_in_section(xpos,output.ampsecan)){
-                            /* in AMP A section */	      
+                            /* in AMP A section */        
                             uncval=Squ((double)output.rdnoiseA/(double)output.gainA);
                             if (image_val > 0.){
-            	                uncval+=((double)image_val/(double)output.gainA); 
+                                uncval+=((double)image_val/(double)output.gainA); 
                             }
                         }else{
-                            /* in AMP B section */	      
+                            /* in AMP B section */        
                             uncval=Squ((double)output.rdnoiseB/(double)output.gainB);
                             if (image_val > 0.){
                                 uncval+=((double)image_val/(double)output.gainB); 
@@ -1827,32 +1827,32 @@ int ImCorrect(int argc,char *argv[])
 
         if (flag_noisemodel==DES_SKYONLY) {
             /* create an image that has no sources */
-        	/* carry out setup tasks first time through */
-        	if (vecsort==NULL) {
+            /* carry out setup tasks first time through */
+            if (vecsort==NULL) {
                 nosource.image=(float *)calloc(output.npixels,sizeof(float));
                 if (nosource.image==NULL) {
-            	    reportevt(flag_verbose,STATUS,5, "Calloc of nosource.image failed");
+                    reportevt(flag_verbose,STATUS,5, "Calloc of nosource.image failed");
                     exit(1);
                 }
                 ncount=(int)Squ(2*maxsize);
                 vecsort=(float *)calloc(ncount,sizeof(float));
                 if (vecsort==NULL) {
-            	    reportevt(flag_verbose,STATUS,5,"Calloc of vecsort failed");
-            	    exit(1);
+                    reportevt(flag_verbose,STATUS,5,"Calloc of vecsort failed");
+                    exit(1);
                 }
                 randnum=(float *)calloc(ncount,sizeof(float));
                 if (randnum==NULL) {
-            	    reportevt(flag_verbose,STATUS,5,"Calloc of randnum failed");
+                    reportevt(flag_verbose,STATUS,5,"Calloc of randnum failed");
                     exit(1);
                 }
                 for (i=0;i<ncount;i++) randnum[i]=ran1(&ranseed);
-        	}
+            }
 
-        	/* ************************************************************ */
-        	/* ********** smooth the input image to create sky image ****** */
-        	/* ************************************************************ */
+            /* ************************************************************ */
+            /* ********** smooth the input image to create sky image ****** */
+            /* ************************************************************ */
             rcount=0;
-        	for (y=0;y<output.axes[1];y++) {
+            for (y=0;y<output.axes[1];y++) {
                 if (y%200==1 && flag_verbose) {printf(".");fflush(stdout);}
                 dy=maxsize;
                 if (y-dy<0)  dy=y;
@@ -1875,13 +1875,13 @@ int ImCorrect(int argc,char *argv[])
                     }else{
                         /* Now cases where smoothing should be attempted */
                         /* extract median */
-            	        count=0;
+                        count=0;
                         amp_check=column_in_section((x+1),output.ampsecan);
-            	        ylen=ymax-ymin;
-            	        xlen=xmax-xmin;
-            	        totpix=ylen*xlen;
-            	        /* use all the pixels */
-            	        if (ylen*xlen<MAXPIXELS){
+                        ylen=ymax-ymin;
+                        xlen=xmax-xmin;
+                        totpix=ylen*xlen;
+                        /* use all the pixels */
+                        if (ylen*xlen<MAXPIXELS){
                             for (k=ymin;k<ymax;k++){
                                 for (l=xmin;l<xmax;l++){
                                     rpos=l+k*output.axes[0];
@@ -1895,7 +1895,7 @@ int ImCorrect(int argc,char *argv[])
                                     }
                                 } 
                             }
-            	        }else{ /* randomly choose the pixels */
+                        }else{ /* randomly choose the pixels */
                             maxcount=0;
                             /* added sanity check to check that no more than the number of */
                             /* possible samples are tried */
@@ -1903,10 +1903,10 @@ int ImCorrect(int argc,char *argv[])
                                 rcount=rcount+19;
                                 maxcount++;
                                 if (rcount >= ncount){ rcount=rcount-ncount;}
-                    		    k=ymin+(int)(totpix*randnum[rcount])/xlen;
-                	            if (k>=ymax) k=ymax-1;
-                	            l=xmin+(int)(totpix*randnum[rcount])%xlen;
-                	            if (l>=xmax) l=xmax-1;
+                                k=ymin+(int)(totpix*randnum[rcount])/xlen;
+                                if (k>=ymax) k=ymax-1;
+                                l=xmin+(int)(totpix*randnum[rcount])%xlen;
+                                if (l>=xmax) l=xmax-1;
                                 rpos=l+k*output.axes[0];
                                 if ((!output.mask[rpos])||(output.mask[rpos]==BADPIX_FIX)){
                                     ramp_check=column_in_section((l+1),output.ampsecan);
@@ -1921,31 +1921,31 @@ int ImCorrect(int argc,char *argv[])
                             if (flag_fast){
                                 nosource.image[loc] = quick_select(vecsort, count);
                             }else{
-                   	            /* sort */
+                                /* sort */
                                 shell(count,vecsort-1);
-                	            /* odd or even number of pixels */
-                	            if (count%2) nosource.image[loc]=vecsort[count/2];
+                                /* odd or even number of pixels */
+                                if (count%2) nosource.image[loc]=vecsort[count/2];
                                 else nosource.image[loc]=0.5*(vecsort[count/2]+vecsort[count/2-1]);
                             }
-            	        }else{
+                        }else{
                             /* If samples are NOT present then preserve the old value */
                            nosource.image[loc]=output.varim[loc];
                         }
                     }
                 } /* xloop */
             } /* yloop */
-        	/* copy source removed image over */
-         	/* take care only to replace non-zero weights */
-        	if (output.variancetype==DES_VARIANCE || output.variancetype==DES_WEIGHT) {
-        	    for (i=0;i<output.npixels;i++){
-            	    if (output.varim[i]>1.0e-10) output.varim[i]=nosource.image[i];
+            /* copy source removed image over */
+            /* take care only to replace non-zero weights */
+            if (output.variancetype==DES_VARIANCE || output.variancetype==DES_WEIGHT) {
+                for (i=0;i<output.npixels;i++){
+                    if (output.varim[i]>1.0e-10) output.varim[i]=nosource.image[i];
                 }
-        	}else if (output.variancetype==DES_SIGMA) {
+            }else if (output.variancetype==DES_SIGMA) {
                 for (i=0;i<output.npixels;i++){
                     if (output.varim[i]<1.0e+10) output.varim[i]=nosource.image[i];
                 }
-        	}
-        	printf("\n"); /* stop printing dots that were showing loop progress */
+            }
+            printf("\n"); /* stop printing dots that were showing loop progress */
         }
 
 #define INTERP_WIDTH  2
@@ -1954,50 +1954,50 @@ int ImCorrect(int argc,char *argv[])
         /* ********************************************************** */
         if (flag_interpolate_col){
  // && flag_bpm) RAG 
-        	if (flag_verbose>=3){
+            if (flag_verbose>=3){
                 sprintf(event,"Interpolating over bad pixels");
             }
-        	interppixels=0;
-        	for (i=0;i<output.npixels;i++) {
+            interppixels=0;
+            for (i=0;i<output.npixels;i++) {
                 if ((output.mask[i]&BADPIX_BPM)&&(!(output.mask[i]&BADPIX_INTERP))){
                     /* this is bad pixel */
-            	    xlow=i-1;
-            	    if (xlow < 0) xlow = 0;
-            	    while ((output.mask[xlow]>0)&&(output.mask[xlow]!=BADPIX_FIX)&&(xlow > 0)){
+                    xlow=i-1;
+                    if (xlow < 0) xlow = 0;
+                    while ((output.mask[xlow]>0)&&(output.mask[xlow]!=BADPIX_FIX)&&(xlow > 0)){
                         if ((i - xlow) == INTERP_WIDTH+1) break; 
                         xlow--;
-            	    }
-            	    xhi=i+1;
-            	    if (xhi > output.npixels) xhi = output.npixels;
-            	    while ((output.mask[xhi]>0)&&(output.mask[xhi]!=BADPIX_FIX)&&(xhi < output.npixels)){ 
+                    }
+                    xhi=i+1;
+                    if (xhi > output.npixels) xhi = output.npixels;
+                    while ((output.mask[xhi]>0)&&(output.mask[xhi]!=BADPIX_FIX)&&(xhi < output.npixels)){ 
                         if ((xhi -i) == INTERP_WIDTH+1) break; 
                         xhi++;
-            	    }
-            	    /* Interpolation over no more than INTERP_WIDTH consecutive pixels */
-            	    if (xhi-xlow< INTERP_WIDTH+1) {
+                    }
+                    /* Interpolation over no more than INTERP_WIDTH consecutive pixels */
+                    if (xhi-xlow< INTERP_WIDTH+1) {
                         output.image[i]=0.5*(output.image[xlow]+output.image[xhi]);
                         /* could instead add noise to counteract averaging of 2 pixels */
-                    	/*if (flag_variance) output.image[i]+=gasdev(&seed)*sqrt(0.25*(1.0/output.varim[xlow]+1.0/output.varim[xhi]));*/
+                        /*if (flag_variance) output.image[i]+=gasdev(&seed)*sqrt(0.25*(1.0/output.varim[xlow]+1.0/output.varim[xhi]));*/
                         output.mask[i] |= BADPIX_INTERP; /* set the interpolate flag */
                         interppixels++;
                         /* now calculate weight for this pixel */
                         /* allows for non-zero weight if interpolation */
                         /* over 2 or fewer pixels */
                         if (flag_variance && (xhi-xlow)<=3) { 
-                    		if (output.varim[xlow]>1.0e-10 && output.varim[xhi]>1.0e-10){
-                    	        output.varim[i]=0.50*(output.varim[xlow]+output.varim[xhi]);
+                            if (output.varim[xlow]>1.0e-10 && output.varim[xhi]>1.0e-10){
+                                output.varim[i]=0.50*(output.varim[xlow]+output.varim[xhi]);
                             }
-                    		/* scale weight because it is interpolated */
-                    		if (flag_variance==DES_WEIGHT || flag_variance==DES_VARIANCE){
+                            /* scale weight because it is interpolated */
+                            if (flag_variance==DES_WEIGHT || flag_variance==DES_VARIANCE){
                                 output.varim[i]/=Squ(scale_interpolate);
-                    		}else if (flag_variance==DES_SIGMA){
+                            }else if (flag_variance==DES_SIGMA){
                                  output.varim[i]*=scale_interpolate;
                             }
-                	    }
+                        }
                     }
                 }
-        	} /* end loop over pixels for interpolation */
-        	if (flag_verbose==3) {
+            } /* end loop over pixels for interpolation */
+            if (flag_verbose==3) {
                 sprintf(event,"%s: %d pixels",event,interppixels);
                 reportevt(flag_verbose,STATUS,1,event);
             }
@@ -2013,10 +2013,10 @@ int ImCorrect(int argc,char *argv[])
             }else{
                 retrievescale(&output,scaleregionn,scalesort,flag_verbose,&skybrite_kv,&mode,&skysigma_kv);
             }
-        	sprintf(event,"Image SKYBRITE = %10.4e & SKYSIGMA = %10.4e",skybrite_kv,skysigma_kv);
+            sprintf(event,"Image SKYBRITE = %10.4e & SKYSIGMA = %10.4e",skybrite_kv,skysigma_kv);
             reportevt(flag_verbose,QA,1,event);
         }
-	
+    
         /* **************************** */
         /* **** FRINGE Correction ***** */
         /* **************************** */
@@ -2037,8 +2037,8 @@ int ImCorrect(int argc,char *argv[])
             for (i=0;i<output.npixels;i++){
                 output.image[i]-=scalefactor*fringe.image[i];
             }
-        }	
-	
+        }   
+    
         /* ********************************** */
         /* **** ILLUMINATION Correction ***** */
         /* ********************************** */
@@ -2077,35 +2077,35 @@ int ImCorrect(int argc,char *argv[])
                     output.mask[i] |= BADPIX_BPM;
                 }
             }
-        }	
+        }   
       
         /* *************************************** */
         /* ******* PhotFlatten Correction ******** */
         /* *************************************** */
 
         if (flag_photflatten) {
-        	flag_imphotflatten=YES;
-        	if (flag_verbose){
+            flag_imphotflatten=YES;
+            if (flag_verbose){
                 reportevt(flag_verbose,STATUS,1,"Applying Photflatten correction");
             }
             if (flag_fast){
-        	    retrievescale_fast(&output,scaleregionn,scalesort,flag_verbose,&skybrite_pf,&mode,&skysigma_pf);
+                retrievescale_fast(&output,scaleregionn,scalesort,flag_verbose,&skybrite_pf,&mode,&skysigma_pf);
             }else{
                 retrievescale(&output,scaleregionn,scalesort,flag_verbose,&skybrite_pf,&mode,&skysigma_pf);
             }
-        	for (i=0;i<output.npixels;i++){
+            for (i=0;i<output.npixels;i++){
                 output.image[i]=(output.image[i]-skybrite_pf)*photflat.image[i]+skybrite_pf; 
             }
-        }	
+        }   
 
         /* *********************** */
         /* **** SAVE RESULTS ***** */
         /* *********************** */
 
         if (flag_output) {
-        	/* if writing individual images for each component */
-        	/* then get these names now */
-        	if (!flag_mef) {
+            /* if writing individual images for each component */
+            /* then get these names now */
+            if (!flag_mef) {
                 /* strip off the ".fits" */
                 sprintf(rootname,"%s",imagename);
                 for (i=strlen(rootname);i>=0;i--) 
@@ -2116,50 +2116,50 @@ int ImCorrect(int argc,char *argv[])
                 sprintf(output.name,"%s",imagename);
                 sprintf(bpmname,"!%s_bpm.fits",rootname);
                 sprintf(varimname,"!%s_var.fits",rootname);
-            }       	
-	
+            }           
+    
             /* make sure path exists for new image */
-        	if (mkpath(output.name,flag_verbose)) {
+            if (mkpath(output.name,flag_verbose)) {
                 sprintf(event,"Failed to create path to file: %s",output.name+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 exit(1);
-        	}else{
+            }else{
                 sprintf(event,"Created path to file: %s",output.name+1);
                 reportevt(flag_verbose,STATUS,1,event);
-        	}
-	
-        	/* create the (image) file */
-        	if (fits_create_file(&output.fptr,output.name,&status)) {
+            }
+    
+            /* create the (image) file */
+            if (fits_create_file(&output.fptr,output.name,&status)) {
                 sprintf(event,"File creation failed: %s",output.name);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
-	
-        	/* create the image */
+            }
+    
+            /* create the image */
             if (fits_create_img(output.fptr,FLOAT_IMG,2,output.axes,&status)) {
                 sprintf(event,"Image creation failed: %s",output.name);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
-	
-        	/* first read the number of keywords */
-        	if (fits_get_hdrspace(data.fptr,&keysexist,&j,&status)) {
+            }
+    
+            /* first read the number of keywords */
+            if (fits_get_hdrspace(data.fptr,&keysexist,&j,&status)) {
                 sprintf(event,"Retrieving header failed: %s",data.name);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
+            }
             sprintf(event,"Copying %d keywords into output image", keysexist);
-        	reportevt(flag_verbose,STATUS,1,event);
-        	/* reset to beginning of output header space */
-        	if (fits_read_record(output.fptr,0,keycard,&status)) {
+            reportevt(flag_verbose,STATUS,1,event);
+            /* reset to beginning of output header space */
+            if (fits_read_record(output.fptr,0,keycard,&status)) {
                 reportevt(flag_verbose,STATUS,5,"Reset to start of header failed");
                 printerror(status);
-        	}
-        	if (fits_read_record(data.fptr,0,keycard,&status)) {
+            }
+            if (fits_read_record(data.fptr,0,keycard,&status)) {
                 reportevt(flag_verbose,STATUS,5,"Reading header record failed");
                 printerror(status);
-        	}
-        	for (j=1;j<=keysexist;j++) {
+            }
+            for (j=1;j<=keysexist;j++) {
                 if (fits_read_record(data.fptr,j,keycard,&status)) {
                     sprintf(event,"Reading header record %d failed",j);
                     reportevt(flag_verbose,STATUS,5,event);
@@ -2175,43 +2175,43 @@ int ImCorrect(int argc,char *argv[])
                     strncmp(keycard,"EXTNAME ",8) &&
                     strncmp(keycard,"BSCALE  ",8) &&
                     strncmp(keycard,"BZERO   ",8) 
-        	       ){ 
+                   ){ 
                     if (fits_write_record(output.fptr,keycard,&status)) {
                         sprintf(event,"Writing record failed: %s",keycard);
                         reportevt(flag_verbose,STATUS,5,event);
                         printerror(status);
                     }
                 }
-         	}
+            }
         }else{ 
             /* writing on top of input image */
-        	output.fptr = data.fptr; 
-        	//	resize image
-        	sprintf(event,"Resizing output image %s to %ld X %ld",output.name+1,output.axes[0],output.axes[1]);
-        	reportevt(flag_verbose,STATUS,1,event);
-        	if (fits_resize_img(output.fptr,FLOAT_IMG,2,output.axes,&status)) {
+            output.fptr = data.fptr; 
+            //  resize image
+            sprintf(event,"Resizing output image %s to %ld X %ld",output.name+1,output.axes[0],output.axes[1]);
+            reportevt(flag_verbose,STATUS,1,event);
+            if (fits_resize_img(output.fptr,FLOAT_IMG,2,output.axes,&status)) {
                 sprintf(event,"Resizing of image failed: %s",output.name+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
-        	/* change BZERO */
-        	if (fits_set_bscale(output.fptr,1.0,0.0,&status)) {
+            }
+            /* change BZERO */
+            if (fits_set_bscale(output.fptr,1.0,0.0,&status)) {
                 sprintf(event,"Reading BSCALE failed: %s",output.name+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
-        	output.bzero=0;
-        	if (fits_update_key_lng(output.fptr,"BZERO",output.bzero,comment,&status)) {
+            }
+            output.bzero=0;
+            if (fits_update_key_lng(output.fptr,"BZERO",output.bzero,comment,&status)) {
                 sprintf(event,"Reading BZERO failed: %s",output.name+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
+            }
         }
         /* write the corrected image*/
         if (fits_write_img(output.fptr,TFLOAT,1,output.npixels,output.image,&status)) {
-        	sprintf(event,"Writing image failed: %s",output.name+1);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            sprintf(event,"Writing image failed: %s",output.name+1);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
 
         /* free image array */ 
@@ -2224,97 +2224,97 @@ int ImCorrect(int argc,char *argv[])
         sprintf(comment,"%s",asctime(localtime(&tm)));
         comment[strlen(comment)-1]=0;
         if (flag_bias && flag_imbias){
-        	if (fits_write_key_str(output.fptr,"DESBIAS",comment,"bias subtracted",&status)) {
+            if (fits_write_key_str(output.fptr,"DESBIAS",comment,"bias subtracted",&status)) {
                 sprintf(event,"Writing DESBIAS failed: %s",output.name+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
-        	if (fits_write_key_str(output.fptr,"BIASFIL",strip_path(bias.name),"Bias image",&status)) {
+            }
+            if (fits_write_key_str(output.fptr,"BIASFIL",strip_path(bias.name),"Bias image",&status)) {
                 sprintf(event,"Keyword BIASFIL insert in %s failed",output.name+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
+            }
         }
         if (flag_pupil && flag_impupil){
-        	if (fits_write_key_str(output.fptr,"DESPUPC",comment,"pupil corrected",&status)) {
+            if (fits_write_key_str(output.fptr,"DESPUPC",comment,"pupil corrected",&status)) {
                 sprintf(event,"Writing DESPUPC failed: %s",output.name+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
-        	if (fits_write_key_str(output.fptr,"PUPFIL",strip_path(pupil.name),"Pupil image",&status)) {
+            }
+            if (fits_write_key_str(output.fptr,"PUPFIL",strip_path(pupil.name),"Pupil image",&status)) {
                 sprintf(event,"Keyword PUPFIL insert in %s failed",output.name+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
+            }
         }
         if (flag_flatten && flag_imflatten){
             if (fits_write_key_str(output.fptr,"DESFLAT",comment,"flat fielded",&status)) {
-	            sprintf(event,"Writing DESFLAT failed: %s",output.name+1);
+                sprintf(event,"Writing DESFLAT failed: %s",output.name+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
-        	if (fits_write_key_str(output.fptr,"FLATFIL",strip_path(flat.name),"Flat image",&status)) {
+            }
+            if (fits_write_key_str(output.fptr,"FLATFIL",strip_path(flat.name),"Flat image",&status)) {
                 sprintf(event,"Keyword FLATFIL insert in %s failed",output.name+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
+            }
         }
         if (flag_dark){
-        	if (fits_write_key_str(output.fptr,"DESDARK",comment,"dark corrected",&status)) {
+            if (fits_write_key_str(output.fptr,"DESDARK",comment,"dark corrected",&status)) {
                 sprintf(event,"Writing DESDARK failed: %s",output.name+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
-        	if (fits_write_key_str(output.fptr,"DARKFIL",strip_path(darkimage.name),"Dark image",&status)) {
+            }
+            if (fits_write_key_str(output.fptr,"DARKFIL",strip_path(darkimage.name),"Dark image",&status)) {
                 sprintf(event,"Keyword DARKFIL insert in %s failed",output.name+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
+            }
         }
         if (flag_illumination && flag_imillumination){
-        	if (fits_write_key_str(output.fptr,"DESILLUM",comment,"Illumination Corrected",&status)) {
+            if (fits_write_key_str(output.fptr,"DESILLUM",comment,"Illumination Corrected",&status)) {
                 sprintf(event,"Writing DESILLUM failed: %s",output.name+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
-        	if (fits_write_key_str(output.fptr,"ILLUMFIL",strip_path(illumination.name),"Illumination image",&status)) {
+            }
+            if (fits_write_key_str(output.fptr,"ILLUMFIL",strip_path(illumination.name),"Illumination image",&status)) {
                 sprintf(event,"Keyword ILLUMFIL insert in %s failed",output.name+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
+            }
         }
         if (flag_photflatten && flag_imphotflatten){
-        	if (fits_write_key_str(output.fptr,"DESPHOTF",comment, "Photometric Flat Corrected",&status)) {
+            if (fits_write_key_str(output.fptr,"DESPHOTF",comment, "Photometric Flat Corrected",&status)) {
                 sprintf(event,"Writing DESPHOTF failed: %s",output.name+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
+            }
         }
         if (flag_fringe && flag_imfringe){
-        	if (fits_write_key_str(output.fptr,"DESFRING",comment,"Fringe Corrected",&status)) {
+            if (fits_write_key_str(output.fptr,"DESFRING",comment,"Fringe Corrected",&status)) {
                 sprintf(event,"Writing DESFRING failed: %s",output.name+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
-        	if (fits_write_key_str(output.fptr,"FRINGFIL",strip_path(fringe.name),"Fringe image", &status)) {
+            }
+            if (fits_write_key_str(output.fptr,"FRINGFIL",strip_path(fringe.name),"Fringe image", &status)) {
                 sprintf(event,"Keyword FRINGFIL insert in %s failed",output.name+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
+            }
         }
         if (flag_updateskysigma){
-        	if (fits_update_key_flt(output.fptr,"SKYSIGMA",skysigma_kv,7,"Sky Sigma (ADU)",&status)) {
+            if (fits_update_key_flt(output.fptr,"SKYSIGMA",skysigma_kv,7,"Sky Sigma (ADU)",&status)) {
                 sprintf(event,"Writing SKYSIGMA failed: %s",output.name+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
+            }
         }
         if (flag_updateskybrite){
-        	if (fits_update_key_flt(output.fptr,"SKYBRITE",skybrite_kv,7,"Sky Brightness (ADU)",&status)) {
+            if (fits_update_key_flt(output.fptr,"SKYBRITE",skybrite_kv,7,"Sky Brightness (ADU)",&status)) {
                 sprintf(event,"Writing SKYBRITE failed: %s",output.name+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
+            }
         }
 
         sprintf(longcomment,"DESDM:");
@@ -2323,8 +2323,8 @@ int ImCorrect(int argc,char *argv[])
         if (flag_verbose) reportevt(flag_verbose,STATUS,1,longcomment);
         if (fits_write_history(output.fptr,longcomment,&status)) {
             sprintf(event,"Writing longcomment failed: %s",output.name+1);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
 
         /* RAG - 2014, Apr 7: Add IMG HDU compression keywords */
@@ -2361,78 +2361,78 @@ int ImCorrect(int argc,char *argv[])
         }
 
         if (fits_update_key_str(output.fptr,"DES_EXT",imtypename[DES_IMAGE],"Image extension",&status)) {
-        	sprintf(event,"Writing DES_EXT=%s failed: %s", imtypename[DES_IMAGE],output.name+1);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            sprintf(event,"Writing DES_EXT=%s failed: %s", imtypename[DES_IMAGE],output.name+1);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
         if (fits_update_key_lng(output.fptr,"EXTVER",1,"Extension version",&status)) {
-        	reportevt(flag_verbose,STATUS,5,"Setting EXTVER=1 failed");
-        	printerror(status);
+            reportevt(flag_verbose,STATUS,5,"Setting EXTVER=1 failed");
+            printerror(status);
         }
 
         /* remove unneeded information from the header */
         nkeys=0;
         while (strlen(delkeys[nkeys])) {
-        	if (fits_read_keyword(output.fptr,delkeys[nkeys],comment,comment,&status)==KEY_NO_EXIST){
+            if (fits_read_keyword(output.fptr,delkeys[nkeys],comment,comment,&status)==KEY_NO_EXIST){
                 status=0;
-        	}else{
+            }else{
                 if (fits_delete_key(output.fptr,delkeys[nkeys],&status)) {
                     if (flag_verbose) {
                         sprintf(event,"Keyword %s not deleted from image %s",delkeys[nkeys],output.name+1);
                         reportevt(flag_verbose,STATUS,3,event);
-            	    }
-            	    status=0;
+                    }
+                    status=0;
                 }
-        	}
-        	nkeys++;
+            }
+            nkeys++;
         }
 
         /* write new keywords if SATURATA/SATURATB were present */
         if (maxsaturate>0.0){
-        	if (fits_write_key(output.fptr,TFLOAT,"SATURATE",&maxsaturate,"Global Saturate Value",&status)) {
+            if (fits_write_key(output.fptr,TFLOAT,"SATURATE",&maxsaturate,"Global Saturate Value",&status)) {
                 sprintf(event,"Writing keyword SATURATE failed: %s",output.name+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
-     	}
-	  
+            }
+        }
+      
         /* update existing keywords */
         if (fits_update_key_str(output.fptr,"OBSTYPE","red","Observation type",&status)) {
-        	sprintf(event,"Updating keyword OBSTYPE failed: %s",output.name+1);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            sprintf(event,"Updating keyword OBSTYPE failed: %s",output.name+1);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
-	    
+        
         /* close and reopen if outputting individual images */
         if (!flag_mef) {
-        	/* close the image file */
-        	if (fits_close_file(output.fptr,&status)) {
+            /* close the image file */
+            if (fits_close_file(output.fptr,&status)) {
                 sprintf(event,"Closing file failed: %s",output.name+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
-        	sprintf(event,"Opening bpm image %s",bpmname+1);
-        	reportevt(flag_verbose,STATUS,1,event);
-        	/* open the bpm file */
-        	if (fits_create_file(&output.fptr,bpmname,&status)) {
+            }
+            sprintf(event,"Opening bpm image %s",bpmname+1);
+            reportevt(flag_verbose,STATUS,1,event);
+            /* open the bpm file */
+            if (fits_create_file(&output.fptr,bpmname,&status)) {
                 sprintf(event,"Creating image mask file failed: %s",bpmname+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
+            }
         }
 
         /* now store the bad pixel mask that has been created or updated */
         /* first create a new extension */
         if (fits_create_img(output.fptr,USHORT_IMG,2,output.axes,&status)) {
-        	sprintf(event,"Creating image mask failed: %s",bpmname+1);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            sprintf(event,"Creating image mask failed: %s",bpmname+1);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
-        /* write the data */	  
+        /* write the data */      
         if (fits_write_img(output.fptr,TUSHORT,1,output.npixels,output.mask,&status)) {
-        	sprintf(event,"Writing image mask failed: %s",bpmname+1);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            sprintf(event,"Writing image mask failed: %s",bpmname+1);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
         /* free mask image array */ 
         free(data.mask);   
@@ -2470,54 +2470,54 @@ int ImCorrect(int argc,char *argv[])
             reportevt(flag_verbose,STATUS,5,event);
             printerror(status);
         }
-	  
+      
         if (fits_update_key_str(output.fptr,"DES_EXT",imtypename[DES_MASK],"Extension type",&status)) {
-        	reportevt(flag_verbose,STATUS,5,"Setting DES_EXT=%s failed");
-        	printerror(status);
+            reportevt(flag_verbose,STATUS,5,"Setting DES_EXT=%s failed");
+            printerror(status);
         }
-	  
+      
         if (fits_update_key_lng(output.fptr,"EXTVER",2,"Extension version",&status)) {
-        	reportevt(flag_verbose,STATUS,5,"Setting EXTVER=2 failed");
-        	printerror(status); 
+            reportevt(flag_verbose,STATUS,5,"Setting EXTVER=2 failed");
+            printerror(status); 
         }
-	  
+      
         /* close and reopen if outputting individual images */
         if (!flag_mef) {
-        	/* close the image file */
-        	if (fits_close_file(output.fptr,&status)) {
+            /* close the image file */
+            if (fits_close_file(output.fptr,&status)) {
                 sprintf(event,"Closing image failed: %s",output.name+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
-        	if (flag_verbose) {
+            }
+            if (flag_verbose) {
                 sprintf(event,"Opening %s image %s",imtypename[output.variancetype],varimname+1);
                 reportevt(flag_verbose,STATUS,1,event);
-        	}
-        	/* open the variance image */
-        	if (fits_create_file(&output.fptr,varimname,&status)) {
+            }
+            /* open the variance image */
+            if (fits_create_file(&output.fptr,varimname,&status)) {
                 sprintf(event,"Creating %s image failed: %s",imtypename[output.variancetype],varimname+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
+            }
         }
 
         /* now store the variance image that has been created or updated */
         /* first create a new extension */
         if (flag_variance) {
-        	if (fits_create_img(output.fptr,FLOAT_IMG,2,output.axes,&status)) {
+            if (fits_create_img(output.fptr,FLOAT_IMG,2,output.axes,&status)) {
                 sprintf(event,"Creating %s image extention failed: %s",imtypename[output.variancetype],varimname+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
-        	/* write the data */	  
-        	if (fits_write_img(output.fptr,TFLOAT,1,output.npixels,output.varim,&status)) {
+            }
+            /* write the data */      
+            if (fits_write_img(output.fptr,TFLOAT,1,output.npixels,output.varim,&status)) {
                 sprintf(event,"Writing %s image failed: %s",imtypename[output.variancetype],varimname+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
-        	/* free variance array */ 
-        	free(data.varim);   
-        	free(output.varim);   
+            }
+            /* free variance array */ 
+            free(data.varim);   
+            free(output.varim);   
 
             /* RAG - 2014, Apr 7: Add WEIGHT HDU compression keywords */
             if (fits_update_key_str(output.fptr,"FZALGOR",WGT_FZALGOR,"Compression type",&status)){
@@ -2552,31 +2552,31 @@ int ImCorrect(int argc,char *argv[])
                 printerror(status);
             }
 
-        	if (fits_update_key_str(output.fptr,"DES_EXT",imtypename[output.variancetype],"Extension type",&status)) {
+            if (fits_update_key_str(output.fptr,"DES_EXT",imtypename[output.variancetype],"Extension type",&status)) {
                 sprintf(event,"Writing DES_EXT=%s failed: %s",imtypename[output.variancetype],varimname+1);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
-	    
-        	if (fits_update_key_lng(output.fptr,"EXTVER",3,"Extension version",&status)){
+            }
+        
+            if (fits_update_key_lng(output.fptr,"EXTVER",3,"Extension version",&status)){
                 reportevt(flag_verbose,STATUS,5,"Setting EXTVER=3 failed");
                 printerror(status);
             }
         }
-	  	    
+            
         /* close the corrected image */
         if (fits_close_file(output.fptr,&status)) {
-        	sprintf(event,"Closing image failed: %s",output.name+1);
-        	reportevt(flag_verbose,STATUS,5,event);
-        	printerror(status);
+            sprintf(event,"Closing image failed: %s",output.name+1);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
         }
         /* close the input image if needed */
         if (flag_output){
-        	if (fits_close_file(data.fptr,&status)) {
+            if (fits_close_file(data.fptr,&status)) {
                 sprintf(event,"Closing input image failed: %s",data.name);
                 reportevt(flag_verbose,STATUS,5,event);
                 printerror(status);
-        	}
+            }
         }
         sprintf(event,"Closed %s: 2D ( %ld X %ld )",&(output.name[flag_output]),output.axes[0],output.axes[1]);
         reportevt(flag_verbose,STATUS,1,event);
@@ -2588,7 +2588,7 @@ int ImCorrect(int argc,char *argv[])
                 sprintf(event,"Failed to close output file list: %s",outputlist);
                 reportevt(flag_verbose,STATUS,5,event);
                 exit(1);
-        	}
+            }
         }
     }
 
