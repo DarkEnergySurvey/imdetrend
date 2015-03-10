@@ -206,6 +206,9 @@ int MakeFlatCorrection(int argc,char *argv[])
     linear_tab[1000],firstimage[1000],retry_firstimage[1000],
     obstype[200],*strip_path(),inname_temp[1000],outname_temp[1000],
     imtypename[6][10]={"","IMAGE","VARIANCE","MASK","SIGMA","WEIGHT"};
+  char  all_ampseca[100],all_ampsecb[100];
+  char  all_datasec[100],all_dataseca[100],all_datasecb[100];
+  char  all_detsec[100],all_detseca[100],all_detsecb[100];
   fitsfile *fptr,*tmp_fptr;
   int	ccdnum=0;
   double	sumvariance,sumval,sum1,sum2a, sum2b, *flatstats;
@@ -231,8 +234,23 @@ int MakeFlatCorrection(int argc,char *argv[])
 
   /* variables for CAMSYM */
 
-  char camsym_card[80];
+  char cardval[81];
+  char camsym_card[81];
+  char gaina_card[81];
+  char gainb_card[81];
+  char rdnoisea_card[81];
+  char rdnoiseb_card[81];
+  char sata_card[81];
+  char satb_card[81];
+  char satboth_card[81];
   int  flag_camsym_fnd=0;
+  int  flag_gaina_fnd=0;
+  int  flag_gainb_fnd=0;
+  int  flag_rdnoisea_fnd=0;
+  int  flag_rdnoiseb_fnd=0;
+  int  flag_sata_fnd=0;
+  int  flag_satb_fnd=0;
+  int  flag_satboth_fnd=0;
 
   /* variables to keep track of min/max date from nite header */
   char nite[80], mindate[80]="99999", maxdate[80]="0000", sawdate = 0;
@@ -289,18 +307,18 @@ int MakeFlatCorrection(int argc,char *argv[])
 	{"avminmaxclip",  required_argument, 0,         OPT_AVMINMAXCLIP},
 	{"variancetype",  required_argument, 0,         OPT_VARIANCETYPE},
 	{"image_compare", required_argument, 0,         OPT_IMAGE_COMPARE},
-        {"bias",          required_argument, 0,         OPT_BIAS},
-        {"linear",        required_argument, 0,         OPT_LINEAR},
+    {"bias",          required_argument, 0,         OPT_BIAS},
+    {"linear",        required_argument, 0,         OPT_LINEAR},
 	{"verbose",       required_argument, 0,         OPT_VERBOSE},
 	{"scale",         required_argument, 0,         OPT_SCALE},
 	{"flattype",      required_argument, 0,         OPT_FLATTYPE},
 	{"pupil",         required_argument, 0,         OPT_PUPIL},
-        {"bpm",           required_argument, 0,         OPT_BPM},
+    {"bpm",           required_argument, 0,         OPT_BPM},
 	{"average",       no_argument,       0,         OPT_AVERAGE},
 	{"median",        no_argument,       0,         OPT_MEDIAN},
 	{"version",       no_argument,       0,         OPT_VERSION},
 	{"help",          no_argument,       0,         OPT_HELP},
-        {"noscale",       no_argument,       &flag_scale, 0},
+    {"noscale",       no_argument,       &flag_scale, 0},
 	{"fast",          no_argument,       &flag_fast,YES},
 	{0,0,0,0}
       };
@@ -594,40 +612,39 @@ int MakeFlatCorrection(int argc,char *argv[])
     /* * cycle through image list checking existence and OBSTYPE * */
     /* *********************************************************** */
     while (fscanf(inp,"%s",imagename)!=EOF) {
-      imnum++;
-      if (strncmp(&(imagename[strlen(imagename)-5]),".fits",5)
-	  || !strncmp(&(imagename[strlen(imagename)-8]),".fits.gz",8)) {
-	sprintf(event,"File must contain list of FITS or compressed FITS images: %s",
-		inname_temp);
-	reportevt(flag_verbose,STATUS,5,event);
-	exit(1);
-      }
-      else { /* open file and check header */
-        if (imnum == 1){
-           /* If this is the first image then save the name in the event that
-              no other corrections besides linearity correction are requested
-              (so that a file is present for the CCDNUM to be probed for)     */
-           sprintf(firstimage,"%s",imagename);
+        imnum++;
+        if (strncmp(&(imagename[strlen(imagename)-5]),".fits",5)
+            || !strncmp(&(imagename[strlen(imagename)-8]),".fits.gz",8)) {
+            sprintf(event,"File must contain list of FITS or compressed FITS images: %s",inname_temp);
+            reportevt(flag_verbose,STATUS,5,event);
+            exit(1);
+        }else { /* open file and check header */
+            if (imnum == 1){
+               /* If this is the first image then save the name in the event that */
+               /* no other corrections besides linearity correction are requested */
+               /* (so that a file is present for the CCDNUM to be probed for)     */
+               sprintf(firstimage,"%s",imagename);
+            }
         }
-	if (fits_open_file(&fptr,imagename,READONLY,&status))  {
-	  sprintf(event,"Input image didn't open: %s",imagename);
-	  reportevt(flag_verbose,STATUS,5,event);
-	  printerror(status);
-	}
+        if (fits_open_file(&fptr,imagename,READONLY,&status))  {
+            sprintf(event,"Input image didn't open: %s",imagename);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
+        }
 
         /* collect min/max nite keys*/
-	if (fits_read_key_str(fptr,"NITE",nite,comment,&status) == KEY_NO_EXIST) {
-          sprintf(event, "NITE keyword not found in %s, we may not get a complete {MAX,MIN}DATE range", imagename);
-	  reportevt(flag_verbose,STATUS,3,event);
-          status=0;
+        if (fits_read_key_str(fptr,"NITE",nite,comment,&status) == KEY_NO_EXIST) {
+            sprintf(event, "NITE keyword not found in %s, we may not get a complete {MAX,MIN}DATE range", imagename);
+            reportevt(flag_verbose,STATUS,3,event);
+            status=0;
         } else {
-          sawdate = 1;
-          if (0 > strcmp(nite,mindate)) {
-             strncpy(mindate,nite,80);
-          }
-          if (0 < strcmp(nite,maxdate)) {
-             strncpy(maxdate,nite,80);
-          }
+            sawdate = 1;
+            if (0 > strcmp(nite,mindate)) {
+                strncpy(mindate,nite,80);
+            }
+            if (0 < strcmp(nite,maxdate)) {
+                strncpy(maxdate,nite,80);
+            }
         }
 
         /* check headers for each input until a card containing CAMSYM keyword is found */
@@ -636,16 +653,84 @@ int MakeFlatCorrection(int argc,char *argv[])
         /* Would be nice if this operated as a loop over a set of keywords but currently this is unncessary */
 
         if (!flag_camsym_fnd){
-           if (fits_read_card(fptr,"CAMSYM",camsym_card,&status) == KEY_NO_EXIST){
-              sprintf(event, "CAMSYM keyword not found in %s", imagename);
+            if (fits_read_card(fptr,"CAMSYM",camsym_card,&status) == KEY_NO_EXIST){
+                sprintf(event, "CAMSYM keyword not found in %s", imagename);
+                reportevt(flag_verbose,STATUS,3,event);
+                status=0;
+            }else{
+                flag_camsym_fnd=1;
+            }
+        }
+
+        /* RAG: March 5, 2015 */
+        /* Other keywords that should be propogated */
+        if (!flag_gaina_fnd){
+           if (fits_read_card(fptr,"GAINA",gaina_card,&status) == KEY_NO_EXIST){
+              sprintf(event, "GAINA keyword not found in %s", imagename);
               reportevt(flag_verbose,STATUS,3,event);
               status=0;
            }else{
-              flag_camsym_fnd=1;
+              flag_gaina_fnd=1;
+           }
+        }
+        if (!flag_gainb_fnd){
+           if (fits_read_card(fptr,"GAINB",gainb_card,&status) == KEY_NO_EXIST){
+              sprintf(event, "GAINB keyword not found in %s", imagename);
+              reportevt(flag_verbose,STATUS,3,event);
+              status=0;
+           }else{
+              flag_gainb_fnd=1;
            }
         }
 
-	/* confirm OBSTYPE */
+        if (!flag_rdnoisea_fnd){
+           if (fits_read_card(fptr,"RDNOISEA",rdnoisea_card,&status) == KEY_NO_EXIST){
+              sprintf(event, "RDNOISEA keyword not found in %s", imagename);
+              reportevt(flag_verbose,STATUS,3,event);
+              status=0;
+           }else{
+              flag_rdnoisea_fnd=1;
+           }
+        }
+        if (!flag_rdnoiseb_fnd){
+           if (fits_read_card(fptr,"RDNOISEB",rdnoiseb_card,&status) == KEY_NO_EXIST){
+              sprintf(event, "RDNOISEB keyword not found in %s", imagename);
+              reportevt(flag_verbose,STATUS,3,event);
+              status=0;
+           }else{
+              flag_rdnoiseb_fnd=1;
+           }
+        }
+
+        if (!flag_sata_fnd){
+           if (fits_read_card(fptr,"SATURATA",sata_card,&status) == KEY_NO_EXIST){
+              sprintf(event, "SATURATA keyword not found in %s", imagename);
+              reportevt(flag_verbose,STATUS,3,event);
+              status=0;
+           }else{
+              flag_sata_fnd=1;
+           }
+        }
+        if (!flag_satb_fnd){
+           if (fits_read_card(fptr,"SATURATB",satb_card,&status) == KEY_NO_EXIST){
+              sprintf(event, "SATURATB keyword not found in %s", imagename);
+              reportevt(flag_verbose,STATUS,3,event);
+              status=0;
+           }else{
+              flag_satb_fnd=1;
+           }
+        }
+        if (!flag_satboth_fnd){
+           if (fits_read_card(fptr,"SATURATE",satboth_card,&status) == KEY_NO_EXIST){
+              sprintf(event, "SATURATE keyword not found in %s", imagename);
+              reportevt(flag_verbose,STATUS,3,event);
+              status=0;
+           }else{
+              flag_satboth_fnd=1;
+           }
+        }
+
+	/*  confirm OBSTYPE */
 	/* 	if (fits_read_key_str(fptr,"OBSTYPE",obstype,comment,&status)== */
 	/* 	    KEY_NO_EXIST) { */
 	/* 	  sprintf(event,"OBSTYPE keyword not found in %s",imagename); */
@@ -658,17 +743,16 @@ int MakeFlatCorrection(int argc,char *argv[])
 	/* 	  reportevt(flag_verbose,STATUS,5,event); */
 	/* 	  exit(0); */
 	/* 	} */
-	if (fits_close_file(fptr,&status)) {
-	  sprintf(event,"Input image didn't close: %s",imagename);
-	  reportevt(flag_verbose,STATUS,5,event);
-	  printerror(status);
-	}
-      }
+        if (fits_close_file(fptr,&status)) {
+            sprintf(event,"Input image didn't close: %s",imagename);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
+        }
     }
     if (fclose(inp)) {
       sprintf(event,"Input image list didn't close: %s",inname_temp);
       reportevt(flag_verbose,STATUS,5,event);
-      exit(0);
+      exit(1);
     }
   }  /* end check of the file list validity */
     
@@ -693,7 +777,6 @@ int MakeFlatCorrection(int argc,char *argv[])
   }
     
     
-	
   if (flag_twilight) {sprintf(obstype,"twilight flat");}
   else{sprintf(obstype,"flatcor");}
 	
@@ -885,6 +968,7 @@ int MakeFlatCorrection(int argc,char *argv[])
       reportevt(flag_verbose,STATUS,5,event);
       printerror(status);
     }
+    sprintf(all_ampseca,"%s",datain.ampseca);
     decodesection(datain.ampseca,datain.ampsecan,flag_verbose);
 
     /* get the BIASSEC information */
@@ -899,12 +983,13 @@ int MakeFlatCorrection(int argc,char *argv[])
     */
 	  
     /* get the AMPSEC information */
-    if (fits_read_key_str(datain.fptr,"AMPSECB",datain.ampsecb,
+    if (fits_read_key_str(datain.fptr,"AMPSECB",datain.ampsecb, 
 			  comment,&status)==KEY_NO_EXIST) {
       sprintf(event,"Keyword AMPSECB not defined in %s",datain.name);
       reportevt(flag_verbose,STATUS,5,event);
       printerror(status);
     }
+    sprintf(all_ampsecb,"%s",datain.ampsecb);
     decodesection(datain.ampsecb,datain.ampsecbn,flag_verbose);
 
     /* get the TRIMSEC information */
@@ -919,15 +1004,54 @@ int MakeFlatCorrection(int argc,char *argv[])
     */
 	  
     /* get the DATASEC information */
-    /*
       if (fits_read_key_str(datain.fptr,"DATASEC",datain.datasec,
       comment,&status)==KEY_NO_EXIST) {
       sprintf(event,"Keyword DATASEC not defined in %s",datain.name);
       reportevt(flag_verbose,STATUS,5,event);
       printerror(status);
       }
+      sprintf(all_datasec,"%s",datain.datasec);
       decodesection(datain.datasec,datain.datasecn,flag_verbose);
-    */
+	  
+      if (fits_read_key_str(datain.fptr,"DATASECA",datain.dataseca,
+      comment,&status)==KEY_NO_EXIST) {
+      sprintf(event,"Keyword DATASECA not defined in %s",datain.name);
+      reportevt(flag_verbose,STATUS,5,event);
+      printerror(status);
+      }
+      sprintf(all_dataseca,"%s",datain.dataseca);
+      decodesection(datain.dataseca,datain.datasecan,flag_verbose);
+	  
+      if (fits_read_key_str(datain.fptr,"DATASECB",datain.datasecb,
+      comment,&status)==KEY_NO_EXIST) {
+      sprintf(event,"Keyword DATASECB not defined in %s",datain.name);
+      reportevt(flag_verbose,STATUS,5,event);
+      printerror(status);
+      }
+      sprintf(all_datasecb,"%s",datain.datasecb);
+      decodesection(datain.datasecb,datain.datasecbn,flag_verbose);
+
+    /* get the DETSEC information */
+      if (fits_read_key_str(datain.fptr,"DETSEC",all_detsec,
+      comment,&status)==KEY_NO_EXIST) {
+      sprintf(event,"Keyword DETSEC not defined in %s",datain.name);
+      reportevt(flag_verbose,STATUS,5,event);
+      printerror(status);
+      }
+	  
+      if (fits_read_key_str(datain.fptr,"DETSECA",all_detseca,
+      comment,&status)==KEY_NO_EXIST) {
+      sprintf(event,"Keyword DETSECA not defined in %s",datain.name);
+      reportevt(flag_verbose,STATUS,5,event);
+      printerror(status);
+      }
+	  
+      if (fits_read_key_str(datain.fptr,"DETSECB",all_detsecb,
+      comment,&status)==KEY_NO_EXIST) {
+      sprintf(event,"Keyword DETSECB not defined in %s",datain.name);
+      reportevt(flag_verbose,STATUS,5,event);
+      printerror(status);
+      }
 	  
     if (flag_verbose>=3) {
       /*
@@ -978,6 +1102,12 @@ int MakeFlatCorrection(int argc,char *argv[])
     data[im].ampsecbn[1] = datain.ampsecbn[1];
     data[im].ampsecbn[2] = datain.ampsecbn[2];
     data[im].ampsecbn[3] = datain.ampsecbn[3];
+/*    data[im].ampseca = datain.ampseca;     */
+/*    data[im].ampsecb = datain.ampsecb;     */
+/*    data[im].datasec  = datain.datasec;    */
+/*    data[im].dataseca = datain.dataseca;   */
+/*    data[im].datasecb = datain.datasecb;   */
+
     data[im].gainA=datain.gainA;data[im].gainB=datain.gainB;
     data[im].rdnoiseA=datain.rdnoiseA;data[im].rdnoiseB=datain.rdnoiseB;
     data[im].image=(float *)calloc(data[im].npixels,sizeof(float));
@@ -1747,6 +1877,150 @@ int MakeFlatCorrection(int argc,char *argv[])
     reportevt(flag_verbose,STATUS,5,event);
     printerror(status);
   }
+
+  /* output DETSEC keywords */
+  /* uses the header item from the last image */
+  if (fits_update_key_str(output.fptr,"DETSIZE","[1:29400,1:29050]",
+                "Detector size",&status)) {
+      sprintf(event,"Writing DETSIZE failed: %s",output.name+1);
+      reportevt(flag_verbose,STATUS,5,event);
+      printerror(status);
+  }
+
+  if (fits_update_key_str(output.fptr,"DETSEC",all_detsec,
+                "Location of this CCD on Focal Plane",&status)) {
+      sprintf(event,"Writing DETSEC failed: %s",output.name+1);
+      reportevt(flag_verbose,STATUS,5,event);
+      printerror(status);
+  }
+  if (fits_update_key_str(output.fptr,"DETSECA",all_detseca,
+                "Detector display tile for amp A",&status)) {
+      sprintf(event,"Writing DETSECA failed: %s",output.name+1);
+      reportevt(flag_verbose,STATUS,5,event);
+      printerror(status);
+  }
+  if (fits_update_key_str(output.fptr,"DETSECB",all_detsecb,
+                "Detector display tile for amp B",&status)) {
+      sprintf(event,"Writing DETSECB failed: %s",output.name+1);
+      reportevt(flag_verbose,STATUS,5,event);
+      printerror(status);
+  }
+
+  /* output DATASEC keywords */
+  /* uses the header item from the last image */
+  if (fits_update_key_str(output.fptr,"DATASEC",all_datasec,
+                "Data section to display",&status)) {
+      sprintf(event,"Writing DATASEC failed: %s",output.name+1);
+      reportevt(flag_verbose,STATUS,5,event);
+      printerror(status);
+  }
+  if (fits_update_key_str(output.fptr,"DATASECA",all_dataseca,
+                "Data section from amp A",&status)) {
+      sprintf(event,"Writing DATASECA failed: %s",output.name+1);
+      reportevt(flag_verbose,STATUS,5,event);
+      printerror(status);
+  }
+  if (fits_update_key_str(output.fptr,"DATASECB",all_datasecb,
+                "Data section from amp B",&status)) {
+      sprintf(event,"Writing DATASECB failed: %s",output.name+1);
+      reportevt(flag_verbose,STATUS,5,event);
+      printerror(status);
+  }
+
+  /* output AMPSEC keywords */
+  /* uses the header item from the last image */
+  if (fits_update_key_str(output.fptr,"AMPSECA",all_ampseca,
+                "CCD section in read order for amp A",&status)) {
+      sprintf(event,"Writing AMPSECA failed: %s",output.name+1);
+      reportevt(flag_verbose,STATUS,5,event);
+      printerror(status);
+  }
+  if (fits_update_key_str(output.fptr,"AMPSECB",all_ampsecb,
+                "CCD section in read order for amp B",&status)) {
+      sprintf(event,"Writing AMPSECB failed: %s",output.name+1);
+      reportevt(flag_verbose,STATUS,5,event);
+      printerror(status);
+  }
+
+  /* Now write out the ensemble of other cards that were deemed desirable if found */
+  if (flag_gaina_fnd){
+     if (fits_update_card(output.fptr,"GAINA",gaina_card,&status)){
+        sprintf(event, "Writing/updating %s failed in :%s",gaina_card,output.name+1);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
+     }
+  }else{
+     sprintf(event, "No GAINA card found among inputs.");
+     reportevt(flag_verbose,STATUS,3,event);
+  }
+
+  if (flag_gainb_fnd){
+     if (fits_update_card(output.fptr,"GAINB",gainb_card,&status)){
+        sprintf(event, "Writing/updating %s failed in :%s",gainb_card,output.name+1);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
+     }
+  }else{
+     sprintf(event, "No GAINB card found among inputs.");
+     reportevt(flag_verbose,STATUS,3,event);
+  }
+
+  if (flag_rdnoisea_fnd){
+     if (fits_update_card(output.fptr,"RDNOISEA",rdnoisea_card,&status)){
+        sprintf(event, "Writing/updating %s failed in :%s",rdnoisea_card,output.name+1);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
+     }
+  }else{
+     sprintf(event, "No RDNOISEA card found among inputs.");
+     reportevt(flag_verbose,STATUS,3,event);
+  }
+
+  if (flag_rdnoiseb_fnd){
+     if (fits_update_card(output.fptr,"RDNOISEB",rdnoiseb_card,&status)){
+        sprintf(event, "Writing/updating %s failed in :%s",rdnoiseb_card,output.name+1);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
+     }
+  }else{
+     sprintf(event, "No RDNOISEB card found among inputs.");
+     reportevt(flag_verbose,STATUS,3,event);
+  }
+
+  if (flag_sata_fnd){
+     if (fits_update_card(output.fptr,"SATURATA",sata_card,&status)){
+        sprintf(event, "Writing/updating %s failed in :%s",sata_card,output.name+1);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
+     }
+  }else{
+     sprintf(event, "No SATURATA card found among inputs.");
+     reportevt(flag_verbose,STATUS,3,event);
+  }
+
+  if (flag_satb_fnd){
+     if (fits_update_card(output.fptr,"SATURATB",satb_card,&status)){
+        sprintf(event, "Writing/updating %s failed in :%s",satb_card,output.name+1);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
+     }
+  }else{
+     sprintf(event, "No SATURATB card found among inputs.");
+     reportevt(flag_verbose,STATUS,3,event);
+  }
+
+  if (flag_satboth_fnd){
+     if (fits_update_card(output.fptr,"SATURATE",satboth_card,&status)){
+        sprintf(event, "Writing/updating %s failed in :%s",satboth_card,output.name+1);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
+     }
+  }else{
+     sprintf(event, "No SATURATE card found among inputs.");
+     reportevt(flag_verbose,STATUS,3,event);
+  }
+
+
 
   /* Write information into the header describing the processing */
   flatstats = (double *)calloc(4,sizeof(double));
