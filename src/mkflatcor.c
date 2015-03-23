@@ -12,6 +12,7 @@ Basic syntax: mkflatcor <input_list> <output_flatcor_image> <options>
     -median (default)
     -scale <scale region>
     -noscale
+    -halfS7 
     -bias <image>
     -linear <lut>
     -pupil <image>
@@ -70,7 +71,7 @@ Detailed Description:
       value in a region of the image (after all corrections have been applied)
       unless the -noscale option is present.  The -scale option allows the user 
       to specify a region to be used.  The default is to scale using the region
-      [500:1500,1500:2500] where the format is: [xmin:xmax,ymin:ymax], all 
+      [512:1536,1536:2560] where the format is: [xmin:xmax,ymin:ymax], all 
       values are integers and non-numeric characters (including ".") serve as 
       delimeters (including ".").  The same region is used when assessing the 
       scale used when applying a pupil correction.
@@ -79,6 +80,9 @@ Detailed Description:
       region could in principle be updated for the application of the pupil 
       while scaling for the combined image could be turned off by specifying 
       -noscale someplace on the command line after the -scale option.
+
+      The -halfS7 option causes the statistic on CCD=31 (i.e. chip S7) to ignore
+      values on the B-side amplifier.
 
   Image Combination:
     There are currently four different options that direct how the image 
@@ -170,6 +174,7 @@ void print_usage()
   printf("  -median (default)\n");
   printf("  -scale <scale region>\n");
   printf("  -noscale\n");
+  printf("  -halfS7\n");
   printf("  -bias <image>\n");
   printf("  -linear <lut>\n"); 
   printf("  -bpm <image>\n");
@@ -191,8 +196,8 @@ int MakeFlatCorrection(int argc,char *argv[])
   int	xp,yp,i,im,imnum,x,y,loc,xmin,xmax,ymin,ymax,num,delta,ncompare=0,
     flag_combine=MEDIAN,flag_bias=NO,flag_pupil=NO,
     flag_variance=NO,flag_bpm=NO,hdutype,
-    flag_variance_method=VARIANCE_DIRECT,flag_twilight=0,
-    scaleregionn[4]={500,1500,1500,2500};
+    flag_variance_method=VARIANCE_DIRECT,flag_twilight=0,flag_halfS7=0,
+    scaleregionn[4]={512,1536,1536,2560};
   int scalenum,flag_verbose=1,mkpath(),flag_image_compare=NO,overscantype=0,
     flag_aver = 0,flag_median=0,flag_avsigclip = 0,flag_avminmaxclip = 0;
   int flag_linear=NO,flag_lutinterp=YES;
@@ -236,6 +241,7 @@ int MakeFlatCorrection(int argc,char *argv[])
 
   char cardval[81];
   char camsym_card[81];
+  char detpos_card[81];
   char gaina_card[81];
   char gainb_card[81];
   char rdnoisea_card[81];
@@ -244,6 +250,7 @@ int MakeFlatCorrection(int argc,char *argv[])
   char satb_card[81];
   char satboth_card[81];
   int  flag_camsym_fnd=0;
+  int  flag_detpos_fnd=0;
   int  flag_gaina_fnd=0;
   int  flag_gainb_fnd=0;
   int  flag_rdnoisea_fnd=0;
@@ -255,7 +262,7 @@ int MakeFlatCorrection(int argc,char *argv[])
   /* variables to keep track of min/max date from nite header */
   char nite[80], mindate[80]="99999", maxdate[80]="0000", sawdate = 0;
 
-  enum {OPT_AVERAGE=1,OPT_AVSIGCLIP,OPT_AVMINMAXCLIP,OPT_MEDIAN,OPT_SCALE,OPT_NOSCALE,
+  enum {OPT_AVERAGE=1,OPT_AVSIGCLIP,OPT_AVMINMAXCLIP,OPT_MEDIAN,OPT_SCALE,OPT_NOSCALE,OPT_HALFS7,
 	OPT_BIAS,OPT_LINEAR,OPT_BPM,OPT_PUPIL,OPT_FLATTYPE,OPT_VARIANCETYPE,OPT_IMAGE_COMPARE,
 	OPT_VERBOSE,OPT_HELP,OPT_VERSION};
   
@@ -318,6 +325,7 @@ int MakeFlatCorrection(int argc,char *argv[])
 	{"median",        no_argument,       0,         OPT_MEDIAN},
 	{"version",       no_argument,       0,         OPT_VERSION},
 	{"help",          no_argument,       0,         OPT_HELP},
+    {"halfS7",        no_argument,       0,         OPT_HALFS7},
     {"noscale",       no_argument,       &flag_scale, 0},
 	{"fast",          no_argument,       &flag_fast,YES},
 	{0,0,0,0}
@@ -509,6 +517,11 @@ int MakeFlatCorrection(int argc,char *argv[])
       flag_combine=MEDIAN;
       flag_median = 1;
       break;
+/*  RAG: 03/20/15  halfS7 option */
+    case OPT_HALFS7: // -halfS7
+      cloperr = 0;
+      flag_halfS7=1;
+      break;
     case OPT_VERBOSE: // -verbose
       // already parsed verbosity
       break;
@@ -524,10 +537,9 @@ int MakeFlatCorrection(int argc,char *argv[])
     case '?': // unknown/unrecognized
       sprintf(event,"Unrecognized option detected, ");
       if(optopt){
-	sprintf(event,"%c.",optopt);
-      }
-      else {
-	sprintf(event,"%s.",argv[curind]);
+         sprintf(event,"%c.",optopt);
+      }else{
+         sprintf(event,"%s.",argv[curind]);
       }
       reportevt(flag_verbose,STATUS,5,event);
       command_line_errors++;
@@ -664,6 +676,16 @@ int MakeFlatCorrection(int argc,char *argv[])
 
         /* RAG: March 5, 2015 */
         /* Other keywords that should be propogated */
+        if (!flag_detpos_fnd){
+            if (fits_read_card(fptr,"DETPOS",detpos_card,&status) == KEY_NO_EXIST){
+                sprintf(event, "DETPOS keyword not found in %s", imagename);
+                reportevt(flag_verbose,STATUS,3,event);
+                status=0;
+            }else{
+                flag_detpos_fnd=1;
+            }
+        }
+
         if (!flag_gaina_fnd){
            if (fits_read_card(fptr,"GAINA",gaina_card,&status) == KEY_NO_EXIST){
               sprintf(event, "GAINA keyword not found in %s", imagename);
@@ -991,6 +1013,20 @@ int MakeFlatCorrection(int argc,char *argv[])
     }
     sprintf(all_ampsecb,"%s",datain.ampsecb);
     decodesection(datain.ampsecb,datain.ampsecbn,flag_verbose);
+
+    /* RAG: halfS7 */
+    /* remove ampB from statistics */
+    if ((flag_halfS7)&&(ccdnum == 31)){
+        /* left the original print statements in case this needs to be generalized one day */ 
+        /* printf("RAG: SCALEREGION %4d,%4d : %4d,%4d \n",scaleregionn[0],scaleregionn[1],scaleregionn[2],scaleregionn[3]); */
+        /* printf("RAG:     AMPSECA %4d,%4d : %4d,%4d \n",datain.ampsecan[0],datain.ampsecan[1],datain.ampsecan[2],datain.ampsecan[3]); */
+        /* printf("RAG:     AMPSECB %4d,%4d : %4d,%4d \n",datain.ampsecbn[0],datain.ampsecbn[1],datain.ampsecbn[2],datain.ampsecbn[3]); */
+
+        if (column_in_section(1024,datain.ampsecbn)){scaleregionn[0]=1025;}
+        if (column_in_section(1025,datain.ampsecbn)){scaleregionn[1]=1024;}
+        sprintf(event," Flag halfS7 is enabled so scaleregion updated to ignore B amplifier [%d,%d:%d,%d] ",scaleregionn[0],scaleregionn[1],scaleregionn[2],scaleregionn[3]);
+        reportevt(flag_verbose,STATUS,1,event);
+    }
 
     /* get the TRIMSEC information */
     /*
@@ -1876,6 +1912,17 @@ int MakeFlatCorrection(int argc,char *argv[])
     sprintf(event,"Writing CCDNUM=%d failed: %s",ccdnum,output.name+1);
     reportevt(flag_verbose,STATUS,5,event);
     printerror(status);
+  }
+
+  if (flag_detpos_fnd){
+     if (fits_update_card(output.fptr,"DETPOS",detpos_card,&status)){
+        sprintf(event, "Writing/updating %s failed in :%s",detpos_card,output.name+1);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
+     }
+  }else{
+     sprintf(event, "No DETPOS card found among inputs.");
+     reportevt(flag_verbose,STATUS,3,event);
   }
 
   /* output DETSEC keywords */
