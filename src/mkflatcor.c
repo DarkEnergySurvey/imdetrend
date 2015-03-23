@@ -82,7 +82,7 @@ Detailed Description:
       -noscale someplace on the command line after the -scale option.
 
       The -halfS7 option causes the statistic on CCD=31 (i.e. chip S7) to ignore
-      values on the B-side amplifier.
+      values on the A-side amplifier.
 
   Image Combination:
     There are currently four different options that direct how the image 
@@ -1022,9 +1022,9 @@ int MakeFlatCorrection(int argc,char *argv[])
         /* printf("RAG:     AMPSECA %4d,%4d : %4d,%4d \n",datain.ampsecan[0],datain.ampsecan[1],datain.ampsecan[2],datain.ampsecan[3]); */
         /* printf("RAG:     AMPSECB %4d,%4d : %4d,%4d \n",datain.ampsecbn[0],datain.ampsecbn[1],datain.ampsecbn[2],datain.ampsecbn[3]); */
 
-        if (column_in_section(1024,datain.ampsecbn)){scaleregionn[0]=1025;}
-        if (column_in_section(1025,datain.ampsecbn)){scaleregionn[1]=1024;}
-        sprintf(event," Flag halfS7 is enabled so scaleregion updated to ignore B amplifier [%d,%d:%d,%d] ",scaleregionn[0],scaleregionn[1],scaleregionn[2],scaleregionn[3]);
+        if (column_in_section(1024,datain.ampsecan)){scaleregionn[0]=1025;}
+        if (column_in_section(1025,datain.ampsecan)){scaleregionn[1]=1024;}
+        sprintf(event," Flag halfS7 is enabled so scaleregion updated to ignore A amplifier [%d:%d,%d:%d] ",scaleregionn[0],scaleregionn[1],scaleregionn[2],scaleregionn[3]);
         reportevt(flag_verbose,STATUS,1,event);
     }
 
