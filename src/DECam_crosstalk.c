@@ -316,8 +316,8 @@ int DECamXTalk(int argc,char *argv[])
   /*  ************  List the Headers Keywords NOT to be ******  */
   /*  ************      copied from 0th Header          ******  */
   /*  ********************************************************  */
-		
-  char	*zeroheader,**exclkey, *ptr,
+                
+  char  *zeroheader,**exclkey, *ptr,
     exclist[40][10]={
     "SIMPLE","BITPIX","NAXIS","NAXIS1",
     "NAXIS2","EXTEND","NEXTEND","CHECKSUM",
@@ -333,32 +333,32 @@ int DECamXTalk(int argc,char *argv[])
     int numzerokeys,nexc=37,numnthkeys,numwrittenkeys=0,
       keyflag,keynum,totkeynum;
     int writeCounter, writeImageFailed, retryDelay, nRetry;
-	
+        
     /*  ******************************************************** */
     /*  ******** array for storing crosstalk coefficients ****** */
     /*  ******************************************************** */
-    float	xtalk[XTDIM][XTDIM];
-    float	x_nl[XTDIM][XTDIM];
-    float	y_nl[XTDIM][XTDIM];
-    float	c_poly[XTDIM][XTDIM][DEGPOLY];
+    float       xtalk[XTDIM][XTDIM];
+    float       x_nl[XTDIM][XTDIM];
+    float       y_nl[XTDIM][XTDIM];
+    float       c_poly[XTDIM][XTDIM][DEGPOLY];
     float   xprime,xprime_pow;
     
-	
+        
     /*  ******************************************************** */
     /*  ******* other variables needed for the processing ****** */
     /*  ******************************************************** */
-    char	filename[500],outname_temp[500],trash[200],nfilename[500],tag1[100],tag2[100],
+    char        filename[500],outname_temp[500],trash[200],nfilename[500],tag1[100],tag2[100],
       newname[500],filetype[50],obstype[80],comment[100],oldcomment[100],command_line[1000],
       longcomment[10000],event[10000],newimagename[500],*xtalk_file=NULL,*xtalk_filename=NULL,
       *replace_file=NULL,flag_hdus_or_ccds = 0, ccdlist[CCDNUM2], hdulist[CCDNUM2], AmpOrder[CCDNUM1];
-    int	anynull,nfound,i,hdunum,hdutype,j,k,x,y,chdu, ccdnum,locout,
+    int anynull,nfound,i,hdunum,hdutype,j,k,x,y,chdu, ccdnum,locout,
       flag_crosstalk=0,flag_verbose=1,flag_phot=0,flag_crossatthresh=0,bitpix,naxis,
       flag_replace=0,ext1,ext2,ampextension,ampA,ampB,locA,locB,ampoffset1,nkeys,
       ampoffset2,nsata=0,nsatb=0,flag_osorder=0,
       maxhdunum=HDUNUM, nhdus, needpath=1,
       mkpath(),getheader_flt(),getheader_str();
     static int status=0;
-    float	value,uncertainty,significance,nullval,*outdata=NULL,**indata;
+    float       value,uncertainty,significance,nullval,*outdata=NULL,**indata;
     float   nonlinon, poly1, poly2, poly3;
     float       crossatthresh;
     float       tmp_satAval,tmp_satBval;
@@ -367,24 +367,27 @@ int DECamXTalk(int argc,char *argv[])
     float       ampBmin = 1e+30,ampBmax = 0;
     float       new_ltv1,new_ltv2,old_ltv1,old_ltv2;
     double      new_crpix1,new_crpix2,old_crpix1=0,old_crpix2=0;
-    long	axes[2],naxes[2],taxes[2],pixels,npixels,fpixel,oldpixel=0;
-    double	xtalkcorrection=0.0;
-    void	printerror(),reportevt(),init_desimage(),decodesection();
+    long        axes[2],naxes[2],taxes[2],pixels,npixels,fpixel,oldpixel=0;
+    double      xtalkcorrection=0.0;
+    void        printerror(),reportevt(),init_desimage(),decodesection();
     fitsfile *fptr,*nfptr;
-    FILE	*inp;
-    time_t	tm;
+    FILE        *inp;
+    time_t      tm;
     desimage input_image[CCDNUM2];
     desimage tmp_image;
     overscan_config osconfig;
     short *maskdata = NULL;
     int myl;
     rlist *rl = NULL;  // linked list of header replacment values 
-    char	delkeys[100][10]={"PRESECA","PRESECB","POSTSECA",
-				  "POSTSECB","TRIMSECA","TRIMSECB","TRIMSEC",
-				  "BIASSECA","BIASSECB",""};
+
+    /* RAG: 2015, March 24... removed update/propogation of FILENAME keyword" */
+
+    char        delkeys[100][10]={"PRESECA","PRESECB","POSTSECA",
+                                  "POSTSECB","TRIMSECA","TRIMSECB","TRIMSEC",
+                                  "BIASSECA","BIASSECB","FILENAME",""};
 
     enum {OPT_CROSSTALK=1,OPT_PHOTFLAG,OPT_SATMASK,OPT_OVERSCAN,OPT_OVERSCANSAMPLE,OPT_OVERSCANFUNCTION,
-	  OPT_OVERSCANORDER,OPT_OVERSCANTRIM,OPT_MAXHDUNUM,OPT_CCDLIST,OPT_HDULIST,OPT_CROSSATTHRESH,
+          OPT_OVERSCANORDER,OPT_OVERSCANTRIM,OPT_MAXHDUNUM,OPT_CCDLIST,OPT_HDULIST,OPT_CROSSATTHRESH,
           OPT_FOCUSCHIPSOUT,OPT_REPLACE,OPT_VERBOSE,OPT_HELP,OPT_VERSION};
 
     command_line[0] = '\0';
@@ -451,253 +454,253 @@ int DECamXTalk(int argc,char *argv[])
     while(1) {
       int curind = optind;
       static struct option xtalk_options[] =
-	{
-	  {"crosstalk",        required_argument, 0,        OPT_CROSSTALK},
-	  {"photflag",         required_argument, 0,         OPT_PHOTFLAG},
-	  {"overscansample",   required_argument, 0,   OPT_OVERSCANSAMPLE},
-	  {"overscanfunction", required_argument, 0, OPT_OVERSCANFUNCTION},
-	  {"overscanorder",    required_argument, 0,    OPT_OVERSCANORDER},
-	  {"overscantrim",     required_argument, 0,     OPT_OVERSCANTRIM},
-	  {"maxhdunum",        required_argument, 0,        OPT_MAXHDUNUM},
-	  {"ccdlist",          required_argument, 0,          OPT_CCDLIST},
-	  {"hdulist",          required_argument, 0,          OPT_HDULIST},
-	  {"crossatthresh",    required_argument, 0,    OPT_CROSSATTHRESH},
-	  {"replace",          required_argument, 0,          OPT_REPLACE},
-	  {"verbose",          required_argument, 0,          OPT_VERBOSE},
-	  {"version",          no_argument,       0,          OPT_VERSION},
-	  {"help",             no_argument,       0,             OPT_HELP},
-	  {"linear",           no_argument,       &flag_linear,         1},
-	  {"presatmask",       no_argument,       &flag_sat_beforextalk,1},
-	  {"postsatmask",      no_argument,       &flag_sat_afterxtalk, 1},
-	  {"overscan",         no_argument,       &flag_overscan,       1},
-	  {"focuschipsout",    no_argument,       &flag_focus,          1},
-	  {0,0,0,0}
-	};
+        {
+          {"crosstalk",        required_argument, 0,        OPT_CROSSTALK},
+          {"photflag",         required_argument, 0,         OPT_PHOTFLAG},
+          {"overscansample",   required_argument, 0,   OPT_OVERSCANSAMPLE},
+          {"overscanfunction", required_argument, 0, OPT_OVERSCANFUNCTION},
+          {"overscanorder",    required_argument, 0,    OPT_OVERSCANORDER},
+          {"overscantrim",     required_argument, 0,     OPT_OVERSCANTRIM},
+          {"maxhdunum",        required_argument, 0,        OPT_MAXHDUNUM},
+          {"ccdlist",          required_argument, 0,          OPT_CCDLIST},
+          {"hdulist",          required_argument, 0,          OPT_HDULIST},
+          {"crossatthresh",    required_argument, 0,    OPT_CROSSATTHRESH},
+          {"replace",          required_argument, 0,          OPT_REPLACE},
+          {"verbose",          required_argument, 0,          OPT_VERBOSE},
+          {"version",          no_argument,       0,          OPT_VERSION},
+          {"help",             no_argument,       0,             OPT_HELP},
+          {"linear",           no_argument,       &flag_linear,         1},
+          {"presatmask",       no_argument,       &flag_sat_beforextalk,1},
+          {"postsatmask",      no_argument,       &flag_sat_afterxtalk, 1},
+          {"overscan",         no_argument,       &flag_overscan,       1},
+          {"focuschipsout",    no_argument,       &flag_focus,          1},
+          {0,0,0,0}
+        };
       int clopx = 0;
       clop = getopt_long_only(argc,argv,"",
-			      xtalk_options,&clopx);
+                              xtalk_options,&clopx);
       if(clop == -1)
-	break;
+        break;
       switch(clop){
       case 0:
-	// For straightforward flags
-	if(xtalk_options[clopx].flag != 0)
-	  break;
-	printf("Option %s is set",xtalk_options[clopx].name);
-	if(optarg)
-	  printf(" with %s",optarg);
-	printf(".\n");
-	break;
+        // For straightforward flags
+        if(xtalk_options[clopx].flag != 0)
+          break;
+        printf("Option %s is set",xtalk_options[clopx].name);
+        if(optarg)
+          printf(" with %s",optarg);
+        printf(".\n");
+        break;
       case OPT_CROSSTALK: // -crosstalk
-	cloperr = 0;
-	flag_crosstalk=1;
-	if(optarg){
-	  xtalk_file=optarg;
-	  xtalk_filename=strip_path(optarg);
-	}
-	else{
-	  cloperr = 1;
-	  reportevt(flag_verbose,STATUS,5,"Option -crosstalk requires an argument specifying the crosstalk file.");
-	  exit(1);
-	}
-	break;
+        cloperr = 0;
+        flag_crosstalk=1;
+        if(optarg){
+          xtalk_file=optarg;
+          xtalk_filename=strip_path(optarg);
+        }
+        else{
+          cloperr = 1;
+          reportevt(flag_verbose,STATUS,5,"Option -crosstalk requires an argument specifying the crosstalk file.");
+          exit(1);
+        }
+        break;
       case OPT_PHOTFLAG: // -photflag
-	cloperr = 0;
-	if(optarg)
-	  sscanf(optarg,"%d",&flag_phot);
-	else cloperr = 1;
-	if(cloperr){
-	  reportevt(flag_verbose,STATUS,5, "Option -photflag requires an argument.");
-	  command_line_errors++;
-	  exit(1);
-	}
-	break;
+        cloperr = 0;
+        if(optarg)
+          sscanf(optarg,"%d",&flag_phot);
+        else cloperr = 1;
+        if(cloperr){
+          reportevt(flag_verbose,STATUS,5, "Option -photflag requires an argument.");
+          command_line_errors++;
+          exit(1);
+        }
+        break;
       case OPT_OVERSCANSAMPLE: // -overscansample
-	cloperr = 0;
- 	flag_overscan = 1;
-	if(optarg){
-	  sscanf(optarg,"%d",&osconfig.sample);
-	  if (osconfig.sample<-1 || osconfig.sample>1) {
-	    sprintf(event,"Invalid Overscan sample, must be -1, 0 or 1.");
-	    reportevt(flag_verbose,STATUS,5,event);
-	    exit(1);
-	  }
-	}
-	else cloperr = 1;
-	if(cloperr){
-	  reportevt(flag_verbose,STATUS,5,
-		    "Option -overscansample requires an argument.");
-	  command_line_errors++;
-	  exit(1);
-	}
-	break;
+        cloperr = 0;
+        flag_overscan = 1;
+        if(optarg){
+          sscanf(optarg,"%d",&osconfig.sample);
+          if (osconfig.sample<-1 || osconfig.sample>1) {
+            sprintf(event,"Invalid Overscan sample, must be -1, 0 or 1.");
+            reportevt(flag_verbose,STATUS,5,event);
+            exit(1);
+          }
+        }
+        else cloperr = 1;
+        if(cloperr){
+          reportevt(flag_verbose,STATUS,5,
+                    "Option -overscansample requires an argument.");
+          command_line_errors++;
+          exit(1);
+        }
+        break;
       case OPT_OVERSCANFUNCTION: // -overscanfunction
-	cloperr = 0;
- 	flag_overscan = 1;
-	if(optarg){
-	  sscanf(optarg,"%d",&osconfig.function);
-	  if (osconfig.function<-51 || osconfig.function>51) {
-	    sprintf(event,"Invlaid Overscan function, must be <-50 to -1>, 0, or <1 to 50>.");
-	    reportevt(flag_verbose,STATUS,5,event);
-	    exit(1);
-	  }
-	}
-	else cloperr = 1;
-	if(cloperr){
-	  reportevt(flag_verbose,STATUS,5,
-		    "Option -overscanfunction requires an argument.");
-	  command_line_errors++;
-	  exit(1);
-	}
-	break;
+        cloperr = 0;
+        flag_overscan = 1;
+        if(optarg){
+          sscanf(optarg,"%d",&osconfig.function);
+          if (osconfig.function<-51 || osconfig.function>51) {
+            sprintf(event,"Invlaid Overscan function, must be <-50 to -1>, 0, or <1 to 50>.");
+            reportevt(flag_verbose,STATUS,5,event);
+            exit(1);
+          }
+        }
+        else cloperr = 1;
+        if(cloperr){
+          reportevt(flag_verbose,STATUS,5,
+                    "Option -overscanfunction requires an argument.");
+          command_line_errors++;
+          exit(1);
+        }
+        break;
       case OPT_OVERSCANORDER: // -overscanorder
-	cloperr = 0;
- 	flag_overscan = 1;
-	flag_osorder = 1;
-	if(optarg){
-	  sscanf(optarg,"%d",&osconfig.order);
-	  if (osconfig.order<1 || osconfig.order>6) {
-	    sprintf(event,"Invalid Overscan order,  must be <1-6>.");
-	    reportevt(flag_verbose,STATUS,5,event);
-	    exit(1);
-	  }
-	} 
-	else cloperr = 1;
-	if(cloperr){
-	  reportevt(flag_verbose,STATUS,5,
-		    "Option -overscanorder requires an argument.");
-	  command_line_errors++;
-	  exit(1);
-	}
-	break;
+        cloperr = 0;
+        flag_overscan = 1;
+        flag_osorder = 1;
+        if(optarg){
+          sscanf(optarg,"%d",&osconfig.order);
+          if (osconfig.order<1 || osconfig.order>6) {
+            sprintf(event,"Invalid Overscan order,  must be <1-6>.");
+            reportevt(flag_verbose,STATUS,5,event);
+            exit(1);
+          }
+        } 
+        else cloperr = 1;
+        if(cloperr){
+          reportevt(flag_verbose,STATUS,5,
+                    "Option -overscanorder requires an argument.");
+          command_line_errors++;
+          exit(1);
+        }
+        break;
       case OPT_OVERSCANTRIM: // -overscantrim
-	cloperr = 0;
- 	flag_overscan = 1;
-	if(optarg){
-	  sscanf(optarg,"%d",&osconfig.trim);
-	  if (osconfig.trim > 20) {
-	    sprintf(event,"Invalid Overscan trim, must be < 20 cols.");
-	    reportevt(2,STATUS,5,event);
-	    exit(1);
-	  }
-	}
-	else cloperr = 1;
-	if(cloperr){
-	  reportevt(flag_verbose,STATUS,5,
-		    "Option -overscantrim requires an argument.");
-	  command_line_errors++;
-	  exit(1);
-	}
-	break;
+        cloperr = 0;
+        flag_overscan = 1;
+        if(optarg){
+          sscanf(optarg,"%d",&osconfig.trim);
+          if (osconfig.trim > 20) {
+            sprintf(event,"Invalid Overscan trim, must be < 20 cols.");
+            reportevt(2,STATUS,5,event);
+            exit(1);
+          }
+        }
+        else cloperr = 1;
+        if(cloperr){
+          reportevt(flag_verbose,STATUS,5,
+                    "Option -overscantrim requires an argument.");
+          command_line_errors++;
+          exit(1);
+        }
+        break;
       case OPT_MAXHDUNUM: // -maxhdunum
-	cloperr = 0;
-	if(optarg){
-	  sscanf(optarg,"%d",&maxhdunum);
-	  if (maxhdunum<1 || maxhdunum>HDUNUM) {
-	    sprintf(event,"Invlaid maxhdunum, must be <1 to %i>.", HDUNUM);
-	    reportevt(flag_verbose,STATUS,5,event);
-	    exit(1);
-	  }
-	}
-	else cloperr = 1;
-	if(cloperr){
-	  reportevt(flag_verbose,STATUS,5,
-		    "Option -maxhdunum requires an argument.");
-	  exit(1);
-	}
-	break;
+        cloperr = 0;
+        if(optarg){
+          sscanf(optarg,"%d",&maxhdunum);
+          if (maxhdunum<1 || maxhdunum>HDUNUM) {
+            sprintf(event,"Invlaid maxhdunum, must be <1 to %i>.", HDUNUM);
+            reportevt(flag_verbose,STATUS,5,event);
+            exit(1);
+          }
+        }
+        else cloperr = 1;
+        if(cloperr){
+          reportevt(flag_verbose,STATUS,5,
+                    "Option -maxhdunum requires an argument.");
+          exit(1);
+        }
+        break;
       case OPT_CCDLIST: // -ccdlist
-	cloperr = 0;
-	flag_hdus_or_ccds = 1;
-	if(optarg){
-	  if (getlistitems(optarg, ccdlist, CCDNUM2) < 1) {
-	    sprintf(event,"Invalid ccdlist.");
-	    reportevt(2,STATUS,5,event);
-	    exit(1);
-	  }
-	}
-	else cloperr = 1;
-	if(cloperr){
-	  reportevt(flag_verbose,STATUS,5,
-		    "Option -ccdlist requires an argument.");
-	  command_line_errors++;
-	  exit(1);
-	}
-	break;
+        cloperr = 0;
+        flag_hdus_or_ccds = 1;
+        if(optarg){
+          if (getlistitems(optarg, ccdlist, CCDNUM2) < 1) {
+            sprintf(event,"Invalid ccdlist.");
+            reportevt(2,STATUS,5,event);
+            exit(1);
+          }
+        }
+        else cloperr = 1;
+        if(cloperr){
+          reportevt(flag_verbose,STATUS,5,
+                    "Option -ccdlist requires an argument.");
+          command_line_errors++;
+          exit(1);
+        }
+        break;
       case OPT_HDULIST: // -hdulist
-	cloperr = 0;
-	flag_hdus_or_ccds = 1;
-	if(optarg){
-	  if (getlistitems(optarg, hdulist, CCDNUM2) < 1) {
-	    sprintf(event,"Invalid hdulist.");
-	    reportevt(2,STATUS,5,event);
-	    exit(1);
-	  }
-	}
-	else cloperr = 1;
-	if(cloperr){
-	  reportevt(flag_verbose,STATUS,5,
-		    "Option -hdulist requires an argument.");
-	  command_line_errors++;
-	  exit(1);
-	}
-	break;
+        cloperr = 0;
+        flag_hdus_or_ccds = 1;
+        if(optarg){
+          if (getlistitems(optarg, hdulist, CCDNUM2) < 1) {
+            sprintf(event,"Invalid hdulist.");
+            reportevt(2,STATUS,5,event);
+            exit(1);
+          }
+        }
+        else cloperr = 1;
+        if(cloperr){
+          reportevt(flag_verbose,STATUS,5,
+                    "Option -hdulist requires an argument.");
+          command_line_errors++;
+          exit(1);
+        }
+        break;
       case OPT_CROSSATTHRESH: // Enables the prescription for crosstalk in heavily saturated cases //
         cloperr=0;
-	flag_crossatthresh=1;
-	if(optarg){
-	  sscanf(optarg,"%f",&crossatthresh);
-	  if (crossatthresh < 0.0){
-	    sprintf(event,"Invlaid crossatthresh, must be >0.\n");
-	    reportevt(flag_verbose,STATUS,5,event);
-	    exit(1);
-	  }
-	}else{
-	  cloperr = 1;
+        flag_crossatthresh=1;
+        if(optarg){
+          sscanf(optarg,"%f",&crossatthresh);
+          if (crossatthresh < 0.0){
+            sprintf(event,"Invlaid crossatthresh, must be >0.\n");
+            reportevt(flag_verbose,STATUS,5,event);
+            exit(1);
+          }
+        }else{
+          cloperr = 1;
         }
-	if(cloperr){
-	  reportevt(flag_verbose,STATUS,5,"Option -crossatthresh requires an argument.\n");
-	  exit(1);
-	}
-	break;
+        if(cloperr){
+          reportevt(flag_verbose,STATUS,5,"Option -crossatthresh requires an argument.\n");
+          exit(1);
+        }
+        break;
       case OPT_REPLACE: // -replace
-	cloperr = 0;
-	flag_replace=1;
-	if(optarg){
-	  replace_file=optarg;
-	}
-	else{
-	  cloperr = 1;
-	  reportevt(flag_verbose,STATUS,5,"Option -replace requires an argument specifying the header replacement list file.");
-	  exit(1);
-	}
-	break;
+        cloperr = 0;
+        flag_replace=1;
+        if(optarg){
+          replace_file=optarg;
+        }
+        else{
+          cloperr = 1;
+          reportevt(flag_verbose,STATUS,5,"Option -replace requires an argument specifying the header replacement list file.");
+          exit(1);
+        }
+        break;
       case OPT_VERBOSE: // -verbose
-	// already parsed verbosity
-	break;
+        // already parsed verbosity
+        break;
       case OPT_VERSION: // -version
-	// Version has already been printed, just exit!
-	//	printf("Version: %s\n",svn_id);
-	exit(0);     
-   	break;
+        // Version has already been printed, just exit!
+        //      printf("Version: %s\n",svn_id);
+        exit(0);     
+        break;
       case OPT_HELP: // -help
-	print_usage(argv[0]);
-	exit(0);     
-	break;
+        print_usage(argv[0]);
+        exit(0);     
+        break;
       case '?': // unknown/unrecognized
-	sprintf(event,"Unrecognized option detected, ");
-	if(optopt){
-	  sprintf(event,"%c.",optopt);
-	}
-	else {
-	  sprintf(event,"%s.",argv[curind]);
-	}
-	reportevt(flag_verbose,STATUS,5,event);
-	command_line_errors++;
-	break;
+        sprintf(event,"Unrecognized option detected, ");
+        if(optopt){
+          sprintf(event,"%c.",optopt);
+        }
+        else {
+          sprintf(event,"%s.",argv[curind]);
+        }
+        reportevt(flag_verbose,STATUS,5,event);
+        command_line_errors++;
+        break;
       default:
-	// should never get here
-	abort();
+        // should never get here
+        abort();
       }
     }
 
@@ -737,7 +740,7 @@ int DECamXTalk(int argc,char *argv[])
        while (fgets(trash,200,inp)!=NULL) {
           if (!strncmp(trash,"ccd",3) || !strncmp(trash,"CCD",3)){
              if (flag_linear){
-	        /* OLD school xtalk files need to replace parentheses and commas with spaces */
+                /* OLD school xtalk files need to replace parentheses and commas with spaces */
                 for (j=0;j<strlen(trash);j++){
                    if (!strncmp(&(trash[j]),"(",1) || !strncmp(&(trash[j]),")",1)) trash[j]=32; 
                 }
@@ -758,11 +761,11 @@ int DECamXTalk(int argc,char *argv[])
              if (!strncmp(tag2+strlen(tag2)-1,"A",1)) ampoffset2=0;
              else if (!strncmp(tag2+strlen(tag2)-1,"B",1)) ampoffset2=1;
              else {
-    		sprintf(event,"Amp not properly noted as A/B in %s",tag2);
-    		reportevt(flag_verbose,STATUS,5,event);
-    		exit(1);
+                sprintf(event,"Amp not properly noted as A/B in %s",tag2);
+                reportevt(flag_verbose,STATUS,5,event);
+                exit(1);
              }
-             /* strip off the A/B suffix */	
+             /* strip off the A/B suffix */     
              tag1[strlen(tag1)-1]=0;tag2[strlen(tag2)-1]=0; 
 
              /* read in the ccd number */       
@@ -772,10 +775,10 @@ int DECamXTalk(int argc,char *argv[])
              if (ext1<0 || ext1>=XTDIM) {
                 sprintf(event,"CCD number out of range: %s %d",tag1,ext1);
                 reportevt(flag_verbose,STATUS,5,event);
-              	exit(1);
+                exit(1);
              }
-	     ext2=(ext2-1)*2+ampoffset2;
-	     if (ext2<0 || ext2>=XTDIM) {
+             ext2=(ext2-1)*2+ampoffset2;
+             if (ext2<0 || ext2>=XTDIM) {
                 sprintf(event,"CCD number out of range: %s %d",tag2,ext2);
                 reportevt(flag_verbose,STATUS,5,event);
                 exit(1);
@@ -786,11 +789,11 @@ int DECamXTalk(int argc,char *argv[])
              if (flag_linear){
                 /* for the case where option -linear was set   */
                 /* assume the values respect old convention */
-		x_nl[ext1][ext2]=1.0e+10;
-		y_nl[ext1][ext2]=value*x_nl[ext1][ext2];
-		c_poly[ext1][ext2][0]=0.0;
-		c_poly[ext1][ext2][1]=0.0;
-		c_poly[ext1][ext2][2]=0.0;
+                x_nl[ext1][ext2]=1.0e+10;
+                y_nl[ext1][ext2]=value*x_nl[ext1][ext2];
+                c_poly[ext1][ext2][0]=0.0;
+                c_poly[ext1][ext2][1]=0.0;
+                c_poly[ext1][ext2][2]=0.0;
              }else{
                 x_nl[ext1][ext2]=nonlinon;
                 y_nl[ext1][ext2]=value*nonlinon;
@@ -799,7 +802,7 @@ int DECamXTalk(int argc,char *argv[])
                 c_poly[ext1][ext2][2]=poly3;
 //              for (myl=0;myl<DEGPOLY;myl++) {   c_poly[ext1][ext2][myl]=poly1;  }
              }
-	  }
+          }
        }
        if (fclose(inp)) {
           sprintf(event,"File close failed: %s",xtalk_filename);
@@ -816,11 +819,11 @@ int DECamXTalk(int argc,char *argv[])
             for (k=0;k<XTDIM;k++) {
                printf("  %7.5f",xtalk[j][k]);
             }
-	    printf("\n");
+            printf("\n");
          }
        }
     }
-	
+        
     /* ********************************************** */
     /* ********* Handle Input Image/File  *********** */
     /* ********************************************** */
@@ -848,8 +851,8 @@ int DECamXTalk(int argc,char *argv[])
     if(optind != argc){
       reportevt(flag_verbose,STATUS,5,"Extra/Unknown command line arguments encountered:");
       while(optind < argc){
-	sprintf(event,"%s",argv[optind++]);
-	reportevt(flag_verbose,STATUS,5,event);
+        sprintf(event,"%s",argv[optind++]);
+        reportevt(flag_verbose,STATUS,5,event);
       }
       command_line_errors++;
       exit(1);
@@ -875,8 +878,8 @@ int DECamXTalk(int argc,char *argv[])
     // Do some interparameter validation
     if(flag_osorder){ // if order option was given
       if(osconfig.function < 1){
-	sprintf(event,"Option ignored: -overscanorder ignored if -overscanfunction < 1.");
-	reportevt(flag_verbose,STATUS,3,event);
+        sprintf(event,"Option ignored: -overscanorder ignored if -overscanfunction < 1.");
+        reportevt(flag_verbose,STATUS,3,event);
       }
     } 
     else if (osconfig.function > 0){
@@ -886,7 +889,7 @@ int DECamXTalk(int argc,char *argv[])
     /**********************************************************/
     /***********************  Open Image **********************/
     /**********************************************************/
-	
+        
     /* open the file, checked for all supported flavors */
     /* Flavor=Y (uncompressed) */
     if (fits_open_file(&fptr,filename,READONLY,&status)) { 
@@ -896,23 +899,23 @@ int DECamXTalk(int argc,char *argv[])
       //      reportevt(flag_verbose,STATUS,3,event);
       /* Flavor=F (fpacked) */
       if (fits_open_file(&fptr,newname,READONLY,&status)) {
-	//	sprintf(event,"File open failed: %s",newname);
-	//	reportevt(flag_verbose,STATUS,3,event);
-	status=0;
-	sprintf(newname,"%s.gz",filename); 
-	/* Flavor=G (gzipped) */
-	if (fits_open_file(&fptr,newname,READONLY,&status)) {
-	  sprintf(event,"File open failed: %s{.fz,.gz}",filename);
-	  reportevt(flag_verbose,STATUS,5,event);
-	  printerror(status);
-	}
+        //      sprintf(event,"File open failed: %s",newname);
+        //      reportevt(flag_verbose,STATUS,3,event);
+        status=0;
+        sprintf(newname,"%s.gz",filename); 
+        /* Flavor=G (gzipped) */
+        if (fits_open_file(&fptr,newname,READONLY,&status)) {
+          sprintf(event,"File open failed: %s{.fz,.gz}",filename);
+          reportevt(flag_verbose,STATUS,5,event);
+          printerror(status);
+        }
       }
     }
     if (flag_verbose) {
-      sprintf(event,"Opened exposure: %s",newname);	
+      sprintf(event,"Opened exposure: %s",newname);     
       reportevt(flag_verbose,STATUS,1,event);
     }
-		
+                
     /* get the number of HDUs in the image */
     if (fits_get_num_hdus(fptr,&hdunum,&status)) {
       sprintf(event,"Reading HDUNUM failed: %s",filename);
@@ -941,7 +944,7 @@ int DECamXTalk(int argc,char *argv[])
     /**********************************************************/
     /*************  Read Header from 0th Extension ************/
     /**********************************************************/
-	
+        
     exclkey=(char **)calloc(nexc,sizeof(char *));
     if (!exclkey) {
       sprintf(event,"Could not calloc exclkey");
@@ -951,14 +954,14 @@ int DECamXTalk(int argc,char *argv[])
     for (j=0;j<nexc;j++) {
       exclkey[j]=(char *)calloc(10,sizeof(char));
       if (!exclkey[j]) {
-	sprintf(event,"Could not calloc exclkey[%d]",j);
-	reportevt(flag_verbose,STATUS,5,event);
-	exit(0);
+        sprintf(event,"Could not calloc exclkey[%d]",j);
+        reportevt(flag_verbose,STATUS,5,event);
+        exit(0);
       }
       sprintf(exclkey[j],"%s",exclist[j]);
     }
     if (fits_hdr2str(fptr,INCLUDECOMMENTS,exclkey,nexc,
-		     &zeroheader,&numzerokeys, &status)) {
+                     &zeroheader,&numzerokeys, &status)) {
       sprintf(event,"Could not read kewords");
       reportevt(flag_verbose,STATUS,5,event);
       printerror(status);
@@ -968,9 +971,9 @@ int DECamXTalk(int argc,char *argv[])
     if (flag_verbose) {
       printf("  Read %d header keywords from 0th header\n",numzerokeys);
       if (flag_verbose > 4) {
-	printf("  *************************************************\n");
-	printf("  %s",zeroheader);
-	printf("*************************************************\n");
+        printf("  *************************************************\n");
+        printf("  %s",zeroheader);
+        printf("*************************************************\n");
       }
     }
 
@@ -982,21 +985,21 @@ int DECamXTalk(int argc,char *argv[])
     }
     else { /* map OBSTYPE into <filetype> */
       if (!strcmp(obstype,"object") || !strcmp(obstype,"OBJECT"))
-	sprintf(filetype,"raw_obj");
+        sprintf(filetype,"raw_obj");
       else if (!strcmp(obstype,"bias") || !strcmp(obstype,"BIAS")
-	       || !strcmp(obstype,"zero") || !strcmp(obstype,"ZERO"))
-	sprintf(filetype,"raw_bias");
+               || !strcmp(obstype,"zero") || !strcmp(obstype,"ZERO"))
+        sprintf(filetype,"raw_bias");
       else if (!strcmp(obstype,"sky flat") || !strcmp(obstype,"SKY FLAT"))
-	sprintf(filetype,"raw_tflat");
+        sprintf(filetype,"raw_tflat");
       else if (!strcmp(obstype,"dark") || !strcmp(obstype,"DARK"))
-	sprintf(filetype,"raw_dark");
+        sprintf(filetype,"raw_dark");
       else if (!strcmp(obstype,"dome flat") || !strcmp(obstype,"DOME FLAT")
-	       || !strcmp(obstype,"flat") || !strcmp(obstype,"FLAT"))
-	sprintf(filetype,"raw_dflat");
+               || !strcmp(obstype,"flat") || !strcmp(obstype,"FLAT"))
+        sprintf(filetype,"raw_dflat");
       else {
-	sprintf(event,"OBSTYPE=%s not recognized",obstype);
-	reportevt(flag_verbose,STATUS,5,event);
-	exit(0);
+        sprintf(event,"OBSTYPE=%s not recognized",obstype);
+        reportevt(flag_verbose,STATUS,5,event);
+        exit(0);
       }
     }
 
@@ -1013,7 +1016,7 @@ int DECamXTalk(int argc,char *argv[])
         if (fits_movabs_hdu(fptr,i,&hdutype,&status)) {
             sprintf(event,"Move to HDU=%d failed: %s",i,filename);
             reportevt(flag_verbose,STATUS,5,event);
-            printerror(status);	
+            printerror(status); 
         }
 
         /* get CCD number */
@@ -1681,20 +1684,20 @@ int DECamXTalk(int argc,char *argv[])
 
       /*sprintf(nfilename,"!%s_%02d.fits",argv[2],ccdnum);*/
       if (fits_create_file(&nfptr,nfilename,&status)) {
-	sprintf(event,"File creation of %s failed",nfilename);
-	reportevt(flag_verbose,STATUS,5,event);
-	printerror(status);
+        sprintf(event,"File creation of %s failed",nfilename);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
       }
       if (flag_verbose) {
-	sprintf(event,"Opened image for CCD %d : %s ",ccdnum,nfilename+1);
-	reportevt(flag_verbose,STATUS,1,event);
+        sprintf(event,"Opened image for CCD %d : %s ",ccdnum,nfilename+1);
+        reportevt(flag_verbose,STATUS,1,event);
       }
-	  
+          
       /* create image extension  */
       if (fits_create_img(nfptr,FLOAT_IMG,2,input_image[ccdnum].axes,&status)) {
-	sprintf(event,"Creating image failed: %s",nfilename);
-	reportevt(flag_verbose,STATUS,5,event);
-	printerror(status);
+        sprintf(event,"Creating image failed: %s",nfilename);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
       }
 
       //      /* ************************************************************* */
@@ -1703,30 +1706,30 @@ int DECamXTalk(int argc,char *argv[])
       //      /* following approach causes problems with RICE tile compression*/
       //      /* copy the header from the CHDU in the input image */
       //      /*
-      //	if (fits_copy_header(fptr,input_image[ccdnum].fptr,&status)) {
-      //	sprintf(event,"Header copy into %s failed",nfilename);
-      //	reportevt(flag_verbose,STATUS,5,event);
-      //	printerror(status);
-      //	}
-      //	if (flag_verbose) 
-      //	printf("  Copied header from %s[%i]\n",filename,i);
-      //	/* resize the image */
+      //        if (fits_copy_header(fptr,input_image[ccdnum].fptr,&status)) {
+      //        sprintf(event,"Header copy into %s failed",nfilename);
+      //        reportevt(flag_verbose,STATUS,5,event);
+      //        printerror(status);
+      //        }
+      //        if (flag_verbose) 
+      //        printf("  Copied header from %s[%i]\n",filename,i);
+      //        /* resize the image */
       //      /*
-      //	if (fits_resize_img(input_image[ccdnum].fptr,FLOAT_IMG,2,naxes,&status)) {
-      //	sprintf(event,"Resizing image %s failed",nfilename);
-      //	reportevt(flag_verbose,STATUS,5,event);
-      //	printerror(status);             
-      //	}
-      //	/* end of problematic section */
+      //        if (fits_resize_img(input_image[ccdnum].fptr,FLOAT_IMG,2,naxes,&status)) {
+      //        sprintf(event,"Resizing image %s failed",nfilename);
+      //        reportevt(flag_verbose,STATUS,5,event);
+      //        printerror(status);             
+      //        }
+      //        /* end of problematic section */
       //      /* ************************************************************* */
       //      /* **************** END JUNK SECTION *************************** */
       //      /* ************************************************************* */
 
       /* first reserve room within the header for the known # of keywords */
       if (fits_set_hdrsize(nfptr,numzerokeys+numnthkeys+15,&status)) {
-	sprintf(event,"Reserving header space for %d keywords failed in %s",numzerokeys+numnthkeys+10,nfilename);
-	reportevt(flag_verbose,STATUS,5,event);
-	printerror(status);
+        sprintf(event,"Reserving header space for %d keywords failed in %s",numzerokeys+numnthkeys+10,nfilename);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
       }
 
 
@@ -1734,150 +1737,151 @@ int DECamXTalk(int argc,char *argv[])
       /* note that last keyword is null keyword and truncates the header! */
       /* only copy the header params that live within zerokeyword */
       if (fits_get_hdrpos(nfptr,&totkeynum,&keynum,&status)) {
-	sprintf(event,"Reading header position in %s failed",nfilename);
-	reportevt(flag_verbose,STATUS,5,event);
-	printerror(status);
+        sprintf(event,"Reading header position in %s failed",nfilename);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
       }
       numwrittenkeys=0;
       for (j=0;j<numzerokeys-1;j++) {
-	/* don't write keyword if it is duplicate */
-	keyflag=0;
-	for (k=0;k<numnthkeys;k++) {
-	  if (!strncmp(zeroheader+j*80,nthheader+k*80,8)) {
-	    keyflag=1;
-	    break;
-	  }
-	}
-	/* copy the record into the header */
-	if (!keyflag) {
-	  if (fits_insert_record(nfptr,totkeynum+numwrittenkeys,
-				 zeroheader+j*80,&status)) {
-	    sprintf(event,"Zero Header insert in %s failed",nfilename);
-	    reportevt(flag_verbose,STATUS,5,event);
-	    printerror(status);
-	  }
-	  numwrittenkeys++;
-	}
+        /* don't write keyword if it is duplicate */
+        keyflag=0;
+        for (k=0;k<numnthkeys;k++) {
+          if (!strncmp(zeroheader+j*80,nthheader+k*80,8)) {
+            keyflag=1;
+            break;
+          }
+        }
+        /* copy the record into the header */
+        if (!keyflag) {
+          if (fits_insert_record(nfptr,totkeynum+numwrittenkeys,
+                                 zeroheader+j*80,&status)) {
+            sprintf(event,"Zero Header insert in %s failed",nfilename);
+            reportevt(flag_verbose,STATUS,5,event);
+            printerror(status);
+          }
+          numwrittenkeys++;
+        }
       }
       if (flag_verbose) printf("%d keywords from 0th header, ",
-			       numwrittenkeys-3);
+                               numwrittenkeys-3);
 
       /* copy the header information from the current HDU of MEF */
       if (fits_get_hdrpos(nfptr,&totkeynum,&keynum,&status)) {
-	sprintf(event,"Reading header position in %s failed",nfilename);
-	reportevt(flag_verbose,STATUS,5,event);
-	printerror(status);
+        sprintf(event,"Reading header position in %s failed",nfilename);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
       }
       if (flag_verbose>=3) {
-	sprintf(event,"Currently at header position %d with %d keywords",
-		keynum,totkeynum);
-	reportevt(flag_verbose,STATUS,1,event);
+        sprintf(event,"Currently at header position %d with %d keywords",
+                keynum,totkeynum);
+        reportevt(flag_verbose,STATUS,1,event);
       }
       numwrittenkeys=0;
       for (j=0;j<numnthkeys-1;j++) {
-	/* copy the record into the header */
-	if (fits_insert_record(nfptr,totkeynum+numwrittenkeys,
-			       nthheader+j*80,&status)) {
-	  sprintf(event,"Insert of %dth header keyword in %s failed:\n%s",
-	          numwrittenkeys,nfilename,nthheader+j*80);
-	  reportevt(flag_verbose,STATUS,5,event);
-	  printerror(status);
-	}
-	numwrittenkeys++;
+        /* copy the record into the header */
+        if (fits_insert_record(nfptr,totkeynum+numwrittenkeys,
+                               nthheader+j*80,&status)) {
+          sprintf(event,"Insert of %dth header keyword in %s failed:\n%s",
+                  numwrittenkeys,nfilename,nthheader+j*80);
+          reportevt(flag_verbose,STATUS,5,event);
+          printerror(status);
+        }
+        numwrittenkeys++;
       }
       if (flag_verbose) 
-	printf("  Copied %d keywords from current header, ",
-	       numwrittenkeys-3);
+        printf("  Copied %d keywords from current header, ",
+               numwrittenkeys-3);
 
       /* remove unneeded information from the header */
       if (flag_overscan && ccdnum < 63) {
-	nkeys=0;
-	while (strlen(delkeys[nkeys])) {
-	  if (fits_read_keyword(nfptr,delkeys[nkeys],
-				comment,comment,&status)==KEY_NO_EXIST) status=0;
-	  else {
-	    if (fits_delete_key(nfptr,delkeys[nkeys],&status)) {
-	      if (flag_verbose) {
-		sprintf(event,"Keyword %s not deleted from image %s",
-			delkeys[nkeys],input_image[ccdnum].name+1);
-		reportevt(flag_verbose,STATUS,3,event);
-	      }
-	      status=0;
-	    }
-	  }
-	  nkeys++;
-	}
+        nkeys=0;
+        while (strlen(delkeys[nkeys])) {
+          if (fits_read_keyword(nfptr,delkeys[nkeys],
+                                comment,comment,&status)==KEY_NO_EXIST) status=0;
+          else {
+            if (fits_delete_key(nfptr,delkeys[nkeys],&status)) {
+              if (flag_verbose) {
+                sprintf(event,"Keyword %s not deleted from image %s",
+                        delkeys[nkeys],input_image[ccdnum].name+1);
+                reportevt(flag_verbose,STATUS,3,event);
+              }
+              status=0;
+            }
+          }
+          nkeys++;
+        }
       }
       /* write image */
       
       writeCounter = 0;
       while (1) {
-	
-	writeImageFailed = fits_write_img(nfptr,TFLOAT,1,input_image[ccdnum].npixels,outdata,&status);
-	if(writeImageFailed) {
-	  
-	  writeCounter++;
-	  sprintf(event,"Writing image  %s failed on try %i", nfilename, writeCounter);
-	  reportevt(flag_verbose,STATUS,4,event);
-	  
-	  sleep(retryDelay);
-	  
-	  if(writeCounter < nRetry) { continue; }
-	  
-	}
-	/* If we get here, we wrote the file,
-	   unless writeCounter is up to nRetry
-	   break in either case */
-	if(writeCounter == nRetry) {
-	  sprintf(event,"Writing image %s failed on final try %i", nfilename, writeCounter);
-	  reportevt(flag_verbose,STATUS,5,event);
-	  printerror(status);
-	}
-	break;
-	
+        
+        writeImageFailed = fits_write_img(nfptr,TFLOAT,1,input_image[ccdnum].npixels,outdata,&status);
+        if(writeImageFailed) {
+          
+          writeCounter++;
+          sprintf(event,"Writing image  %s failed on try %i", nfilename, writeCounter);
+          reportevt(flag_verbose,STATUS,4,event);
+          
+          sleep(retryDelay);
+          
+          if(writeCounter < nRetry) { continue; }
+          
+        }
+        /* If we get here, we wrote the file,
+           unless writeCounter is up to nRetry
+           break in either case */
+        if(writeCounter == nRetry) {
+          sprintf(event,"Writing image %s failed on final try %i", nfilename, writeCounter);
+          reportevt(flag_verbose,STATUS,5,event);
+          printerror(status);
+        }
+        break;
+        
       }
       
       if (flag_verbose) printf("  Wrote image data, ");
 
+      /* RAG: 2015, March 24... removed update/propogation of FILENAME keyword" */
       /* want only the image name-- search for first occurence of "/" */
-      for (j=strlen(nfilename);j>=0;j--) 
-	if (!strncmp(&(nfilename[j]),"/",1)) break;
-      sprintf(newimagename,"%s",(nfilename+j+1));
-      for (j=strlen(newimagename);j>=0;j--) 
-	if (!strncmp(&(newimagename[j]),".fits",5)) break;
-      newimagename[j]=0;
-      if (!strncmp(newimagename,"!",1)) 
-	sprintf(newimagename,"%s",newimagename+1);
-      if (fits_modify_key_str(nfptr,"FILENAME",newimagename,"",&status)) {
-	sprintf(event,"Keyword FILENAME modify in %s failed",nfilename);
-	reportevt(flag_verbose,STATUS,5,event);
-	printerror(status);
-      }
-      if (flag_verbose) printf("FILENAME = %s, ",nfilename+1);
+      /* for (j=strlen(nfilename);j>=0;j--)  */
+      /*   if (!strncmp(&(nfilename[j]),"/",1)) break; */
+      /* sprintf(newimagename,"%s",(nfilename+j+1)); */
+      /* for (j=strlen(newimagename);j>=0;j--)  */
+      /*   if (!strncmp(&(newimagename[j]),".fits",5)) break; */
+      /* newimagename[j]=0; */
+      /* if (!strncmp(newimagename,"!",1))  */
+      /*   sprintf(newimagename,"%s",newimagename+1); */
+      /* if (fits_modify_key_str(nfptr,"FILENAME",newimagename,"",&status)) { */
+      /*   sprintf(event,"Keyword FILENAME modify in %s failed",nfilename); */
+      /*   reportevt(flag_verbose,STATUS,5,event); */
+      /*   printerror(status); */
+      /* } */
+      /* if (flag_verbose) printf("FILENAME = %s, ",nfilename+1); */
 
       if (fits_insert_record(nfptr,totkeynum+(++numwrittenkeys),
-			     "COMMENT ------------------------",
-			     &status)) {
-	sprintf(event,"Comment insert in %s failed",nfilename);
-	reportevt(flag_verbose,STATUS,5,event);
-	printerror(status);
+                             "COMMENT ------------------------",
+                             &status)) {
+        sprintf(event,"Comment insert in %s failed",nfilename);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
       }
 
       /* add photflag */
       if (fits_update_key_lng(nfptr,"PHOTFLAG",flag_phot,
-			      "Night Photometric (1) or not (0)",&status)) {
-	sprintf(event,"Keyword PHOTFLAG insert in %s failed",nfilename);
-	reportevt(flag_verbose,STATUS,5,event);
-	printerror(status);
+                              "Night Photometric (1) or not (0)",&status)) {
+        sprintf(event,"Keyword PHOTFLAG insert in %s failed",nfilename);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
       }
       if (flag_verbose) printf("PHOTFLAG = %d\n",flag_phot);
 
       /* update OBSTYPE keyword */
       if (fits_update_key_str(nfptr,"OBSTYPE",filetype,
-			      "Type of observation",&status)) {
-	sprintf(event,"Keyword OBSTYPE update in %s failed",nfilename);
-	reportevt(flag_verbose,STATUS,5,event);
-	printerror(status);
+                              "Type of observation",&status)) {
+        sprintf(event,"Keyword OBSTYPE update in %s failed",nfilename);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
       }
       if (flag_verbose) printf("  OBSTYPE = %s\n",filetype);
 
@@ -1886,48 +1890,48 @@ int DECamXTalk(int argc,char *argv[])
       sprintf(comment,"%s",asctime(localtime(&tm)));
       comment[strlen(comment)-1]=0;
       if (fits_write_key_str(nfptr,"DESDCXTK",comment,
-			     "DECam image conversion and crosstalk correction",
-			     &status)) {
-	sprintf(event,"Keyword DESDCXTK insert in %s failed",nfilename);
-	reportevt(flag_verbose,STATUS,5,event);
-	printerror(status);
+                             "DECam image conversion and crosstalk correction",
+                             &status)) {
+        sprintf(event,"Keyword DESDCXTK insert in %s failed",nfilename);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
       }
       if (ccdnum < 63) {
       if (flag_crosstalk) {
       if (fits_write_key_str(nfptr,"XTALKFIL",xtalk_filename,
-			     "Crosstalk file",
-			     &status)) {
-	sprintf(event,"Keyword XTALKFIL insert in %s failed",nfilename);
-	reportevt(flag_verbose,STATUS,5,event);
-	printerror(status);
+                             "Crosstalk file",
+                             &status)) {
+        sprintf(event,"Keyword XTALKFIL insert in %s failed",nfilename);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
       }
       }
       if(flag_overscan) {
-	if (fits_write_key_str(nfptr,"DESOSCN",comment,
-			       "overscan corrected",&status)) {
-	  sprintf(event,"Writing DESOSCN failed: %s",nfilename);
-	  reportevt(flag_verbose,STATUS,5,event);
-	  printerror(status);
-	}	
-	/* update the DATASEC keyword if overscan corrected */
-	if (fits_update_key_str(nfptr,"DATASEC",input_image[ccdnum].datasec,
-				"Data section within image",&status)) {
-	  sprintf(event,"Updating DATASEC failed: %s",nfilename);
-	  reportevt(flag_verbose,STATUS,5,event);
-	  printerror(status);
-	}
-	if (fits_update_key_str(nfptr,"DATASECA",input_image[ccdnum].dataseca,
-				NULL,&status)) {
-	  sprintf(event,"Updating DATASECA failed: %s",nfilename);
-	  reportevt(flag_verbose,STATUS,5,event);
-	  printerror(status);
-	}
-	if (fits_update_key_str(nfptr,"DATASECB",input_image[ccdnum].datasecb,
-				NULL,&status)) {
-	  sprintf(event,"Updating DATASECB failed: %s",nfilename);
-	  reportevt(flag_verbose,STATUS,5,event);
-	  printerror(status);
-	}
+        if (fits_write_key_str(nfptr,"DESOSCN",comment,
+                               "overscan corrected",&status)) {
+          sprintf(event,"Writing DESOSCN failed: %s",nfilename);
+          reportevt(flag_verbose,STATUS,5,event);
+          printerror(status);
+        }       
+        /* update the DATASEC keyword if overscan corrected */
+        if (fits_update_key_str(nfptr,"DATASEC",input_image[ccdnum].datasec,
+                                "Data section within image",&status)) {
+          sprintf(event,"Updating DATASEC failed: %s",nfilename);
+          reportevt(flag_verbose,STATUS,5,event);
+          printerror(status);
+        }
+        if (fits_update_key_str(nfptr,"DATASECA",input_image[ccdnum].dataseca,
+                                NULL,&status)) {
+          sprintf(event,"Updating DATASECA failed: %s",nfilename);
+          reportevt(flag_verbose,STATUS,5,event);
+          printerror(status);
+        }
+        if (fits_update_key_str(nfptr,"DATASECB",input_image[ccdnum].datasecb,
+                                NULL,&status)) {
+          sprintf(event,"Updating DATASECB failed: %s",nfilename);
+          reportevt(flag_verbose,STATUS,5,event);
+          printerror(status);
+        }
 
 /*         printf(" RAG trim_sec: %d:%d,%d:%d \n",input_image.trimsecn[0],input_image.trimsecn[1],input_image.trimsecn[2],input_image.trimsecn[3]);  */
 
@@ -1936,16 +1940,16 @@ int DECamXTalk(int argc,char *argv[])
            but require that LTV1 and LTV2 are populated correctly and that correctly would be to have positive 
            offsets which is still under contention  */
 
-	if (fits_update_key_flt(nfptr,"LTV1",0.0,2,NULL,&status)) {
-	  sprintf(event,"Update LTV1 failed: %s",nfilename);
-	  reportevt(flag_verbose,STATUS,5,event);
-	  printerror(status);
-	}
-	if (fits_update_key_flt(nfptr,"LTV2",0.0,2,NULL,&status)) {
-	  sprintf(event,"Update LTV2 failed: %s",nfilename);
-	  reportevt(flag_verbose,STATUS,5,event);
-	  printerror(status);
-	}
+        if (fits_update_key_flt(nfptr,"LTV1",0.0,2,NULL,&status)) {
+          sprintf(event,"Update LTV1 failed: %s",nfilename);
+          reportevt(flag_verbose,STATUS,5,event);
+          printerror(status);
+        }
+        if (fits_update_key_flt(nfptr,"LTV2",0.0,2,NULL,&status)) {
+          sprintf(event,"Update LTV2 failed: %s",nfilename);
+          reportevt(flag_verbose,STATUS,5,event);
+          printerror(status);
+        }
 
 /*      These are commented out for the time being pending the results of the discussion 
         on how to properly set the LTV keywords in the raw image headers */
@@ -2028,18 +2032,18 @@ int DECamXTalk(int argc,char *argv[])
 
       }      
       if(flag_sat_beforextalk || flag_sat_afterxtalk) { 
-	if (fits_write_key_str(nfptr,"DESSAT",comment,
-			       "saturated pixels flagged",&status)) {
-	  sprintf(event,"Writing DESSAT failed: %s",nfilename);
-	  reportevt(flag_verbose,STATUS,5,event);
-	  printerror(status);
-	}	
-	if (fits_write_key_lng(nfptr,"NSATPIX",(long)(nsata+nsatb),
-			       "Number of saturated pixels",&status)) {
-	  sprintf(event,"Setting number of saturated pixels failed: %ld",(long)(nsata+nsatb));
-	  reportevt(flag_verbose,STATUS,5,event);
-	  printerror(status);
-	}
+        if (fits_write_key_str(nfptr,"DESSAT",comment,
+                               "saturated pixels flagged",&status)) {
+          sprintf(event,"Writing DESSAT failed: %s",nfilename);
+          reportevt(flag_verbose,STATUS,5,event);
+          printerror(status);
+        }       
+        if (fits_write_key_lng(nfptr,"NSATPIX",(long)(nsata+nsatb),
+                               "Number of saturated pixels",&status)) {
+          sprintf(event,"Setting number of saturated pixels failed: %ld",(long)(nsata+nsatb));
+          reportevt(flag_verbose,STATUS,5,event);
+          printerror(status);
+        }
       }
 
       /* RAG - 2014, Apr 7: Add IMG HDU compression keywords */
@@ -2082,17 +2086,17 @@ int DECamXTalk(int argc,char *argv[])
       //      for (j=0;j<argc;j++) sprintf(longcomment,"%s %s",longcomment,argv[j]);
       sprintf(longcomment,"%s %s",longcomment,command_line);
       if (fits_write_history(nfptr,longcomment,&status)) {
-	sprintf(event,"DESDM: longcomment insert in %s failed",nfilename);
-	reportevt(flag_verbose,STATUS,5,event);
-	printerror(status);
+        sprintf(event,"DESDM: longcomment insert in %s failed",nfilename);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
       }
       if (flag_verbose>=3) printf("  => %s\n",longcomment);
       /* mark this as an image extension */
       if (fits_write_key_str(nfptr,"DES_EXT","IMAGE","Image extension",
-			     &status)) {
-	sprintf(event,"Keyword DES_EXT insert in %s failed",nfilename);
-	reportevt(flag_verbose,STATUS,5,event);
-	printerror(status);
+                             &status)) {
+        sprintf(event,"Keyword DES_EXT insert in %s failed",nfilename);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
       }
 
       if((flag_sat_beforextalk || flag_sat_afterxtalk) && ccdnum < 63){
@@ -2102,7 +2106,7 @@ int DECamXTalk(int argc,char *argv[])
            reportevt(flag_verbose,STATUS,5,event);
            printerror(status);
          }
-         /* Write the mask data */	  
+         /* Write the mask data */        
          if (fits_write_img(nfptr,TUSHORT,1,input_image[ccdnum].npixels,maskdata,&status)) {
            sprintf(event,"Writing image mask failed.");
            reportevt(flag_verbose,STATUS,5,event);
@@ -2110,13 +2114,13 @@ int DECamXTalk(int argc,char *argv[])
          }
          /* Indicate it's a MASK extension */
          if (fits_update_key_str(nfptr,"DES_EXT","MASK",
-                               	"Extension type",&status)) {
+                                "Extension type",&status)) {
            reportevt(flag_verbose,STATUS,5,"Setting DES_EXT=MASK failed.");
            printerror(status);
          }
          /* May be needed */
          if (fits_update_key_lng(nfptr,"EXTVER",2,
-				"Extension version",&status)) {
+                                "Extension version",&status)) {
            reportevt(flag_verbose,STATUS,5,"Setting EXTVER=2 failed");
            printerror(status); 
          }
@@ -2157,25 +2161,25 @@ int DECamXTalk(int argc,char *argv[])
 
       /* close the new image */
       if (fits_close_file(nfptr,&status)) {
-	sprintf(event,"Closing %s failed",nfilename);
-	reportevt(flag_verbose,STATUS,5,event);
-	printerror(status);
+        sprintf(event,"Closing %s failed",nfilename);
+        reportevt(flag_verbose,STATUS,5,event);
+        printerror(status);
       }
       if (flag_verbose) {
-	sprintf(event,"Closed image %ld X %ld  OBSTYPE = %s PHOTFLAG = %d : %s",
-		input_image[ccdnum].axes[0],input_image[ccdnum].axes[1],filetype,flag_phot,nfilename+1);
-	reportevt(flag_verbose,STATUS,1,event);
+        sprintf(event,"Closed image %ld X %ld  OBSTYPE = %s PHOTFLAG = %d : %s",
+                input_image[ccdnum].axes[0],input_image[ccdnum].axes[1],filetype,flag_phot,nfilename+1);
+        reportevt(flag_verbose,STATUS,1,event);
       }
 
 
       /*if (flag_verbose) printf("  Closed image %s\n",nfilename+1);*/
       /* Move to the next HDU 
       if (i<hdunum) 
-	if (fits_movrel_hdu(fptr,1,&hdutype,&status)) {
-	  sprintf(event,"Move to next HDU failed");
-	  reportevt(flag_verbose,STATUS,5,event);
-	  printerror(status);
-	}
+        if (fits_movrel_hdu(fptr,1,&hdutype,&status)) {
+          sprintf(event,"Move to next HDU failed");
+          reportevt(flag_verbose,STATUS,5,event);
+          printerror(status);
+        }
       */
 
       if (nthheader != NULL) free(nthheader);
@@ -2226,12 +2230,12 @@ int grabkeywordval(header,numkeys,keyword,keytyp,keyval)
      int numkeys,keytyp;
      void *keyval;
 {
-  int	i,loc,j=0,found=0;
-  char 	*val_str;
-  float	*val_flt;
-  double	*val_dbl;
-  int	*val_int;
-	
+  int   i,loc,j=0,found=0;
+  char  *val_str;
+  float *val_flt;
+  double        *val_dbl;
+  int   *val_int;
+        
   for (i=0;i<numkeys;i++) {
     loc=i*80;
     /* find the keyword */
@@ -2239,37 +2243,37 @@ int grabkeywordval(header,numkeys,keyword,keytyp,keyval)
       loc+=9;
       /* strip of any leading spaces or ' */
       while (!strncmp(header+loc," ",1) || 
-	     !strncmp(header+loc,"'",1)) loc++;
+             !strncmp(header+loc,"'",1)) loc++;
       found++;
       if (keytyp==STRING) {
-	val_str=(char *)keyval;
-	/* copy over until "/" */
-	while (strncmp(header+loc,"/",1)) val_str[j++]=header[loc++];
-	j--;
-	/* strip off any trailing spaces of ' */
-	while (!strncmp(val_str+j," ",1) || 
-	       !strncmp(val_str+j,"'",1)) j--;
-	val_str[j+1]=0;
-	/*printf("  KW: %8s %s\n",keyword,val_str);*/
-	break;
+        val_str=(char *)keyval;
+        /* copy over until "/" */
+        while (strncmp(header+loc,"/",1)) val_str[j++]=header[loc++];
+        j--;
+        /* strip off any trailing spaces of ' */
+        while (!strncmp(val_str+j," ",1) || 
+               !strncmp(val_str+j,"'",1)) j--;
+        val_str[j+1]=0;
+        /*printf("  KW: %8s %s\n",keyword,val_str);*/
+        break;
       }
       if (keytyp==FLOAT)  {
-	val_flt=(float *)keyval;
-	sscanf(header+loc,"%f",val_flt);
-	/*printf("  KW: %8s %f\n",keyword,*val_flt);*/
-	break;
+        val_flt=(float *)keyval;
+        sscanf(header+loc,"%f",val_flt);
+        /*printf("  KW: %8s %f\n",keyword,*val_flt);*/
+        break;
       }
       if (keytyp==DOUBLE) {
-	val_dbl=(double *)keyval;
-	sscanf(header+loc,"%lf",val_dbl);
-	/*printf("  KW: %8s %f\n",keyword,*val_dbl);*/
-	break;
+        val_dbl=(double *)keyval;
+        sscanf(header+loc,"%lf",val_dbl);
+        /*printf("  KW: %8s %f\n",keyword,*val_dbl);*/
+        break;
       }
       if (keytyp==INTEG) {
-	val_int=(int *)keyval;
-	sscanf(header+loc,"%d",val_int);
-	/*printf("  KW: %8s %d\n",keyword,*val_int);*/
-	break;
+        val_int=(int *)keyval;
+        sscanf(header+loc,"%d",val_int);
+        /*printf("  KW: %8s %d\n",keyword,*val_int);*/
+        break;
       }
     }
   }
@@ -2281,9 +2285,9 @@ int getheader_flt(hdr,key,value,flag_verbose)
      float *value;
      int flag_verbose;
 {
-  int	len,lines,flag=0,keylen,i;
-  char	event[500] ,nline[100];
-  void	reportevt();
+  int   len,lines,flag=0,keylen,i;
+  char  event[500] ,nline[100];
+  void  reportevt();
   len=strlen(hdr);
   keylen=strlen(key);
   lines=len/80;
@@ -2319,9 +2323,9 @@ int getheader_flt(hdr,key,value,flag_verbose)
  
 int getheader_str(char *hdr,char *key,char *value,int flag_verbose)
 {
-  int	len,lines,flag=0,keylen,i;
-  char	event[500],nline[100];
-  void	reportevt();
+  int   len,lines,flag=0,keylen,i;
+  char  event[500],nline[100];
+  void  reportevt();
   char *answer;
   len=strlen(hdr);
   keylen=strlen(key);
