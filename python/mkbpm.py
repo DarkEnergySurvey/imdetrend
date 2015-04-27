@@ -40,21 +40,71 @@ NROW=4096
 NCOL=2048
 SHAPE=[NROW,NCOL]
 
-#specific bad pixel codes
+# Codes from from $IMSUPPORT_DIR/include/imsupport.h
+# Should be able to load with ctypes.CDLL
+# I'm ashamed to even think about doing this...
+DEFAULT = odict([
+        ('BPMDEF_FLAT_MIN' , 1   ), 
+        ('BPMDEF_FLAT_MAX' , 2   ), 
+        ('BPMDEF_FLAT_MASK', 4   ), 
+        ('BPMDEF_BIAS_HOT' , 8   ), 
+        ('BPMDEF_BIAS_WARM', 16  ), 
+        ('BPMDEF_BIAS_MASK', 32  ), 
+        ('BPMDEF_BIAS_COL' , 64  ), 
+        ('BPMDEF_EDGE'     , 128 ), 
+        ('BPMDEF_CORR'     , 256 ), 
+        ('BPMDEF_TAPE_BUMP', 512 ),
+        ('BPMDEF_FUNKY_COL', 1024), 
+        ('BPMDEF_WACKY_PIX', 2048), 
+        ('BPMDEF_GENERIC'  , 4096),  # GENERIC should probably be removed
+])
+
+def get_imsupport(basedir=None,filepath='include/imsupport.h'):
+    if basedir is None: basedir = os.getenv('IMSUPPORT_DIR') 
+    filename = os.path.join(os.getenv('IMSUPPORT_DIR'),filepath)    
+
+    if not os.path.exists(filename): return DEFAULT
+        
+    ret = odict(DEFAULT)
+    for line in open(filename,'r').readlines():
+        if not line.startswith('#define BPMDEF_'): continue
+        junk,key,value = line.split(' ',3)
+        ret[key] = int(value)
+    return ret
+
+IMSUPPORT = get_imsupport()
+
+# Just remap for old interface    
 BADPIX = odict([
-        ('GENERIC'  ,1   ),
-        ('EDGE'     ,2   ),
-        ('CORRECT'  ,4   ),
-        ('FLAT_MIN' ,8   ),
-        ('FLAT_MAX' ,16  ),
-        ('BIAS_HOT' ,32  ),
-        ('BIAS_WARM',64  ),
-        ('BIAS_COL' ,128 ),
-        ('FUNKY_COL',256 ),
-        ('WACKY_PIX',512 ),
-        ('TAPE_BUMP',1024),
+        ('GENERIC'  ,IMSUPPORT['BPMDEF_GENERIC']  ),
+        ('EDGE'     ,IMSUPPORT['BPMDEF_EDGE']     ),
+        ('CORR'     ,IMSUPPORT['BPMDEF_CORR']     ),
+        ('FLAT_MIN' ,IMSUPPORT['BPMDEF_FLAT_MIN'] ),
+        ('FLAT_MAX' ,IMSUPPORT['BPMDEF_FLAT_MAX'] ),
+        ('BIAS_HOT' ,IMSUPPORT['BPMDEF_BIAS_HOT'] ),
+        ('BIAS_WARM',IMSUPPORT['BPMDEF_BIAS_WARM']),
+        ('BIAS_COL' ,IMSUPPORT['BPMDEF_BIAS_COL'] ),
+        ('FUNKY_COL',IMSUPPORT['BPMDEF_FUNKY_COL']),
+        ('WACKY_PIX',IMSUPPORT['BPMDEF_WACKY_PIX']),
+        ('TAPE_BUMP',IMSUPPORT['BPMDEF_TAPE_BUMP']),
         ])
 
+BADPIX_DOC = odict([
+        ('GENERIC'  , 'Generic (undifferentiated) bad pixel flag'),
+        ('EDGE'     , 'Pixels on the edge of the CCD.'   ),
+        ('CORR'     , 'Correctable pixels (usually downstream of hot pixels).' ),
+        ('FLAT_MIN' , 'Pixels that are dull in the flats.'  ),
+        ('FLAT_MAX' , 'Pixels that are hot in the flats.'  ),
+        ('BIAS_HOT' , 'Pixels that are hot in the biases.'  ),
+        ('BIAS_WARM', 'Pixels that are warm in the biases.'  ),
+        ('BIAS_COL' , 'Pixels that are downstream of a hot pixel in the bias.' ),
+        ('FUNKY_COL', 'Columns with charge redistribution in sky exposures.' ),
+        ('WACKY_PIX', 'Outliers in stacked sky exposures.'  ),
+        ('TAPE_BUMP', 'Pixels that reside in tape bumps.' ),
+        ])
+
+
+### Original Marriner codes
 #BADPIX_GENERIC  =1
 #BADPIX_FLAT_MIN =2
 #BADPIX_FLAT_MAX =4
@@ -274,10 +324,15 @@ class BadPixelMasker(object):
     @staticmethod
     def load_pixel_list(filename, ccdnum):
         bpm = np.zeros(SHAPE,dtype=int) 
-        badpix = np.loadtxt(filename)
-        for i,xmin,xmax,ymin,ymax in badpix:
+        badpix = np.loadtxt(filename,dtype=int)
+        if badpix.shape[-1] < 5:
+            raise Exception("Wrong number of columns in %s"%filename)
+        if badpix.shape[-1] == 5:
+            badpix = np.append(badpix,np.ones(len(badpix)),axis=1)
+
+        for i,xmin,xmax,ymin,ymax,bit in badpix:
             if i != ccdnum: continue
-            bpm[ymin-1:ymax,xmin-1:xmax] |= True
+            bpm[ymin-1:ymax,xmin-1:xmax] |= bit
         return bpm
 
     @staticmethod
@@ -298,8 +353,8 @@ class BadPixelMasker(object):
         logging.info("")
         logging.info("BAD PIXEL MASK SUMMARY")
 
-        badpix =(bpm&~BADPIX['CORRECT']>0).sum()
-        corrpix=(bpm&BADPIX['CORRECT']>0).sum()
+        badpix =(bpm&~BADPIX['CORR']>0).sum()
+        corrpix=(bpm&BADPIX['CORR']>0).sum()
      
         logging.info("Flat low=%i (%i < %g)"%((bpm&BADPIX['FLAT_MIN']>0).sum(),opts.numfmin,opts.flatmin))
         logging.info("Flat high=%i (%i > %g)"%((bpm&BADPIX['FLAT_MAX']>0).sum(),opts.numfmax,opts.flatmax))
@@ -309,7 +364,7 @@ class BadPixelMasker(object):
         #logging.info("Bias mask=%i"%(bpm&BADPIX_BIAS_MASK>0).sum())
         logging.info("Bias column=%i"%(bpm&BADPIX['BIAS_COL']>0).sum())
         logging.info("Edge=%i (%i)"%((bpm&BADPIX['EDGE']>0).sum(),opts.edgesize))
-        logging.info("Correctable=%i"%(bpm&BADPIX['CORRECT']>0).sum())
+        logging.info("Correctable=%i"%(bpm&BADPIX['CORR']>0).sum())
         logging.info("Funky columns=%i"%(bpm&BADPIX['FUNKY_COL']>0).sum())
         logging.info("Wacky pixels=%i"%(bpm&BADPIX['WACKY_PIX']>0).sum())
         logging.info("Generic bad pixels=%i"%(bpm&BADPIX['GENERIC']>0).sum())
@@ -332,7 +387,8 @@ class BadPixelMasker(object):
      
         Returns:
         """
-        if not os.path.exists(os.path.dirname(filename)):
+        dirname = os.path.dirname(filename)
+        if dirname and not os.path.exists(dirname):
             msg = "Outfile path does not exist: %s"%filename
             raise IOError(msg)
         hdu=pyfits.PrimaryHDU(data=copy.copy(bpm))
@@ -427,7 +483,7 @@ class BadPixelMasker(object):
             bpm |= self.mask_images(opts)
             
         # Clear warm pixels in correctable pixels (bad columns)
-        bpm &= ~(BADPIX['BIAS_WARM']*(bpm&BADPIX['CORRECT']>0))
+        bpm &= ~(BADPIX['BIAS_WARM']*(bpm&BADPIX['CORR']>0))
         # Also clear warm pixesl at edges
         bpm &= ~(BADPIX['BIAS_WARM']*(bpm&BADPIX['EDGE']>0))
 
@@ -446,7 +502,7 @@ class BadPixelMasker(object):
         if os.path.splitext(opts.badpix)[1]=='.fits':
             bpm |= self.load_bpm(opts.badpix)
         else:
-            bpm |= self.load_pixel_list(opts.badpix, self.ccdnum)*BADPIX['GENERIC']
+            bpm |= self.load_pixel_list(opts.badpix, self.ccdnum)
         return bpm
         
     def mask_edges(self,opts):
@@ -535,16 +591,16 @@ class BadPixelMasker(object):
                     ystart = _iy+60
                     if ystart < SHAPE[0]:
                         bpm[ystart::60,_ix] &= ~BADPIX['BIAS_WARM']
-                        bpm[ystart::60,_ix] |= BADPIX['CORRECT']
+                        bpm[ystart::60,_ix] |= BADPIX['CORR']
                     bpm[0:ymin,_ix] &= ~BADPIX['BIAS_WARM']
-                    bpm[0:ymin,_ix] |= BADPIX['CORRECT']
+                    bpm[0:ymin,_ix] |= BADPIX['CORR']
                 else:
                     ystart = _iy-60
                     if ystart >= 0:
                         bpm[ystart::-60,_ix] &= ~BADPIX['BIAS_WARM']
-                        bpm[ystart::-60,_ix] |= BADPIX['CORRECT']
+                        bpm[ystart::-60,_ix] |= BADPIX['CORR']
                     bpm[ymax:,_ix] &= ~BADPIX['BIAS_WARM']
-                    bpm[ymax:,_ix] |= BADPIX['CORRECT']
+                    bpm[ymax:,_ix] |= BADPIX['CORR']
             else:
                 logging.debug("Column=%i is NOT correctable.",_ix)
                 bpm[:,_ix] |= BADPIX['BIAS_COL']
