@@ -888,6 +888,10 @@ int MakeBleedMask(const char *argv[])
   structuring_elementx[0] = -1;
   structuring_elementx[1] = 1;
 
+  std::vector<long> structuring_elementy(2,0);
+  structuring_elementy[0] = -Nx;
+  structuring_elementy[1] = Nx;
+
   // TEST MOVE DILATION
   // Dilate twice.  This *should* speed up the bleedtrail detection because
   // now instead of using the bounding box, just the "saturated" mask can be 
@@ -1900,6 +1904,21 @@ int MakeBleedMask(const char *argv[])
   // This will close up small 1-pixel gaps in the trail.
   Morph::BlobsType trail_blobs;
   
+//
+// RAG:  Add Y-dilation (to catch nasty bits from brighter-fatter)
+//
+  if(flag_verbose){
+    Out.str("");
+    Out << "Performing y-dilation of all bleed-trails" << std::endl;
+    LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
+  }
+  Morph::DilateMaskY(Inimage.DES()->mask,Nx,Ny,structuring_elementy,trail_mask);
+  Morph::GetBlobs(Inimage.DES()->mask,Nx,Ny,trail_mask,blob_image,trail_blobs);
+
+//
+// RAG:  Add X-dilation for brigh trails to clear
+//
+
   if(do_trail_dilation){
     int idilations;
     if(flag_verbose){
@@ -1926,20 +1945,19 @@ int MakeBleedMask(const char *argv[])
       std::sort(trailblob.begin(),trailblob.end());
       Morph::GetBlobBoundingBox(trailblob,Nx,Ny,box);
       for(int tj = box[2];tj <= box[3];tj++){
-	for(int ti = box[0];ti <= box[1];ti++){
-	  if(((ti < (Nx-1)) && (ti > 0))){
-	    int pixel_index    = tj*Nx+ti;
-	    if(!(Inimage.DES()->mask[pixel_index]&trail_mask)){
-	      int left_neighbor  = pixel_index - 1;
-	      int right_neighbor = pixel_index + 1;
-	      if(Inimage.DES()->mask[left_neighbor]&trail_mask &&
-		 Inimage.DES()->mask[right_neighbor]&trail_mask){
-		Inimage.DES()->mask[pixel_index] |= trail_mask;
-		bleed_status++;
-	      }
-	    }
-	  }
-	}
+        for(int ti = box[0];ti <= box[1];ti++){
+          if(((ti < (Nx-1)) && (ti > 0))){
+            int pixel_index    = tj*Nx+ti;
+            if(!(Inimage.DES()->mask[pixel_index]&trail_mask)){
+              int left_neighbor  = pixel_index - 1;
+              int right_neighbor = pixel_index + 1;
+              if(Inimage.DES()->mask[left_neighbor]&trail_mask && Inimage.DES()->mask[right_neighbor]&trail_mask){
+                Inimage.DES()->mask[pixel_index] |= trail_mask;
+                bleed_status++;
+              }
+            }
+          }
+        }
       }
     }
     trail_blobs.resize(0);
@@ -1957,8 +1975,8 @@ int MakeBleedMask(const char *argv[])
   bleed_status = 0;
   while(tbi != trail_blobs.end())
     bleed_status += tbi++->size();
+ 
 
-  
   // profiler.FunctionExit("BleedTrails");
   total_trail_pixels = bleed_status;
 
@@ -1978,8 +1996,8 @@ int MakeBleedMask(const char *argv[])
 	<< (bleed_status != 1 ? "s." : ".") << std::endl;
     LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
   }
-  
 
+  
   //  // TEMPORARY - EXAMINE THE INTERMEDIATE MASK
   //  for(Morph::IndexType p = 0;p < npix;p++)
   //    Inimage.DES()->mask[p] = temp_mask[p];
