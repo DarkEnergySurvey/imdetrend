@@ -155,7 +155,6 @@ def idl_histogram(data,bins=None):
     rev = np.hstack( (len(edges), len(edges) + np.cumsum(hist), digi) )
     return hist,edges,rev
 
-@staticmethod
 def smooth(x,window_len=11,window='hanning'):
     """
     Smoothing function. (From Peter Melchior)
@@ -243,7 +242,7 @@ class BadPixelMasker(object):
                             help="Set all BPM bits to BADPIX=1"                 )),
             ('badccd',dict(action='store_true',                                  
                            help="Produce trivial BPM for bad CCDs."             )),
-            ('outdir',dict(default='debug',type=str,
+            ('outdir',dict(default=None,type=str,
                             help="Output directory for QA."                     )),
 
         ])
@@ -254,8 +253,10 @@ class BadPixelMasker(object):
         # Currently, outdir must exist
         self.outdir = self.opts.outdir
         if self.outdir and not os.path.exists(self.outdir):
-            msg = "Debug directory does not exist: %s"%self.outdir
-            raise Exception(msg)
+            logging.info("Creating QA directory: %s"%self.outdir)
+            os.makedirs(self.outdir)
+            #msg = "Debug directory does not exist: %s"%self.outdir
+            #raise Exception(msg)
         self.debug = self.outdir is not None
 
     @staticmethod
@@ -425,7 +426,7 @@ class BadPixelMasker(object):
         ofits.write(median,header=header,compress=compress,tile_dims=tile_dims)
         ofits.close()
 
-    def write_funky_devs(self, devs):
+    def write_funky_devs(self, nites, meds, devs):
         logging.info("Writing column deviations...")
         outfile=os.path.join(self.outdir,"funky_devs_%02d.fits"%self.ccdnum)
         hdu = pyfits.PrimaryHDU(devs)
@@ -675,7 +676,7 @@ class BadPixelMasker(object):
             devs[i][EDGE:-EDGE] -= meds[i]
             #devs[i][EDGE:-EDGE] = np.median(d,axis=0)[EDGE:-EDGE] - meds[i]
          
-        if self.debug: self.write_column_devs(devs)
+        if self.debug: self.write_funky_devs(nites,meds,devs)
         
         logging.info("Finding funky columns...")
         stack = np.median(devs,axis=0)
