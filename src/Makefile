@@ -80,7 +80,7 @@ vpath %.o $(LIBS)
 ################################################################################
 # gcc
 CC :=		gcc -Wall
-CPPC := 	g++
+CPPC := 	$(CXX)
 CPPFLAGS:=      -g -O3
 CPPCOPTS :=	-c -Wall -funroll-loops -O3 -Wno-unused-variable 
 FC :=		f77
