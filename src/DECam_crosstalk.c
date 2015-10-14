@@ -366,6 +366,7 @@ int DECamXTalk(int argc,char *argv[])
     float       ampAmin = 1e+30,ampAmax = 0,satval;
     float       ampBmin = 1e+30,ampBmax = 0;
     float       new_ltv1,new_ltv2,old_ltv1,old_ltv2;
+    float       tmp_gainA,tmp_gainB,tmp_rdnoiseA,tmp_rdnoiseB,tmp_satA,tmp_satB;
     double      new_crpix1,new_crpix2,old_crpix1=0,old_crpix2=0;
     long        axes[2],naxes[2],taxes[2],pixels,npixels,fpixel,oldpixel=0;
     double      xtalkcorrection=0.0;
@@ -1421,8 +1422,47 @@ int DECamXTalk(int argc,char *argv[])
         }
 
         // apply header value replacement, if needed and available
-        if (flag_replace && rl != NULL)
+        if (flag_replace && rl != NULL){
             apply_replacement_list(nthheader, rl, flag_verbose);
+
+            // RAG: Update desimage structure so that it has updated values for keywords that are commonly updated.
+            if(getheader_flt(nthheader,"SATURATA",&tmp_satA,flag_verbose)){
+                sprintf(event,"SATURATA not found in header.");
+                reportevt(flag_verbose,STATUS,5,event);
+                printerror(status);
+            }
+            input_image[ccdnum].saturateA=tmp_satA;
+            if(getheader_flt(nthheader,"SATURATB",&tmp_satB,flag_verbose)){
+                sprintf(event,"SATURATB not found in header.");
+                reportevt(flag_verbose,STATUS,5,event);
+                printerror(status);
+            }
+            input_image[ccdnum].saturateB=tmp_satB;
+            if(getheader_flt(nthheader,"GAINA",&tmp_gainA,flag_verbose)){
+                sprintf(event,"GAINA not found in header.");
+                reportevt(flag_verbose,STATUS,5,event);
+                printerror(status);
+            }
+            input_image[ccdnum].gainA=tmp_gainA;
+            if(getheader_flt(nthheader,"GAINB",&tmp_gainB,flag_verbose)){
+                sprintf(event,"GAINB not found in header.");
+                reportevt(flag_verbose,STATUS,5,event);
+                printerror(status);   
+            }
+            input_image[ccdnum].gainB=tmp_gainB;
+            if(getheader_flt(nthheader,"RDNOISEA",&tmp_rdnoiseA,flag_verbose)){
+                sprintf(event,"RDNOISEA not found in header.");
+                reportevt(flag_verbose,STATUS,5,event);
+                printerror(status);   
+            }
+            input_image[ccdnum].rdnoiseA=tmp_rdnoiseA;
+            if(getheader_flt(nthheader,"RDNOISEB",&tmp_rdnoiseB,flag_verbose)){
+                sprintf(event,"RDNOISEB not found in header.");
+                reportevt(flag_verbose,STATUS,5,event);
+                printerror(status);
+            }
+            input_image[ccdnum].rdnoiseB=tmp_rdnoiseB;
+        }
 
         if (fits_get_img_param(fptr, 2, &bitpix, &naxis, naxes, &status)) {
             sprintf(event,"Image params not found in %s",filename);
