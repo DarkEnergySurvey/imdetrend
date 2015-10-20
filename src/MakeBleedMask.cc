@@ -2881,15 +2881,22 @@ int MakeBleedMask(const char *argv[])
   catstruct *cat             = NULL;
   tabstruct *tab             = NULL;
   std::vector<double> imjacobian(4,0);
-  if(FitsTools::HeaderKeyExists(Inimage.ImageHeader(),"SCAMPFLG")){
-    if(FitsTools::GetHeaderValue<int>(Inimage.ImageHeader(),"SCAMPFLG") > 0) get_wcs = false;
-  } else if(!FitsTools::HeaderKeyExists(Inimage.ImageHeader(),"SCAMPFLG")){
-    get_wcs = false;
-    Out.str("");
-    Out << "Failed to find SCAMPFLG keyword in header of " << Inimage.DES()->name 
-        << ". Writing tables in image coordinates.";
-    LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
-  }
+
+//  RAG (Oct 20, 2015): Removed check for SCAMPFLG therefore always tries to find a WCS... 
+// 
+//
+//   if(FitsTools::HeaderKeyExists(Inimage.ImageHeader(),"SCAMPFLG")){
+//     if(FitsTools::GetHeaderValue<int>(Inimage.ImageHeader(),"SCAMPFLG") > 0) get_wcs = false;
+//   } else if(!FitsTools::HeaderKeyExists(Inimage.ImageHeader(),"SCAMPFLG")){
+//     get_wcs = false;
+//     Out.str("");
+//     Out << "Failed to find SCAMPFLG keyword in header of " << Inimage.DES()->name 
+//         << ". Writing tables in image coordinates.";
+//      LX::ReportMessage(flag_verbose,STATUS,3,Out.str());
+//   }
+//
+//
+
   if(get_wcs) {
     if (!(cat = read_cat(Inimage.DES()->name))){
       Out.str("");
