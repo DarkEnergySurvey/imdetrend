@@ -26,14 +26,17 @@ import os
 import logging
 import copy
 import datetime
-import pyfits
-import numpy as np
-import fitsio
 import subprocess
 from collections import OrderedDict as odict
 
+import pyfits
+import numpy as np
+import fitsio
 import scipy.stats
 import scipy.ndimage
+
+# Import the maskbits from despyfits:
+# imsupport/include/mask_bits.h
 
 # Image geometry
 NROW=4096
@@ -209,7 +212,7 @@ class BadPixelMasker(object):
             ('funkycol',dict(default=None,metavar='funky_pixels.lst',
                              help="Funky column map to combine with output BPM.")),
             ('wackypix',dict(default=None,metavar='wacky_pixels.lst',
-                             help="Funky pixel map to combine with output BPM." )),
+                             help="Wacky pixel map to combine with output BPM." )),
 
             # Tuneable parameters for algorithms
             ('edgesize',dict(default=15,type=positive_int,
