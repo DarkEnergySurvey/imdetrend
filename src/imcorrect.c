@@ -1770,7 +1770,8 @@ int ImCorrect(int argc,char *argv[])
                     if (flat.image[i]>0.){
                         image_val/=flat.image[i];
                         uncval/=Squ((double)flat.image[i]);
-                        if ((flat.varim[i]>0.0)&&((!output.mask[i])||(output.mask[i]==BADPIX_FIX))){
+                        /* RAG: BADPIX_FIX update to BADPIX_FIXED */
+                        if ((flat.varim[i]>0.0)&&((!output.mask[i])||(output.mask[i]==BADPIX_FIXED))){
                             uncval+=1.0/((double)flat.varim[i]);
                         }
                     }else{
@@ -1887,7 +1888,8 @@ int ImCorrect(int argc,char *argv[])
                                     rpos=l+k*output.axes[0];
                                     /* Check and make sure that the pixel is not flagged (unless fixed) */
                                     /* Then check that the pixel is not on the opposite amplifier */
-                                    if ((!output.mask[rpos])||(output.mask[rpos]==BADPIX_FIX)){
+                                    /* RAG: BADPIX_FIX update to BADPIX_FIXED */
+                                    if ((!output.mask[rpos])||(output.mask[rpos]==BADPIX_FIXED)){
                                         ramp_check=column_in_section((l+1),output.ampsecan);
                                         if (ramp_check == amp_check){
                                             vecsort[count++]=output.varim[rpos];
@@ -1908,7 +1910,8 @@ int ImCorrect(int argc,char *argv[])
                                 l=xmin+(int)(totpix*randnum[rcount])%xlen;
                                 if (l>=xmax) l=xmax-1;
                                 rpos=l+k*output.axes[0];
-                                if ((!output.mask[rpos])||(output.mask[rpos]==BADPIX_FIX)){
+                                /* RAG: BADPIX_FIX update to BADPIX_FIXED */
+                                if ((!output.mask[rpos])||(output.mask[rpos]==BADPIX_FIXED)){
                                     ramp_check=column_in_section((l+1),output.ampsecan);
                                     if (ramp_check == amp_check){
                                         vecsort[count++]=output.varim[rpos];
@@ -1963,13 +1966,15 @@ int ImCorrect(int argc,char *argv[])
                     /* this is bad pixel */
                     xlow=i-1;
                     if (xlow < 0) xlow = 0;
-                    while ((output.mask[xlow]>0)&&(output.mask[xlow]!=BADPIX_FIX)&&(xlow > 0)){
+                    /* RAG: BADPIX_FIX update to BADPIX_FIXED */
+                    while ((output.mask[xlow]>0)&&(output.mask[xlow]!=BADPIX_FIXED)&&(xlow > 0)){
                         if ((i - xlow) == INTERP_WIDTH+1) break; 
                         xlow--;
                     }
                     xhi=i+1;
                     if (xhi > output.npixels) xhi = output.npixels;
-                    while ((output.mask[xhi]>0)&&(output.mask[xhi]!=BADPIX_FIX)&&(xhi < output.npixels)){ 
+                    /* RAG: BADPIX_FIX update to BADPIX_FIXED */
+                    while ((output.mask[xhi]>0)&&(output.mask[xhi]!=BADPIX_FIXED)&&(xhi < output.npixels)){ 
                         if ((xhi -i) == INTERP_WIDTH+1) break; 
                         xhi++;
                     }
