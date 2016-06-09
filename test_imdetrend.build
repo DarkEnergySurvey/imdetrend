@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+# Uncomment to use prompt
+echo -n "Enter path to PRODUCT_DIR: "
+read product_dir
+
+# Do the setup first
+source $EUPS_DIR/desdm_eups_setup.sh
+setup -v imsupport 7.4.0+1
+setup -v ccfits 2.4+3
+setup -v nrecipes 2.0+3
+
+export PREFIX=$PRODUCT_DIR
+
+make
+make install
