@@ -360,6 +360,12 @@ int MakeBleedMask(const char *argv[])
   std::string SaturatedObjectFileName =  comline.GetOption("saturated_objects");
   std::string TrailBoxesFileName      =  comline.GetOption("trailboxes");
 
+
+  //RAG: this is a hack to sllow us to remove the definition for BADPIX_LOW elsewhere in the DES software stack.
+  //Note that the software stack has been doing exactly this for the Y3A1_FINALCUT processing so it should work
+  //as a temporary fix until we engiineer a python utility
+#define BADPIX_LOW (BADPIX_BADAMP) 
+
   int bleedmask_status = 0;
 
   if(!sverb.empty()){
