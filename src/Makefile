@@ -112,8 +112,12 @@ EXE_REST =  ../bin/imcorrect			\
 	../bin/mkflatcor			\
 	../bin/mksupersky			\
         ../bin/mkbleedmask                     \
-        ../bin/maskcosmics          		\
         ../bin/mkbpm
+
+#
+# ADW 2016-06-09: removed maskcosmics (and the need for BADPIX_LOW)
+#
+#        ../bin/maskcosmics          		\
 
 #
 # RAG removed mkmask (and therefore the need to compile mkstarmask
@@ -180,8 +184,10 @@ all: $(EXE)
 	$(CC) $(CFLAGS) -o $@ $^  $(NR2) $(FITSIO) -lm
 ../bin/mkbleedmask: MakeBleedMask.o BleedTrail.o ${LIBIMSUPPORT} fitswcs.o   
 	$(CPPC) $(CFLAGS) -o $@ $^ -L$(DES_PREREQ)/lib $(WCS_C) $(TPIX_FITS) $(FITSIO) $(CCFITS) -lm
-../bin/maskcosmics: maskcosmics.o fitswcs.o ${LIBIMSUPPORT} 
-	$(CC) $(CFLAGS) -o $@ $^  $(NR2) $(WCS_C) $(TPIX_FITS) $(FITSIO) -lm
+
+# ADW 2016-06-09: removed
+#../bin/maskcosmics: maskcosmics.o fitswcs.o ${LIBIMSUPPORT} 
+#	$(CC) $(CFLAGS) -o $@ $^  $(NR2) $(WCS_C) $(TPIX_FITS) $(FITSIO) -lm
 
 # RAG removed 
 #../bin/mkmask: mkmask.o mkstarmask.o fitswcs.o ${LIBIMSUPPORT} 
