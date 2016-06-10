@@ -1,4 +1,4 @@
-setupRequired(imsupport 7.1.13+1)
-setupRequired(ccfits 2.4+3)
-setupRequired(nrecipes 2.0+3)
+setupRequired(imsupport 7.5.0+0)
+setupRequired(ccfits 2.5+0)
+setupRequired(nrecipes 2.0+4)
 envPrepend(PATH, ${PRODUCT_DIR}/bin)
