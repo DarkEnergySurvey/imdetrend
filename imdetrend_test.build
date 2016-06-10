@@ -15,6 +15,16 @@ setup -v ccfits 2.4+7
 setup -v nrecipes 2.0+4
 
 export PREFIX=$PRODUCT_DIR
-
+make clean
 make
 make install
+
+echo "                                               "
+echo "---------------------------------------------------------"
+echo " IMDETREND installed locally on $PRODUCT_DIR"
+echo " Make sure you setup by doing:"
+echo "                                               "
+echo "    setup -v -r $PRODUCT_DIR"
+echo " "
+echo "---------------------------------------------------------"
+echo " "
