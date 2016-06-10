@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+# Uncomment to use prompt
+#echo -n "Enter path to PRODUCT_DIR: "
+#read product_dir
+
+export PRODUCT_DIR=$HOME/build-test/imdetrend
+echo "Will Install to: $PRODUCT_DIR"
+
+# Do the setup first
+source $EUPS_DIR/desdm_eups_setup.sh
+#setup -v imsupport 7.4.0+1
+setup -v -r $HOME/build-test/imsupport
+setup -v ccfits 2.4+3
+setup -v nrecipes 2.0+3
+
+export PREFIX=$PRODUCT_DIR
+
+make
+make install
