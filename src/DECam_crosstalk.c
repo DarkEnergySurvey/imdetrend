@@ -985,7 +985,8 @@ int DECamXTalk(int argc,char *argv[])
       printerror(status);
     }
     else { /* map OBSTYPE into <filetype> */
-      if (!strcmp(obstype,"object") || !strcmp(obstype,"OBJECT"))
+      if (!strcmp(obstype,"object") || !strcmp(obstype,"OBJECT") 
+        || !strcmp(obstype,"standard") || !strcmp(obstype,"STANDARD"))
         sprintf(filetype,"raw_obj");
       else if (!strcmp(obstype,"bias") || !strcmp(obstype,"BIAS")
                || !strcmp(obstype,"zero") || !strcmp(obstype,"ZERO"))
