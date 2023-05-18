@@ -9,9 +9,9 @@ echo "Will Install to: $PRODUCT_DIR"
 
 # Do the setup first
 source $EUPS_DIR/desdm_eups_setup.sh
-#setup -v imsupport 7.5.0+0
-setup -v -r $HOME/build-test/imsupport
-setup -v ccfits 2.5+0
+setup -v imsupport 7.5.0+5
+#setup -v -r $HOME/build-test/imsupport
+setup -v ccfits 2.6+0
 setup -v nrecipes 2.0+4
 
 export PREFIX=$PRODUCT_DIR
