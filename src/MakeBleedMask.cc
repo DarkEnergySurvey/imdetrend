@@ -2748,61 +2748,77 @@ int MakeBleedMask(const char *argv[])
     } 
   }
 
+// RAG 2023May11
+// The following was removed as it was found to often result in a bookkeeping error in the final SATSTAR output.
+// Current understanding is that a new set of blobs is being created but is based on an image 
+// that had already been updated with BADPIX_STAR.  Therefore the output of GetBlobs does not always
+// respond identically to the prior cases.. and most notably any new object will not have radius estimates.
+// It then goes on to push those new arrays but the radii measurements are being drawn from memory that has been
+// unassigned.  
+// A set of tests were run on images where the code below was triggered (based on their logs) removal of the code
+// did not make changes to the mask outputs.  It can result in a different SATSTAR table but those tables do not
+// seem to be problematic (and there are many other cases where a problematic FITS tables was being generated due
+// to the code making its check (purportedly it was going to remove stars that were on bleedtrails)
+   Out.str("");
+   Out << "mkbleedmask running with RejectObscured block removed (may effect cases where stars are obscured by bleeds.";
+   LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
+
   // profiler.FunctionEntry("RejectObscured");
   // Reject stars obscured by bleeds 
-  blob_image.resize(npix,0);
-  saturated_blobs.resize(0);
-  Morph::GetBlobs(Inimage.DES()->mask,Nx,Ny,BADPIX_STAR,blob_image,saturated_blobs);
-  std::vector<Morph::BlobType>::iterator blobit = saturated_blobs.begin();
-  std::vector<double> new_center_x;
-  std::vector<double> new_center_y;
-  std::vector<double> new_radius;
+//  blob_image.resize(npix,0);
+//  saturated_blobs.resize(0);
+//  Morph::GetBlobs(Inimage.DES()->mask,Nx,Ny,BADPIX_STAR,blob_image,saturated_blobs);
+//  std::vector<Morph::BlobType>::iterator blobit = saturated_blobs.begin();
+//  std::vector<double> new_center_x;
+//  std::vector<double> new_center_y;
+//  std::vector<double> new_radius;
+// THESE are re-used later (and are formed properly here) so they are left here.
   std::vector<double>::iterator cxi  = star_centers_x.begin();
   std::vector<double>::iterator cyi  = star_centers_y.begin();
   std::vector<double>::iterator sri  = star_radii.begin();
-  Morph::IndexType ncovered = 0;
-  while(blobit != saturated_blobs.end()){
-    double center_x = *cxi++;
-    double center_y = *cyi++;
-    double srad = *sri++;
-    Morph::BlobType &blob = *blobit++;
-    Morph::BlobType::iterator bi = blob.begin();
-    bool covered_by_trail = true;
-    while(bi != blob.end() && covered_by_trail){
-      Morph::IndexType pixel_index = *bi++;
-      if(!(Inimage.DES()->mask[pixel_index] & trail_mask))
-        covered_by_trail = false;
-    }
-    if(covered_by_trail){
-      ncovered++;
-      bi = blob.begin();
-      while(bi != blob.end() && covered_by_trail){
-        Morph::IndexType pixel_index = *bi++;
-        Inimage.DES()->mask[pixel_index] &= ~BADPIX_STAR;
-      }
-    }
-    else{
-      new_center_x.push_back(center_x);
-      new_center_y.push_back(center_y);
-      new_radius.push_back(srad);
-    }
-  }
-  star_centers_x.resize(0);
-  star_centers_y.resize(0);
-  star_radii.resize(0);
-  cxi = new_center_x.begin();
-  cyi = new_center_y.begin();
-  sri = new_radius.begin();
-  while(sri != new_radius.end()){
-    star_centers_x.push_back(*cxi++);
-    star_centers_y.push_back(*cyi++);
-    star_radii.push_back(*sri++);
-  }
-  if(ncovered > 0){
-    Out.str("");
-    Out << "Rejected " << ncovered << " stars due to being completely obscured by bleeds.";
-    LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
-  }
+//  Morph::IndexType ncovered = 0;
+//  while(blobit != saturated_blobs.end()){
+//    double center_x = *cxi++;
+//    double center_y = *cyi++;
+//    double srad = *sri++;
+//    Morph::BlobType &blob = *blobit++;
+//    Morph::BlobType::iterator bi = blob.begin();
+//    bool covered_by_trail = true;
+//    while(bi != blob.end() && covered_by_trail){
+//      Morph::IndexType pixel_index = *bi++;
+//      if(!(Inimage.DES()->mask[pixel_index] & trail_mask))
+//        covered_by_trail = false;
+//    }
+//    if(covered_by_trail){
+//      ncovered++;
+//      bi = blob.begin();
+//      while(bi != blob.end() && covered_by_trail){
+//        Morph::IndexType pixel_index = *bi++;
+//        Inimage.DES()->mask[pixel_index] &= ~BADPIX_STAR;
+//      }
+//    }
+//    else{
+//      new_center_x.push_back(center_x);
+//      new_center_y.push_back(center_y);
+//      new_radius.push_back(srad);
+//    }
+//  }
+//  star_centers_x.resize(0);
+//  star_centers_y.resize(0);
+//  star_radii.resize(0);
+//  cxi = new_center_x.begin();
+//  cyi = new_center_y.begin();
+//  sri = new_radius.begin();
+//  while(sri != new_radius.end()){
+//    star_centers_x.push_back(*cxi++);
+//    star_centers_y.push_back(*cyi++);
+//    star_radii.push_back(*sri++);
+//  }
+//  if(ncovered > 0){
+//    Out.str("");
+//    Out << "Rejected " << ncovered << " stars due to being completely obscured by bleeds.";
+//    LX::ReportMessage(flag_verbose,STATUS,1,Out.str());
+//  }
   // profiler.FunctionExit("RejectObscured");
   // profiler.FunctionExit("Stars");
   // profiler.FunctionEntry("Output");
